@@ -1,0 +1,22 @@
+RewriteEngine On
+RewriteBase /flowforge/
+
+# API has its own scripts / .htaccess under /flowforge/api/
+RewriteRule ^api(?:/|$) - [L]
+
+# Allow client sites to iframe public chat + embed routes
+<IfModule mod_headers.c>
+  SetEnvIf Request_URI "(?i)^/flowforge/(embed|c)/" FLOWFORGE_PUBLIC_CHAT
+  # Also match when this .htaccess is evaluated with a per-dir prefix stripped
+  SetEnvIf Request_URI "(?i)^(embed|c)/" FLOWFORGE_PUBLIC_CHAT
+  Header always unset X-Frame-Options env=FLOWFORGE_PUBLIC_CHAT
+  Header always set Content-Security-Policy "frame-ancestors *" env=FLOWFORGE_PUBLIC_CHAT
+</IfModule>
+
+# Serve existing files and directories as-is (assets, favicon, embed.js, etc.)
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# SPA client routes → index.html (e.g. /flowforge/signup, /flowforge/embed/…)
+RewriteRule ^ index.html [L]

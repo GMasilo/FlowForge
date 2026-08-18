@@ -1,0 +1,418 @@
+{
+  "kind": "flowforge.chatbotFlow",
+  "version": 1,
+  "exportedAt": "2026-08-06T09:59:22.218Z",
+  "chatbot": {
+    "id": "260eda4b-0bbf-4b29-97f2-06e9357f898f",
+    "name": "University Student Admission",
+    "description": "Collects applicant details and stores them in the Admissions entity."
+  },
+  "flow": {
+    "id": "e5e91ab3-0fa1-4fd1-bdfc-ea3deab72424",
+    "name": "Main",
+    "version": 1
+  },
+  "globals": [],
+  "nodes": [
+    {
+      "id": "2f6b5139-f1f0-49c6-96a1-f758f40d7851",
+      "key": "welcome",
+      "type": "message",
+      "label": "Welcome",
+      "config": {
+        "text": "Welcome to university student admissions. I will collect a few details for your application.",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 40
+      }
+    },
+    {
+      "id": "44b3a6ee-c68d-4f8e-9e05-5d071dd39375",
+      "key": "ask_first_name",
+      "type": "question",
+      "label": "First name",
+      "config": {
+        "prompt": "What is your first name?",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "answerType": "text",
+        "delaySeconds": 0,
+        "answerRequired": true,
+        "outputVariable": "first_name",
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 140
+      }
+    },
+    {
+      "id": "3a4dc7cb-a41a-4ec9-adfb-cc29d612e809",
+      "key": "ask_last_name",
+      "type": "question",
+      "label": "Last name",
+      "config": {
+        "prompt": "What is your last name?",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "answerType": "text",
+        "delaySeconds": 0,
+        "answerRequired": true,
+        "outputVariable": "last_name",
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 240
+      }
+    },
+    {
+      "id": "ffa93e84-4cd9-4a1d-9f12-0c781d3ca261",
+      "key": "ask_email",
+      "type": "question",
+      "label": "Email",
+      "config": {
+        "prompt": "What is your email address?",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "answerType": "email",
+        "delaySeconds": 0,
+        "answerRequired": true,
+        "outputVariable": "email",
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 340
+      }
+    },
+    {
+      "id": "3e9038ba-ba89-48ea-bdf0-b06c8c6386c5",
+      "key": "ask_phone",
+      "type": "question",
+      "label": "Phone",
+      "config": {
+        "prompt": "What is your phone number? (optional — you can type skip if the UI allows; otherwise enter a number)",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "answerType": "text",
+        "delaySeconds": 0,
+        "answerRequired": false,
+        "outputVariable": "phone",
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 440
+      }
+    },
+    {
+      "id": "f0cd3d04-b4e9-4ecb-a6e5-5b42ea1d335f",
+      "key": "ask_dob",
+      "type": "question",
+      "label": "Date of birth",
+      "config": {
+        "prompt": "What is your date of birth?",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "answerType": "date",
+        "delaySeconds": 0,
+        "answerRequired": true,
+        "outputVariable": "date_of_birth",
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 540
+      }
+    },
+    {
+      "id": "451ea108-9411-41f9-a479-be52b1451402",
+      "key": "ask_program",
+      "type": "question",
+      "label": "Program",
+      "config": {
+        "prompt": "Which program of study are you applying for?",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "answerType": "text",
+        "delaySeconds": 0,
+        "answerRequired": true,
+        "outputVariable": "program",
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 640
+      }
+    },
+    {
+      "id": "b0b3fd6d-554b-4f51-bbbf-6fa99704941f",
+      "key": "ask_high_school",
+      "type": "question",
+      "label": "High school",
+      "config": {
+        "prompt": "Which high school did you attend?",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "answerType": "text",
+        "delaySeconds": 0,
+        "answerRequired": false,
+        "outputVariable": "high_school",
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 740
+      }
+    },
+    {
+      "id": "d563aa04-f8e8-4058-9ece-8e1b7b09288b",
+      "key": "ask_gpa",
+      "type": "question",
+      "label": "GPA",
+      "config": {
+        "prompt": "What is your GPA / average mark? (number)",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "answerType": "number",
+        "delaySeconds": 0,
+        "answerRequired": false,
+        "outputVariable": "gpa",
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 840
+      }
+    },
+    {
+      "id": "bd2966d9-ea4c-40d8-80de-f18ba1de6e1e",
+      "key": "ask_nationality",
+      "type": "question",
+      "label": "Nationality",
+      "config": {
+        "prompt": "What is your nationality?",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "answerType": "text",
+        "delaySeconds": 0,
+        "answerRequired": false,
+        "outputVariable": "nationality",
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 940
+      }
+    },
+    {
+      "id": "d19f748e-aeb7-4905-9238-759b0390e033",
+      "key": "save_application",
+      "type": "entity",
+      "label": "Save application",
+      "config": {
+        "filters": [],
+        "entityId": "c1666741-cfbf-4096-8499-c3fba190c40b",
+        "fieldMap": {
+          "gpa": "{{vars.gpa}}",
+          "email": "{{vars.email}}",
+          "phone": "{{vars.phone}}",
+          "program": "{{vars.program}}",
+          "last_name": "{{vars.last_name}}",
+          "first_name": "{{vars.first_name}}",
+          "high_school": "{{vars.high_school}}",
+          "nationality": "{{vars.nationality}}",
+          "date_of_birth": "{{vars.date_of_birth}}"
+        },
+        "recordId": "",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "operation": "create",
+        "delaySeconds": 0,
+        "outputVariable": "application",
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 1040
+      }
+    },
+    {
+      "id": "e5ae0623-724e-4216-bf3a-c966130cd856",
+      "key": "thanks",
+      "type": "message",
+      "label": "Confirmation",
+      "config": {
+        "text": "Thank you, {{vars.first_name}}! Your admission application has been saved (id: {{vars.application.id}}). Our admissions team will contact you at {{vars.email}}.",
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 1140
+      }
+    },
+    {
+      "id": "8dccb179-e35d-4d51-93a1-535f9295104a",
+      "key": "end",
+      "type": "end",
+      "label": "End",
+      "config": {
+        "runAfter": {
+          "failed": false,
+          "skipped": false,
+          "timedOut": false,
+          "succeeded": true
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0
+      },
+      "position": {
+        "x": 80,
+        "y": 1240
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "7f6e6b36-a297-4f3c-bb43-710232c72acf",
+      "source": "2f6b5139-f1f0-49c6-96a1-f758f40d7851",
+      "target": "44b3a6ee-c68d-4f8e-9e05-5d071dd39375",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "26c3b707-f735-4c4e-afb7-83a1136e12fa",
+      "source": "44b3a6ee-c68d-4f8e-9e05-5d071dd39375",
+      "target": "3a4dc7cb-a41a-4ec9-adfb-cc29d612e809",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "0a5701cf-1c4e-41a5-b8bf-6414fd4c3d7d",
+      "source": "3a4dc7cb-a41a-4ec9-adfb-cc29d612e809",
+      "target": "ffa93e84-4cd9-4a1d-9f12-0c781d3ca261",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "827d8cbd-43d6-40de-9d70-6ea57230aaa6",
+      "source": "ffa93e84-4cd9-4a1d-9f12-0c781d3ca261",
+      "target": "3e9038ba-ba89-48ea-bdf0-b06c8c6386c5",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "613fb375-6cee-409f-ba22-11c6238137c4",
+      "source": "3e9038ba-ba89-48ea-bdf0-b06c8c6386c5",
+      "target": "f0cd3d04-b4e9-4ecb-a6e5-5b42ea1d335f",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "17a76f36-4e23-49a4-9b40-9bb31a08511b",
+      "source": "f0cd3d04-b4e9-4ecb-a6e5-5b42ea1d335f",
+      "target": "451ea108-9411-41f9-a479-be52b1451402",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "7dc83480-5286-431b-974a-1d6e492cdd6d",
+      "source": "451ea108-9411-41f9-a479-be52b1451402",
+      "target": "b0b3fd6d-554b-4f51-bbbf-6fa99704941f",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "9a402cf4-fa82-40d9-a7a4-2c8b6ddb1de5",
+      "source": "b0b3fd6d-554b-4f51-bbbf-6fa99704941f",
+      "target": "d563aa04-f8e8-4058-9ece-8e1b7b09288b",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "1048934f-2194-4faa-a871-3931c008aa46",
+      "source": "d563aa04-f8e8-4058-9ece-8e1b7b09288b",
+      "target": "bd2966d9-ea4c-40d8-80de-f18ba1de6e1e",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "09dfb75c-15ce-4f80-a906-525036ced455",
+      "source": "bd2966d9-ea4c-40d8-80de-f18ba1de6e1e",
+      "target": "d19f748e-aeb7-4905-9238-759b0390e033",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "c3a3c398-87db-432a-9272-489f56a164c3",
+      "source": "d19f748e-aeb7-4905-9238-759b0390e033",
+      "target": "e5ae0623-724e-4216-bf3a-c966130cd856",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "59dba65b-3b0f-43fc-ac64-4e1043e5527b",
+      "source": "e5ae0623-724e-4216-bf3a-c966130cd856",
+      "target": "8dccb179-e35d-4d51-93a1-535f9295104a",
+      "sourceHandle": null,
+      "label": null
+    }
+  ]
+}

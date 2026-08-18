@@ -1,0 +1,15 @@
+node_modules
+web/node_modules
+web/dist
+.env
+web/.env
+web/api/config.php
+web/api/storage/*
+!web/api/storage/.gitkeep
+web/api/files/*
+!web/api/files/.gitkeep
+!web/api/files/.gitignore
+!web/api/files/.htaccess
+.DS_Store
+supabase/.temp
+*.log

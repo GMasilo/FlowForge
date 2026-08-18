@@ -1,0 +1,21 @@
+# Instance uploads live here. Never serve or execute them directly —
+# use /file/get.php instead.
+
+Options -Indexes
+
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Deny from all
+</IfModule>
+
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+  php_flag engine off
+</IfModule>
+
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .phps
+RemoveType .php .phtml .php3 .php4 .php5 .php7 .phps

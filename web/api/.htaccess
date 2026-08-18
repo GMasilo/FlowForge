@@ -1,0 +1,38 @@
+RewriteEngine On
+
+# Pass Authorization through to PHP (CGI/FastCGI often strips it otherwise)
+RewriteCond %{HTTP:Authorization} .
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Deny access to config, storage, and instance file blobs (served via /file/get)
+RewriteRule ^(config\.php|config\.example\.php|storage/.*|lib/.*|files/.*)$ - [F,L]
+
+# Route pretty paths to scripts
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^health/?$ health.php [L,QSA]
+RewriteRule ^auth/check/?$ auth/check.php [L,QSA]
+RewriteRule ^http/execute/?$ http/execute.php [L,QSA]
+RewriteRule ^email/send/?$ email/send.php [L,QSA]
+RewriteRule ^email/test/?$ email/test.php [L,QSA]
+RewriteRule ^email/invite/?$ email/invite.php [L,QSA]
+RewriteRule ^url/preview/?$ url/preview.php [L,QSA]
+RewriteRule ^webhooks/dispatch/?$ webhooks/dispatch.php [L,QSA]
+RewriteRule ^webhooks/emit_session/?$ webhooks/emit_session.php [L,QSA]
+RewriteRule ^file/upload/?$ file/upload.php [L,QSA]
+RewriteRule ^file/get/?$ file/get.php [L,QSA]
+RewriteRule ^file/list/?$ file/list.php [L,QSA]
+RewriteRule ^file/delete/?$ file/delete.php [L,QSA]
+RewriteRule ^payment/start/?$ payment/start.php [L,QSA]
+RewriteRule ^payment/notify/?$ payment/notify.php [L,QSA]
+RewriteRule ^payment/status/?$ payment/status.php [L,QSA]
+
+# Security headers (Apache)
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+</IfModule>
+
+# Disable directory listing
+Options -Indexes
