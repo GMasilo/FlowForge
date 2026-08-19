@@ -3,7 +3,7 @@
  * Utility functions for document file management
  */
 
-import type { DocumentInfo, DocumentFile } from './documentApi'
+import type { DocumentFile } from './documentApi'
 
 /**
  * Format file size in human-readable format

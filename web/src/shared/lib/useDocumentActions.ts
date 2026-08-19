@@ -8,6 +8,7 @@ import type { DocumentKind } from './documentApi'
 import {
   viewDocument,
   downloadDocument,
+  openDocument,
   renameDocument,
   copyDocument,
   moveDocument,
@@ -36,6 +37,12 @@ export function useDocumentActions(instanceId: string, chatbotId: string, kind: 
 
   const download = useMutation({
     mutationFn: (filename: string) => downloadDocument(instanceId, chatbotId, filename, kind),
+  })
+
+  const open = useMutation({
+    mutationFn: async (filename: string) => {
+      openDocument(instanceId, chatbotId, filename, kind)
+    },
   })
 
   const rename = useMutation({
@@ -100,6 +107,13 @@ export function useDocumentActions(instanceId: string, chatbotId: string, kind: 
     [download],
   )
 
+  const openByName = useCallback(
+    async (filename: string) => {
+      return open.mutateAsync(filename)
+    },
+    [open],
+  )
+
   const renameFile = useCallback(
     async (oldName: string, newName: string) => {
       return rename.mutateAsync({ oldName, newName })
@@ -138,6 +152,7 @@ export function useDocumentActions(instanceId: string, chatbotId: string, kind: 
   return {
     view: viewByName,
     download: downloadByName,
+    open: openByName,
     rename: renameFile,
     copy: copyFile,
     move: moveFile,
@@ -146,12 +161,21 @@ export function useDocumentActions(instanceId: string, chatbotId: string, kind: 
     isLoading:
       view.isPending ||
       download.isPending ||
+      open.isPending ||
       rename.isPending ||
       copy.isPending ||
       move.isPending ||
       remove.isPending ||
       upload.isPending,
-    error: view.error || download.error || rename.error || copy.error || move.error || remove.error || upload.error,
+    error:
+      view.error ||
+      download.error ||
+      open.error ||
+      rename.error ||
+      copy.error ||
+      move.error ||
+      remove.error ||
+      upload.error,
   }
 }
 

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, ImageIcon, Loader2, Trash2, Upload } from 'lucide-react'
+import { Copy, Download, ExternalLink, ImageIcon, Loader2, Trash2, Upload } from 'lucide-react'
 import {
   DESIGNER_MEDIA_ACCEPT,
   mediaInsert,
@@ -15,6 +15,7 @@ import {
   listDesignerMedia,
   uploadDesignerMedia,
 } from '@/shared/lib/flowforgeApi'
+import { createDocumentHandlers } from '@/shared/lib/documents'
 import { canEdit } from '@/shared/types/database'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { Button } from '@/shared/ui/button'
@@ -42,6 +43,9 @@ export function MediaLibraryPanel({
   const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [busyFile, setBusyFile] = useState<string | null>(null)
+
+  const docs = createDocumentHandlers({ instanceId, chatbotId, kind: 'media' })
 
   const media = useChatbotMedia(instanceId, chatbotId)
 
@@ -79,6 +83,30 @@ export function MediaLibraryPanel({
       window.setTimeout(() => setCopied(null), 1200)
     } catch {
       setError('Could not copy to clipboard')
+    }
+  }
+
+  async function openFile(filename: string) {
+    setBusyFile(filename)
+    setError(null)
+    try {
+      docs.open(filename)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not open file')
+    } finally {
+      setBusyFile(null)
+    }
+  }
+
+  async function downloadFile(filename: string) {
+    setBusyFile(filename)
+    setError(null)
+    try {
+      await docs.download(filename)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not download file')
+    } finally {
+      setBusyFile(null)
     }
   }
 
@@ -161,7 +189,7 @@ export function MediaLibraryPanel({
                     {file.filename}
                   </p>
                   <p className="truncate font-mono text-[10px] text-teal-700">{insert}</p>
-                  <div className="mt-1 flex gap-1">
+                  <div className="mt-1 flex flex-wrap gap-1">
                     <button
                       type="button"
                       className={cn(
@@ -174,6 +202,24 @@ export function MediaLibraryPanel({
                     >
                       <Copy className="h-3 w-3" />
                       {copied === file.filename ? 'Copied' : 'Copy'}
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                      disabled={busyFile === file.filename}
+                      onClick={() => void openFile(file.filename)}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                      disabled={busyFile === file.filename}
+                      onClick={() => void downloadFile(file.filename)}
+                    >
+                      <Download className="h-3 w-3" />
+                      Download
                     </button>
                     {editable ? (
                       <button

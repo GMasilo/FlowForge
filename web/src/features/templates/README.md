@@ -1,6 +1,6 @@
 # Template Handler Functions - Quick Start
 
-This directory contains comprehensive template handling functionality for viewing, downloading, importing, and exporting document templates.
+This directory contains template handling for **chatbot_templates** JSON (email, FAQ, catalogs, downloadable file definitions). For **stored media files** (PDFs in the library), see [`DOCUMENT_HANDLERS.md`](../shared/lib/DOCUMENT_HANDLERS.md).
 
 ## Files Overview
 

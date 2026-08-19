@@ -2,10 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   viewTemplate,
   downloadTemplate,
-  exportTemplates,
   importTemplates,
-  duplicateTemplate,
-  cloneTemplateToAnotherChatbot,
 } from './templateApi'
 import {
   getTemplatePreview,
@@ -24,7 +21,7 @@ import {
 } from './templateHelpers'
 import type { ChatbotTemplate } from '@/shared/types/database'
 
-global.fetch = vi.fn()
+vi.stubGlobal('fetch', vi.fn())
 
 const mockTemplate: ChatbotTemplate = {
   id: 'template-123',

@@ -11,6 +11,7 @@ const dirs = [
   'src/features/designer/validation',
   'src/features/entities',
   'src/features/templates',
+  'src/shared/lib',
 ]
 
 const files = dirs.flatMap((dir) =>

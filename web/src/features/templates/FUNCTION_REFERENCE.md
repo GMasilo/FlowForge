@@ -229,5 +229,6 @@ const circular = hasCircularDependency(template, allTemplates)
 ## See Also
 
 - **[TEMPLATE_HANDLERS.md](./TEMPLATE_HANDLERS.md)** - Complete documentation with detailed examples
+- **[DOCUMENT_HANDLERS.md](../shared/lib/DOCUMENT_HANDLERS.md)** - Stored media/document files (Open, Download, CRUD)
 - **[README.md](./README.md)** - Quick start guide
 - **[templateHandlers.check.ts](./templateHandlers.check.ts)** - Test suite

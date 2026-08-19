@@ -54,7 +54,7 @@ export function useTemplateActions(chatbotId?: string) {
   const duplicate = useMutation({
     mutationFn: ({ templateId, newName }: { templateId: string; newName?: string }) =>
       duplicateTemplate(templateId, newName),
-    onSuccess: async (result) => {
+    onSuccess: async () => {
       if (chatbotId) {
         await qc.invalidateQueries({ queryKey: chatbotTemplatesQueryKey(chatbotId) })
       }

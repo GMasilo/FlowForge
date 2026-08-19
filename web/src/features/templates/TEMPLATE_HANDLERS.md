@@ -1,6 +1,6 @@
 # Template Handler Functions
 
-This document describes the template handler functions available for managing document templates in the application.
+This document describes handler functions for **chatbot template records** (`chatbot_templates` — email, FAQ, catalogs, downloadable file layouts). For **uploaded media files** (PDFs in the Media library), see [`DOCUMENT_HANDLERS.md`](../../shared/lib/DOCUMENT_HANDLERS.md).
 
 ## Overview
 
@@ -455,6 +455,37 @@ function analyzeDependencies(template: ChatbotTemplate, allTemplates: ChatbotTem
 
 ---
 
+## Template typed inputs
+
+Copy-style templates (email, FAQ, message, menu, hours, legal, receipt, **downloadable file**) declare an **input contract** on the Templates tab. The body uses `{{inputs.key}}` instead of embedding chatbot variables directly.
+
+When a template is inserted on a Message, Question, End, Email, or OTP step:
+
+1. The step still references `{{templates.key.text}}`, `.html`, `.subject`, or `.file`.
+2. The inspector shows **Template inputs** — bind each declared input to `{{vars.*}}`, `{{steps.*}}`, or a literal.
+3. Bindings are stored on the step as `templateBindings[templateKey][inputKey]`.
+4. At send time, bindings resolve into `inputs` and the template body is filled.
+
+Store catalogs (`kind: cart`) do **not** use this pattern.
+
+```typescript
+// Step config (simplified)
+{
+  text: 'Here is your agreement: {{templates.agreement.file}}',
+  templateBindings: {
+    agreement: {
+      name: '{{vars.full_name}}',
+      email: '{{steps.ask_email.response}}',
+      signature: '{{vars.signature}}',
+    },
+  },
+}
+```
+
+Problems flags required inputs with empty bindings on the inserting step.
+
+---
+
 ## Security & Permissions
 
 All API endpoints require authentication and verify:
@@ -479,17 +510,27 @@ try {
 ## Type Definitions
 
 ```typescript
-type TemplateKind = 'email' | 'faq' | 'cart' | 'menu' | 'message' | 'hours' | 'legal' | 'receipt'
+type TemplateKind = 'email' | 'faq' | 'cart' | 'menu' | 'message' | 'hours' | 'legal' | 'receipt' | 'document'
 
-type TemplateContent = 
-  | EmailContent 
-  | FaqContent 
-  | CartContent 
-  | MenuContent 
-  | MessageContent 
-  | HoursContent 
-  | LegalContent 
+type TemplateInput = {
+  key: string
+  label: string
+  type: 'string' | 'number' | 'boolean' | 'date' | 'file'
+  required: boolean
+}
+
+type TemplateContent =
+  | EmailContent
+  | FaqContent
+  | CartContent
+  | MenuContent
+  | MessageContent
+  | HoursContent
+  | LegalContent
   | ReceiptContent
+  | DocumentContent
+
+// Copy-style content includes inputs: TemplateInput[] (cart does not)
 
 interface ChatbotTemplate {
   id: string
