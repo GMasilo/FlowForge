@@ -34,6 +34,11 @@ $map = [
     '/template/download' => __DIR__ . '/template/download.php',
     '/template/export' => __DIR__ . '/template/export.php',
     '/template/import' => __DIR__ . '/template/import.php',
+    '/document/view' => __DIR__ . '/document/view.php',
+    '/document/download' => __DIR__ . '/document/download.php',
+    '/document/rename' => __DIR__ . '/document/rename.php',
+    '/document/copy' => __DIR__ . '/document/copy.php',
+    '/document/move' => __DIR__ . '/document/move.php',
 ];
 
 if (isset($map[$path])) {
