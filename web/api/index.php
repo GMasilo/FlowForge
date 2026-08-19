@@ -30,6 +30,10 @@ $map = [
     '/payment/start' => __DIR__ . '/payment/start.php',
     '/payment/notify' => __DIR__ . '/payment/notify.php',
     '/payment/status' => __DIR__ . '/payment/status.php',
+    '/template/view' => __DIR__ . '/template/view.php',
+    '/template/download' => __DIR__ . '/template/download.php',
+    '/template/export' => __DIR__ . '/template/export.php',
+    '/template/import' => __DIR__ . '/template/import.php',
 ];
 
 if (isset($map[$path])) {
