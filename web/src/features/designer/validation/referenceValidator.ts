@@ -8,6 +8,7 @@ import {
 } from '@/features/designer/model/flowSchema'
 import type { ConnectionValidationInfo } from '@/features/connections/connectionValidation'
 import { isTemplateKindAllowedForAnswerType, templateContentLooksLikeCart } from '@/features/templates/templateKindCompatibility'
+import { parseTemplateBindingMap, parseTemplateInputs } from '@/features/templates/templateModel'
 import {
   findContinueRootIds,
   loopBodyStart,
@@ -174,12 +175,16 @@ function hasAlternatePath(
   return paths > 1
 }
 
-function parseRef(ref: string): { kind: 'vars' | 'steps' | 'media' | 'templates'; name: string; path: string[] } | null {
+function parseRef(
+  ref: string,
+): { kind: 'vars' | 'steps' | 'media' | 'templates' | 'inputs'; name: string; path: string[] } | null {
   const parts = ref.split('.').map((p) => p.trim()).filter(Boolean)
   if (parts.length < 2) return null
   const kind = parts[0]
-  if (kind !== 'vars' && kind !== 'steps' && kind !== 'media' && kind !== 'templates') return null
-  return { kind, name: parts[1], path: parts.slice(2) }
+  if (kind !== 'vars' && kind !== 'steps' && kind !== 'media' && kind !== 'templates' && kind !== 'inputs') {
+    return null
+  }
+  return { kind, name: parts[1]!, path: parts.slice(2) }
 }
 
 function collectJsonStrings(value: unknown, out: string[] = [], depth = 0): string[] {
@@ -234,7 +239,7 @@ function collectNodeTemplateStrings(node: DesignerNode, ctx: ValidationContext):
 /** `{{userName}}` in templates is treated as `{{vars.userName}}`. */
 function normalizeRef(rawRef: string): string {
   const t = rawRef.trim()
-  if (/^(vars|steps|media|templates|otp)\./i.test(t)) return t
+  if (/^(vars|steps|media|templates|otp|inputs)\./i.test(t)) return t
   if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(t)) return `vars.${t}`
   return t
 }
@@ -244,8 +249,12 @@ function calledTemplateKeys(node: DesignerNode, strings: string[]): string[] {
   for (const key of [
     String(node.config.templateKey ?? '').trim(),
     String(node.config.shopTemplateKey ?? '').trim(),
+    String(node.config.otpTemplateKey ?? '').trim(),
   ]) {
     if (key) keys.add(key)
+  }
+  for (const key of Object.keys(parseTemplateBindingMap(node.config.templateBindings))) {
+    if (key.trim()) keys.add(key.trim())
   }
   for (const text of strings) {
     for (const rawRef of extractTemplateRefs(text)) {
@@ -256,16 +265,21 @@ function calledTemplateKeys(node: DesignerNode, strings: string[]): string[] {
   return [...keys]
 }
 
+function declaredTemplateInputs(content: unknown) {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return []
+  return parseTemplateInputs((content as Record<string, unknown>).inputs)
+}
+
 /** Refs inside a template (and nested {{templates.*}}), not including the outer templates.key call. */
 function refsInsideTemplate(
   key: string,
   contents: Record<string, unknown>,
   seen: Set<string> = new Set(),
-): string[] {
+): Array<{ rawRef: string; templateKey: string }> {
   if (!key || seen.has(key)) return []
   seen.add(key)
   if (!(key in contents)) return []
-  const refs: string[] = []
+  const refs: Array<{ rawRef: string; templateKey: string }> = []
   for (const text of collectJsonStrings(contents[key])) {
     for (const rawRef of extractTemplateRefs(text)) {
       const parsed = parseRef(rawRef)
@@ -273,7 +287,7 @@ function refsInsideTemplate(
         refs.push(...refsInsideTemplate(parsed.name, contents, seen))
         continue
       }
-      refs.push(rawRef)
+      refs.push({ rawRef, templateKey: key })
     }
   }
   return refs
@@ -386,7 +400,7 @@ export function validateFlow(
           severity: 'error',
           nodeId: node.id,
           code: 'invalid_ref',
-          message: `Invalid reference "{{${rawRef}}}". Use {{vars.name}}, {{steps.key.path}}, {{media.key}}, {{templates.key}}, {{otp.code}}, or expressions like parseJson({{vars.jsonStr}})`,
+          message: `Invalid reference "{{${rawRef}}}". Use {{vars.name}}, {{steps.key.path}}, {{media.key}}, {{templates.key}}, {{inputs.key}}, {{otp.code}}, or expressions like parseJson({{vars.jsonStr}})`,
         })
         return
       }
@@ -450,6 +464,28 @@ export function validateFlow(
         return
       }
 
+      if (parsed.kind === 'inputs') {
+        if (!templateKey) {
+          issues.push({
+            severity: 'error',
+            nodeId: node.id,
+            code: 'invalid_ref',
+            message: `"{{inputs.${parsed.name}}}" only works inside a template. Declare the input on the template, then bind it on this step.`,
+          })
+          return
+        }
+        const declared = declaredTemplateInputs(ctx.templateContents?.[templateKey])
+        if (!declared.some((input) => input.key === parsed.name)) {
+          issues.push({
+            severity: 'error',
+            nodeId: node.id,
+            code: 'unknown_template_input',
+            message: `Template "${templateKey}" uses "{{inputs.${parsed.name}}}" which is not a declared input`,
+          })
+        }
+        return
+      }
+
       const target = nodeByKey.get(parsed.name)
       if (!target) {
         issues.push({
@@ -506,12 +542,32 @@ export function validateFlow(
 
     if (ctx.templateContents) {
       const seenInner = new Set<string>()
+      const bindings = parseTemplateBindingMap(node.config.templateBindings)
       for (const tmplKey of calledTemplateKeys(node, strings)) {
-        for (const rawRef of refsInsideTemplate(tmplKey, ctx.templateContents)) {
-          const dedupe = `${tmplKey}:${rawRef}`
+        for (const inner of refsInsideTemplate(tmplKey, ctx.templateContents)) {
+          const dedupe = `${inner.templateKey}:${inner.rawRef}`
           if (seenInner.has(dedupe)) continue
           seenInner.add(dedupe)
-          checkRef(rawRef, tmplKey)
+          checkRef(inner.rawRef, inner.templateKey)
+        }
+        if (
+          node.type === 'message' ||
+          node.type === 'question' ||
+          node.type === 'end' ||
+          node.type === 'email'
+        ) {
+          for (const input of declaredTemplateInputs(ctx.templateContents[tmplKey])) {
+            if (!input.required) continue
+            const bound = (bindings[tmplKey]?.[input.key] ?? '').trim()
+            if (bound) continue
+            issues.push({
+              severity: 'error',
+              nodeId: node.id,
+              field: `templateBindings.${tmplKey}.${input.key}`,
+              code: 'unbound_template_input',
+              message: `Template "${tmplKey}" requires input "${input.label || input.key}"`,
+            })
+          }
         }
       }
     }

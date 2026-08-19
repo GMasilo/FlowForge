@@ -209,4 +209,120 @@ const welcome = { html: 'Hello {{vars.name}} from {{vars.brand}}' }
   )
 }
 
+{
+  const welcomeInputs = {
+    html: 'Hello {{inputs.name}}',
+    inputs: [{ key: 'name', label: 'Full name', type: 'string', required: true }],
+  }
+  const email = node({
+    id: 'e1',
+    key: 'send',
+    type: 'email',
+    config: { connectionId: 'c1', body: '{{templates.welcome.html}}' },
+  })
+  const issues = validateFlow([email], [], {
+    globalVariables: [],
+    templateKeys: ['welcome'],
+    templateContents: { welcome: welcomeInputs },
+  })
+  assert(
+    issues.some(
+      (i) =>
+        i.code === 'unbound_template_input' &&
+        i.field === 'templateBindings.welcome.name' &&
+        i.message.includes('Full name'),
+    ),
+    'required template input without a binding is an error',
+  )
+  assert(
+    !issues.some((i) => i.code === 'unknown_var' && i.message.includes('inputs')),
+    '{{inputs.*}} is not treated as a chatbot variable',
+  )
+}
+
+{
+  const ask = node({
+    id: 'q1',
+    key: 'ask_name',
+    type: 'question',
+    config: { prompt: 'Name?', outputVariable: 'name' },
+  })
+  const email = node({
+    id: 'e1',
+    key: 'send',
+    type: 'email',
+    config: {
+      connectionId: 'c1',
+      body: '{{templates.welcome.html}}',
+      templateBindings: { welcome: { name: '{{vars.name}}' } },
+    },
+  })
+  const edge: DesignerEdge = { id: 'ed', source: 'q1', target: 'e1' }
+  const issues = validateFlow([ask, email], [edge], {
+    globalVariables: [],
+    templateKeys: ['welcome'],
+    templateContents: {
+      welcome: {
+        html: 'Hello {{inputs.name}}',
+        inputs: [{ key: 'name', label: 'Full name', type: 'string', required: true }],
+      },
+    },
+  })
+  assert(
+    !issues.some((i) => i.code === 'unbound_template_input' || i.code === 'unknown_var' || i.code === 'unknown_template_input'),
+    'bound required input is valid',
+  )
+}
+
+{
+  const email = node({
+    id: 'e1',
+    key: 'send',
+    type: 'email',
+    config: { connectionId: 'c1', body: '{{templates.welcome.html}}' },
+  })
+  const issues = validateFlow([email], [], {
+    globalVariables: [],
+    templateKeys: ['welcome'],
+    templateContents: {
+      welcome: {
+        html: 'Hello {{inputs.nickname}}',
+        inputs: [{ key: 'name', label: 'Name', type: 'string', required: false }],
+      },
+    },
+  })
+  assert(
+    issues.some((i) => i.code === 'unknown_template_input' && i.message.includes('inputs.nickname')),
+    'undeclared {{inputs.*}} on a template is an error',
+  )
+}
+
+{
+  const otp = node({
+    id: 'q1',
+    key: 'verify',
+    type: 'question',
+    config: {
+      prompt: 'Enter the code',
+      answerType: 'otp',
+      outputVariable: 'otp',
+      otpTemplateKey: 'welcome',
+    },
+  })
+  const issues = validateFlow([otp], [], {
+    globalVariables: [],
+    templateKeys: ['welcome'],
+    templateContents: {
+      welcome: {
+        html: 'Code for {{inputs.name}}',
+        inputs: [{ key: 'name', label: 'Name', type: 'string', required: true }],
+      },
+    },
+  })
+  assert(
+    issues.some((i) => i.code === 'unbound_template_input' && i.field === 'templateBindings.welcome.name'),
+    'otpTemplateKey required inputs must be bound',
+  )
+}
+
 console.log('referenceValidator.templates.check.ts: all passed')

@@ -1,3 +1,8 @@
+import {
+  decodeDocumentEmbed,
+  type FilledDocument,
+} from '@/features/templates/documentFill'
+
 export const DESIGNER_MEDIA_ACCEPT =
   '.jpg,.jpeg,.png,.gif,.webp,.mp3,.wav,.ogg,.mp4,.webm,.pdf,.txt,.csv,.doc,.docx,.xls,.xlsx,.zip'
 
@@ -187,9 +192,10 @@ export function formatMediaForText(value: unknown, embedMedia: boolean): string 
 export type ChatContentSegment =
   | { kind: 'text'; text: string }
   | { kind: 'file'; file: ChatbotMediaFile }
+  | { kind: 'document'; document: FilledDocument }
 
 const CHAT_EMBED_RE =
-  /<<ff:file:([A-Za-z0-9+/=]+)>>|(https?:\/\/[^\s<>"]+\/file\/get\?[^\s<>"]+)|(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)(?:\?[^\s<>"]*)?)/gi
+  /<<ff:doc:([A-Za-z0-9+/=]+)>>|<<ff:file:([A-Za-z0-9+/=]+)>>|(https?:\/\/[^\s<>"]+\/file\/get\?[^\s<>"]+)|(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)(?:\?[^\s<>"]*)?)/gi
 
 export function parseChatSegments(text: string): ChatContentSegment[] {
   if (!text) return []
@@ -201,12 +207,17 @@ export function parseChatSegments(text: string): ChatContentSegment[] {
     if (match.index > last) {
       segments.push({ kind: 'text', text: text.slice(last, match.index) })
     }
-    const b64 = match[1]
-    const fileGetUrl = match[2]
-    const mediaUrl = match[3]
-    if (b64) {
+    const docB64 = match[1]
+    const fileB64 = match[2]
+    const fileGetUrl = match[3]
+    const mediaUrl = match[4]
+    if (docB64) {
+      const document = decodeDocumentEmbed(docB64)
+      if (document) segments.push({ kind: 'document', document })
+      else segments.push({ kind: 'text', text: match[0] })
+    } else if (fileB64) {
       try {
-        const parsed = JSON.parse(b64ToUtf8(b64)) as unknown
+        const parsed = JSON.parse(b64ToUtf8(fileB64)) as unknown
         const file = fileValueFromUnknown(parsed)
         if (file) segments.push({ kind: 'file', file })
         else segments.push({ kind: 'text', text: match[0] })
@@ -220,12 +231,16 @@ export function parseChatSegments(text: string): ChatContentSegment[] {
     last = match.index + match[0].length
   }
   if (last < text.length) segments.push({ kind: 'text', text: text.slice(last) })
-  return segments.filter((seg) => seg.kind === 'file' || seg.text.length > 0)
+  return segments.filter((seg) => seg.kind !== 'text' || seg.text.length > 0)
 }
 
 export function stripFileEmbeds(text: string): string {
   return parseChatSegments(text)
-    .map((seg) => (seg.kind === 'text' ? seg.text : seg.file.url))
+    .map((seg) => {
+      if (seg.kind === 'text') return seg.text
+      if (seg.kind === 'document') return seg.document.filename
+      return seg.file.url
+    })
     .join('')
 }
 

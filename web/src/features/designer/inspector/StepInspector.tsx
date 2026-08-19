@@ -75,6 +75,10 @@ import { DateTimePicker, dateTimeModeForAnswerType } from '@/shared/ui/date-time
 import { cn } from '@/shared/lib/utils'
 import { StepMediaPicker } from '@/features/designer/inspector/StepMediaPicker'
 import { FlowTemplatePicker, InsertTemplateControl } from '@/features/templates/FlowTemplatePicker'
+import {
+  TemplateInputBindings,
+  ensureTemplateBinding,
+} from '@/features/templates/TemplateInputBindings'
 import { templateKindsForAnswerType } from '@/features/templates/templateKindCompatibility'
 import { chatbotTemplatesQueryKey, fetchChatbotTemplates } from '@/features/templates/templateApi'
 import {
@@ -1130,6 +1134,7 @@ function EmailStepFields({
             subject,
             body,
             paramValues: { ...paramValues, subject, body },
+            templateBindings: ensureTemplateBinding(node.config.templateBindings, key),
           })
         }}
       />
@@ -1471,11 +1476,14 @@ export function StepInspector({ node, connections, connectionsReady = true, read
           />
           <InsertTemplateControl
             chatbotId={chatbotId}
-            kinds={['message', 'faq', 'menu', 'hours', 'legal', 'receipt']}
+            kinds={['message', 'faq', 'menu', 'hours', 'legal', 'receipt', 'document']}
             readOnly={readOnly}
-            onInsert={(snippet) => {
+            onInsert={(snippet, key) => {
               const current = String(node.config.text ?? '')
-              patchConfig({ text: current ? `${current}\n\n${snippet}` : snippet })
+              patchConfig({
+                text: current ? `${current}\n\n${snippet}` : snippet,
+                templateBindings: ensureTemplateBinding(node.config.templateBindings, key),
+              })
             }}
           />
           <div className="mt-3">
@@ -1505,9 +1513,12 @@ export function StepInspector({ node, connections, connectionsReady = true, read
               chatbotId={chatbotId}
               kinds={questionTemplateKinds}
               readOnly={readOnly}
-              onInsert={(snippet) => {
+              onInsert={(snippet, key) => {
                 const current = String(node.config.prompt ?? '')
-                patchConfig({ prompt: current ? `${current}\n\n${snippet}` : snippet })
+                patchConfig({
+                  prompt: current ? `${current}\n\n${snippet}` : snippet,
+                  templateBindings: ensureTemplateBinding(node.config.templateBindings, key),
+                })
               }}
             />
             {answerSuggestions.length && !readOnly ? (
@@ -2056,6 +2067,7 @@ export function StepInspector({ node, connections, connectionsReady = true, read
                         otpTemplateKey: key,
                         otpSubject: `{{templates.${key}.subject}}`,
                         otpBody: `{{templates.${key}.html}}\n\nYour code is {{otp.code}}.`,
+                        templateBindings: ensureTemplateBinding(node.config.templateBindings, key),
                       })
                     }}
                   />
@@ -2905,6 +2917,18 @@ export function StepInspector({ node, connections, connectionsReady = true, read
             onChange={(v) => patchConfig(endConfigSchema.parse({ message: v }))}
             suggestions={suggestions}
           />
+          <InsertTemplateControl
+            chatbotId={chatbotId}
+            kinds={['message', 'faq', 'menu', 'hours', 'legal', 'receipt', 'document']}
+            readOnly={readOnly}
+            onInsert={(snippet, key) => {
+              const current = String(node.config.message ?? '')
+              patchConfig({
+                message: current ? `${current}\n\n${snippet}` : snippet,
+                templateBindings: ensureTemplateBinding(node.config.templateBindings, key),
+              })
+            }}
+          />
           <div className="mt-3">
             <StepMediaPicker
               instanceId={instance.id}
@@ -2915,6 +2939,16 @@ export function StepInspector({ node, connections, connectionsReady = true, read
             />
           </div>
         </div>
+      ) : null}
+
+      {node.type === 'message' || node.type === 'question' || node.type === 'end' || node.type === 'email' ? (
+        <TemplateInputBindings
+          templates={templatesQuery.data ?? []}
+          config={node.config}
+          readOnly={readOnly}
+          suggestions={suggestions}
+          onChange={(templateBindings) => patchConfig({ templateBindings })}
+        />
       ) : null}
 
       <StepRunSettings

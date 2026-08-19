@@ -902,6 +902,19 @@ export function suggestNextSteps(args: {
       })
     }
 
+    if (prevType === 'signature' || prevType === 'form') {
+      push({
+        type: 'message',
+        label: 'Send filled file',
+        reason: 'Offer a PDF, Word, or Excel download filled from this conversation',
+        score: prevType === 'signature' ? 0.72 : 0.58,
+        seed: {
+          label: 'Document',
+          config: { text: 'Here is your document:\n{{templates.agreement.file}}' },
+        },
+      })
+    }
+
     if (prevType === 'nps' || prevType === 'rating' || prevType === 'stars' || prevType === 'likert' || prevType === 'mood') {
       push({
         type: 'condition',

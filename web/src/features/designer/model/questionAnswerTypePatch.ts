@@ -155,6 +155,7 @@ export function buildQuestionAnswerTypePatch(
     patch.otpBody = null
     patch.otpExpiresSeconds = null
     patch.otpMaxAttempts = null
+    patch.otpTemplateKey = null
   }
   if (answerType !== 'confirm') patch.confirmLabel = null
   return patch

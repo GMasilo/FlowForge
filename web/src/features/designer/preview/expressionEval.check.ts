@@ -93,6 +93,32 @@ assert(step === 7, 'steps path')
   assert(html.includes('<br>'), 'receipt html uses line breaks')
 }
 
+{
+  const copyCtx = {
+    vars: { name: 'Ada' },
+    steps: {},
+    templateBindings: {
+      welcome: { name: '{{vars.name}}' },
+      faq: { name: '{{vars.name}}' },
+    },
+    templates: {
+      welcome: { kind: 'message', text: 'Hello {{inputs.name}}' },
+      faq: {
+        kind: 'faq',
+        text: 'Hi {{inputs.name}}\n\n• Hours?\n  We open at 9.',
+      },
+    },
+  }
+  assert(
+    interpolateTemplate('{{templates.welcome.text}}', copyCtx) === 'Hello Ada',
+    'message template fills inputs from bindings',
+  )
+  assert(
+    interpolateTemplate('{{templates.faq.text}}', copyCtx).startsWith('Hi Ada'),
+    'faq .text fills inputs on access',
+  )
+}
+
 const mediaCtx = { ...ctx, media: { logo_png: 'https://cdn.example/logo.png' } }
 assert(
   interpolateTemplate('Logo {{media.logo_png}}', mediaCtx) === 'Logo https://cdn.example/logo.png',

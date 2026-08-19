@@ -60,7 +60,8 @@ assert('products' in legacy && legacy.products[0]?.name === 'Widget', 'legacy it
 assert('categories' in legacy && legacy.categories.length >= 1, 'legacy gets a category')
 
 const email = starterTemplateContent('email')
-assert('html' in email && email.html.includes('{{vars.name}}'), 'email html has placeholder')
+assert('html' in email && email.html.includes('{{inputs.name}}'), 'email html has placeholder')
+assert('inputs' in email && email.inputs.some((i) => i.key === 'name'), 'email starter declares name input')
 
 const expr = templateExprValue({
   id: '1',
@@ -107,7 +108,7 @@ assert(
 
 {
   const receipt = renderReceiptFromCart(
-    { title: 'Your receipt', intro: 'Thanks Ada', footer: 'Come again' },
+    { title: 'Your receipt', intro: 'Thanks Ada', footer: 'Come again', inputs: [] },
     built,
     { reference: 'PF-99' },
   )
@@ -119,5 +120,11 @@ assert(
 
 const parsed = parseTemplateContent('hours', { timezone: 'UTC', days: [{ day: 'Monday', closed: true }] })
 assert('days' in parsed && parsed.days[0]?.closed === true, 'hours parse')
+
+{
+  const doc = parseTemplateContent('document', starterTemplateContent('document'))
+  assert('format' in doc && doc.format === 'pdf', 'document starter format')
+  assert('fields' in doc && doc.fields.some((f) => f.as === 'image'), 'document starter signature field')
+}
 
 console.log(JSON.stringify({ ok: true, faqChars: faqText.length, cartChars: cartText.length }, null, 2))

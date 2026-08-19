@@ -1120,15 +1120,16 @@ export const DOC_SECTIONS: DocSection[] = [
           '{{steps.http_1.data}} — data from an HTTP step (shape depends on the response)',
           '{{media.welcome_png.url}} — public URL of a chatbot media file',
           '{{renderFile(media.welcome_png)}} — inline image/file preview in chat',
-          '{{templates.help_faq.text}} — rendered FAQ / menu / hours / legal text',
+          '{{templates.help_faq.text}} — rendered FAQ / menu / hours / legal text (inputs filled from the step)',
           '{{templates.welcome_email.html}} — HTML email body from a template',
+          '{{templates.agreement.file}} — download chip for a filled PDF, Word, or Excel file',
           '{{vars.cart.total}} — payable total from a Shop question (subtotal plus catalog fees)',
           '{{vars.cart.subtotal}} / {{vars.cart.feesTotal}} — product lines only, and fees only',
         ],
       },
       {
         paragraphs: [
-          'If a template uses {{vars.name}} (or a step output) that is not set before the step that inserts it, Problems shows an error on that step. Define the variable as a global, or collect it in an earlier question / set-variable step.',
+          'Copy templates declare named inputs ({{inputs.name}} in the body). Bind those inputs on the Message, Question, End, Email, or OTP step that inserts the template — a variable, a step output, or a literal. Leftover {{vars.name}} placeholders still interpolate. If a required input has no binding, or a leftover variable is not set before the step, Problems flags that step.',
         ],
       },
       {
@@ -1244,7 +1245,7 @@ export const DOC_SECTIONS: DocSection[] = [
     body: [
       {
         paragraphs: [
-          'Open a chatbot’s Templates tab to create reusable content. Insert it on a step with {{templates.key.text}} (chat) or {{templates.key.html}} / {{templates.key.subject}} (email). Publishing snapshots templates into the live graph so public chat keeps working even if you edit later. Placeholders inside a template ({{vars.name}}, {{steps.ask_email.response}}, …) must already be set when the flow reaches the step that uses that template — otherwise Problems flags the step.',
+          'Open a chatbot’s Templates tab to create reusable content. Copy-style templates (email, FAQ, message, menu, hours, legal, receipt, downloadable file) declare typed inputs; the body uses {{inputs.key}}. Insert the template on a step with {{templates.key.text}} (chat), {{templates.key.html}} / {{templates.key.subject}} (email), or {{templates.key.file}} (download). On that step, bind each input to {{vars.*}}, {{steps.*}}, or a literal. Store catalogs stay as they are. Publishing snapshots templates into the live graph so public chat keeps working even if you edit later.',
         ],
       },
       {
@@ -1253,13 +1254,20 @@ export const DOC_SECTIONS: DocSection[] = [
           'HTML email — subject and HTML body for Email steps and OTP messages.',
           'Help / FAQ — question and answer lists for support menus.',
           'Store catalog — categories, products, and optional checkout fees (shipping, delivery, tax) for a Shop question.',
+          'Downloadable file — PDF, Word, or Excel filled from template inputs (and leftover {{vars.*}}). List layout stacks fields; Page layout is an A4 canvas. Insert {{templates.key.file}} on a Message or End step; visitors download the built file.',
           'Menu, chat message, opening hours, legal copy, and receipts.',
+        ],
+      },
+      {
+        heading: 'Inputs',
+        paragraphs: [
+          'On the Templates tab, add named inputs (string, number, boolean, date, or file). Use {{inputs.key}} in the body instead of pasting chatbot variables. When you insert the template on a Message, Question, End, Email, or OTP step, the inspector lists each input so you can bind {{vars.name}}, {{steps.ask_email.response}}, or a typed literal. Required inputs with an empty binding show up in Problems.',
         ],
       },
       {
         heading: 'Match the response type',
         paragraphs: [
-          'On a Question, Insert Template and {{ suggestions only list kinds that fit the current Response. Message and End steps can still insert any chat template as text.',
+          'On a Question, Insert Template and {{ suggestions only list kinds that fit the current Response. Message and End steps can insert chat copy, receipts, and downloadable files.',
         ],
         bullets: [
           'Shop — store catalogs plus chat copy (FAQ, menu, hours, legal). Bind the catalog with Store catalog on the question; do not paste the same catalog into a later Payment prompt.',
@@ -1287,8 +1295,23 @@ export const DOC_SECTIONS: DocSection[] = [
         ],
       },
       {
+        heading: 'Downloadable files',
+        paragraphs: [
+          'Create a Downloadable file template and choose PDF, Word, or Excel. Declare inputs such as name, email, and signature, then use {{inputs.name}} in fields and {{inputs.signature}} on an Image field. Bind those inputs on the Message or End step that inserts {{templates.agreement.file}} — visitors get a download chip; the file is built from that conversation when they click it.',
+        ],
+        bullets: [
+          'List layout — stacked title, intro, fields, body, and footer. Use this for a simple form-style file.',
+          'Page layout — A4 canvas. Add heading, text, field, signature, line, and cart blocks, then drag them into place.',
+          'Snap to grid is on by default (2% of the page). Blocks also snap to each other and to the page center; teal guides appear while you drag. Hold Alt to move freely.',
+          'Select a block to set millimetre Left, Top, Width, and Height (lines use Thickness, down to 0.1 mm). Values keep the decimals you type. You can still drag or pull the teal corner.',
+          'Font is Helvetica, Times, or Courier, plus size, bold, and left/center/right alignment. Set text color (line color on a Line block) and an optional fill.',
+          'PDF keeps positions, fonts, colors, and bold. Word keeps font, color, bold, and reading order, but not pixel placement. Excel is a row list in visual order.',
+          'Include shop cart line items when a cart variable is set, or drop a Cart block on the page.',
+        ],
+      },
+      {
         heading: 'Example',
-        code: '{{templates.welcome_email.html}}\n{{templates.receipt.text}}\n{{vars.cart.total}}',
+        code: '{{templates.welcome_email.html}}\n{{templates.receipt.text}}\n{{templates.agreement.file}}\n{{vars.cart.total}}',
       },
     ],
   },
@@ -1377,7 +1400,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'template-syntax',
     question: 'How do I insert a previous answer into a message?',
     answer:
-      'Use template syntax such as {{vars.userAnswer}} or {{steps.ask_name.response}}, depending on where you stored the value. Template fields offer suggestions as you type. After a Shop question, use {{vars.cart.total}} (or {{vars.cart.subtotal}} / {{vars.cart.feesTotal}}) on later steps.',
+      'Use {{vars.userAnswer}} or {{steps.ask_name.response}} in chat and email steps, depending on where you stored the value. Copy templates use {{inputs.key}} in the body; bind those inputs on the inserting step. Template fields offer suggestions as you type. After a Shop question, use {{vars.cart.total}} (or {{vars.cart.subtotal}} / {{vars.cart.feesTotal}}) on later steps.',
   },
   {
     id: 'shop-cart',
@@ -1389,13 +1412,19 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'insert-template-kinds',
     question: 'Why can’t I insert a store catalog on a Payment question?',
     answer:
-      'On a question, Insert Template and {{ suggestions only list templates that match the Response type. Store catalogs belong on Shop. Payment can insert chat copy and receipts. HTML email is picked on Email steps and OTP fields, not in a chat prompt. Message and Email steps after Payment can insert a receipt as {{templates.key.text}} or {{templates.key.html}}. Problems warns if a non-Shop prompt already references a catalog — inserting one there can loop cart copy back into checkout.',
+      'On a question, Insert Template and {{ suggestions only list templates that match the Response type. Store catalogs belong on Shop. Payment can insert chat copy and receipts. HTML email is picked on Email steps and OTP fields, not in a chat prompt. Message and End steps can insert a downloadable file as {{templates.key.file}}. Message and Email steps after Payment can insert a receipt as {{templates.key.text}} or {{templates.key.html}}. Problems warns if a non-Shop prompt already references a catalog — inserting one there can loop cart copy back into checkout.',
   },
   {
     id: 'media-attach',
     question: 'How do I show an image or file in a chatbot message?',
     answer:
       'Open Design, upload the file in the Media library, then attach it on a Message, Question, or End step — or insert {{renderFile(media.filename_ext)}} in the message text to show a preview (welcome.png becomes {{renderFile(media.welcome_png)}}). Use {{media.welcome_png.url}} when you need the link itself.',
+  },
+  {
+    id: 'document-download',
+    question: 'How do I let visitors download a filled PDF, Word, or Excel file?',
+    answer:
+      'On Templates, create a Downloadable file (PDF, Word, or Excel). Declare inputs on the template ({{inputs.name}}, {{inputs.signature}} for a drawn signature) and bind them on the Message or End step that inserts {{templates.your_key.file}}. Use List layout for a stacked form, or Page layout to place blocks on an A4 page: drag to move, type millimetres for Left/Top/Width/Height (any decimals; lines down to 0.1 mm), snap to the grid (hold Alt to move freely), then set font, bold, and colors. PDF matches the page; Word and Excel follow the same order. Visitors get a download chip; the file is filled when they click it.',
   },
   {
     id: 'http-fail',

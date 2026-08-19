@@ -18,6 +18,7 @@ import {
   parseJsonValue,
   resolveExpressionValue,
 } from '@/features/designer/preview/expressionEval'
+import { parseTemplateBindingMap, type TemplateBindingMap } from '@/features/templates/templateModel'
 import { findContinueRootIds } from '@/features/designer/utils/conditionGraph'
 import type { FlowNodeType } from '@/shared/types/database'
 
@@ -141,8 +142,16 @@ export function interpolate(
   media: Record<string, unknown> = {},
   embedMedia = false,
   templates: Record<string, unknown> = {},
+  templateBindings: TemplateBindingMap = {},
 ): string {
-  return interpolateTemplate(template, { vars, steps: stepOutputs, media, templates, embedMedia })
+  return interpolateTemplate(template, {
+    vars,
+    steps: stepOutputs,
+    media,
+    templates,
+    embedMedia,
+    templateBindings,
+  })
 }
 
 function interpolateChat(
@@ -151,8 +160,13 @@ function interpolateChat(
   stepOutputs: Record<string, unknown>,
   media: Record<string, unknown> = {},
   templates: Record<string, unknown> = {},
+  templateBindings: TemplateBindingMap = {},
 ): string {
-  return interpolate(template, vars, stepOutputs, media, true, templates)
+  return interpolate(template, vars, stepOutputs, media, true, templates, templateBindings)
+}
+
+function bindingsOf(config: Record<string, unknown>): TemplateBindingMap {
+  return parseTemplateBindingMap(config.templateBindings)
 }
 
 function resolveValue(
@@ -161,8 +175,9 @@ function resolveValue(
   stepOutputs: Record<string, unknown>,
   media: Record<string, unknown> = {},
   templates: Record<string, unknown> = {},
+  templateBindings: TemplateBindingMap = {},
 ): unknown {
-  return resolveExpressionValue(raw, { vars, steps: stepOutputs, media, templates })
+  return resolveExpressionValue(raw, { vars, steps: stepOutputs, media, templates, templateBindings })
 }
 
 function coerceCompare(left: unknown, right: unknown, operator: string): boolean {
@@ -397,11 +412,12 @@ export function applyOtpEmailTemplate(
   code: string,
   media: Record<string, unknown> = {},
   templates: Record<string, unknown> = {},
+  templateBindings: TemplateBindingMap = {},
 ): string {
   const withCode = template
     .replace(/\{\{\s*otp\.code\s*\}\}/gi, code)
     .replace(/\{\{\s*otpCode\s*\}\}/gi, code)
-  return interpolate(withCode, vars, stepOutputs, media, false, templates)
+  return interpolate(withCode, vars, stepOutputs, media, false, templates, templateBindings)
 }
 
 function otpConfigOf(config: Record<string, unknown>) {
@@ -461,9 +477,34 @@ export async function sendOtpEmailChallenge(
   }
 
   const code = generateOtpCode(cfg.length)
-  const to = applyOtpEmailTemplate(cfg.toTemplate, state.vars, state.stepOutputs, code, state.media, state.templates).trim()
-  const subject = applyOtpEmailTemplate(cfg.subjectTemplate, state.vars, state.stepOutputs, code, state.media, state.templates)
-  const body = applyOtpEmailTemplate(cfg.bodyTemplate, state.vars, state.stepOutputs, code, state.media, state.templates)
+  const otpBindings = bindingsOf(node.config)
+  const to = applyOtpEmailTemplate(
+    cfg.toTemplate,
+    state.vars,
+    state.stepOutputs,
+    code,
+    state.media,
+    state.templates,
+    otpBindings,
+  ).trim()
+  const subject = applyOtpEmailTemplate(
+    cfg.subjectTemplate,
+    state.vars,
+    state.stepOutputs,
+    code,
+    state.media,
+    state.templates,
+    otpBindings,
+  )
+  const body = applyOtpEmailTemplate(
+    cfg.bodyTemplate,
+    state.vars,
+    state.stepOutputs,
+    code,
+    state.media,
+    state.templates,
+    otpBindings,
+  )
   const expiresAt = new Date(Date.now() + cfg.expiresSeconds * 1000).toISOString()
   const sentAt = new Date().toISOString()
   const connection = connectionsById[cfg.connectionId]
@@ -709,7 +750,7 @@ export function tickPreview(
 
   if (node.type === 'message') {
     const template = String(node.config.text ?? '')
-    const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates)
+    const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates, bindingsOf(node.config))
     const media = attachmentsFor(node, next.mediaCatalog)
     const stored = stripFileEmbeds(text)
     next = {
@@ -727,10 +768,11 @@ export function tickPreview(
   }
 
   if (node.type === 'question') {
+    const qBindings = bindingsOf(node.config)
     const promptTemplate = String(node.config.prompt ?? '')
-    const prompt = interpolateChat(promptTemplate, next.vars, next.stepOutputs, next.media, next.templates)
+    const prompt = interpolateChat(promptTemplate, next.vars, next.stepOutputs, next.media, next.templates, qBindings)
     const choices = resolveQuestionChoices(node.config, {
-      resolve: (raw) => resolveValue(raw, next.vars, next.stepOutputs, next.media, next.templates),
+      resolve: (raw) => resolveValue(raw, next.vars, next.stepOutputs, next.media, next.templates, qBindings),
     })
     const allowMultiple = node.config.allowMultiple === true
     const media = attachmentsFor(node, next.mediaCatalog)
@@ -747,6 +789,7 @@ export function tickPreview(
         next.media,
         false,
         next.templates,
+        qBindings,
       ).trim()
       const amount = interpolate(
         String(node.config.paymentAmount ?? ''),
@@ -755,6 +798,7 @@ export function tickPreview(
         next.media,
         false,
         next.templates,
+        qBindings,
       ).trim()
       const currency =
         String(node.config.currencyCode ?? 'ZAR').trim().toUpperCase() || 'ZAR'
@@ -772,6 +816,7 @@ export function tickPreview(
           next.media,
           false,
           next.templates,
+          qBindings,
         ).trim() || undefined,
         buyerEmail: interpolate(
           String(node.config.paymentBuyerEmail ?? ''),
@@ -780,6 +825,7 @@ export function tickPreview(
           next.media,
           false,
           next.templates,
+          qBindings,
         ).trim() || undefined,
         buyerName: interpolate(
           String(node.config.paymentBuyerName ?? ''),
@@ -788,6 +834,7 @@ export function tickPreview(
           next.media,
           false,
           next.templates,
+          qBindings,
         ).trim() || undefined,
         nodeKey: node.key,
         verify: !!String(node.config.paymentConnectionId ?? '').trim(),
@@ -1008,7 +1055,7 @@ export function tickPreview(
 
   if (node.type === 'end') {
     const template = String(node.config.message ?? 'Thanks — conversation complete.')
-    const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates)
+    const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates, bindingsOf(node.config))
     const media = attachmentsFor(node, next.mediaCatalog)
     next = appendRun(next, node, {
       inputs: { message: template },
@@ -1519,8 +1566,17 @@ export async function runConnectionStep(
         ? (node.config.paramValues as Record<string, string>)
         : {}
     const interpolatedParams: Record<string, string> = {}
+    const emailBindings = bindingsOf(node.config)
     for (const [k, v] of Object.entries(rawParams)) {
-      interpolatedParams[k] = interpolate(String(v ?? ''), next.vars, next.stepOutputs, next.media, false, next.templates)
+      interpolatedParams[k] = interpolate(
+        String(v ?? ''),
+        next.vars,
+        next.stepOutputs,
+        next.media,
+        false,
+        next.templates,
+        emailBindings,
+      )
     }
     if (emailCfg) {
       const resolved = resolveParamValues(emailCfg.inputParams, interpolatedParams)
@@ -1534,6 +1590,7 @@ export async function runConnectionStep(
       next.media,
       false,
       next.templates,
+      emailBindings,
     )
     const subject = interpolate(
       String(interpolatedParams.subject ?? node.config.subject ?? ''),
@@ -1542,6 +1599,7 @@ export async function runConnectionStep(
       next.media,
       false,
       next.templates,
+      emailBindings,
     )
     const body = interpolate(
       String(interpolatedParams.body ?? node.config.body ?? ''),
@@ -1550,6 +1608,7 @@ export async function runConnectionStep(
       next.media,
       false,
       next.templates,
+      emailBindings,
     )
 
     inputs = {

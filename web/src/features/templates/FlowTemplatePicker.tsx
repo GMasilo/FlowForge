@@ -93,7 +93,7 @@ export function InsertTemplateControl({
   chatbotId?: string
   kinds?: TemplateKind[]
   readOnly?: boolean
-  onInsert: (snippet: string) => void
+  onInsert: (snippet: string, key: string) => void
 }) {
   const [picked, setPicked] = useState('')
   const { chatbotId: routeChatbotId } = useParams()
@@ -124,7 +124,7 @@ export function InsertTemplateControl({
         onClick={() => {
           const row = rows.find((r) => r.key === picked)
           if (!row) return
-          onInsert(insertSnippet(row.key, row.kind))
+          onInsert(insertSnippet(row.key, row.kind), row.key)
           setPicked('')
         }}
       >
