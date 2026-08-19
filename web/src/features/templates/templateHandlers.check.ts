@@ -2,10 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   viewTemplate,
   downloadTemplate,
-  exportTemplates,
   importTemplates,
-  duplicateTemplate,
-  cloneTemplateToAnotherChatbot,
 } from './templateApi'
 import {
   getTemplatePreview,
@@ -36,6 +33,7 @@ const mockTemplate: ChatbotTemplate = {
   content: {
     subject: 'Welcome!',
     html: '<p>Welcome to our service</p>',
+    inputs: [],
   },
   deleted_at: null,
   created_by: 'user-789',
@@ -54,6 +52,7 @@ const mockTemplates: ChatbotTemplate[] = [
     content: {
       intro: 'Common questions',
       items: [{ question: 'What are your hours?', answer: '9-5 daily' }],
+      inputs: [],
     },
   },
   {
@@ -145,7 +144,7 @@ describe('Template API Functions', () => {
             key: 'new_template',
             name: 'New Template',
             kind: 'message',
-            content: { text: 'Hello' },
+            content: { text: 'Hello', inputs: [] },
           },
         ],
         false,
@@ -278,8 +277,10 @@ describe('Template Helper Functions', () => {
     it('should extract template dependencies', () => {
       const templateWithDeps: ChatbotTemplate = {
         ...mockTemplate,
+        kind: 'message',
         content: {
           text: 'See {{templates.hours_main.text}} or {{templates.contact_info.text}}',
+          inputs: [],
         },
       }
 
@@ -298,15 +299,17 @@ describe('Template Helper Functions', () => {
     it('should detect circular dependencies', () => {
       const template1: ChatbotTemplate = {
         ...mockTemplate,
+        kind: 'message',
         key: 'template_a',
-        content: { text: '{{templates.template_b.text}}' },
+        content: { text: '{{templates.template_b.text}}', inputs: [] },
       }
 
       const template2: ChatbotTemplate = {
         ...mockTemplate,
+        kind: 'message',
         id: 'template-2',
         key: 'template_b',
-        content: { text: '{{templates.template_a.text}}' },
+        content: { text: '{{templates.template_a.text}}', inputs: [] },
       }
 
       const circular = hasCircularDependency(template1, [template1, template2])
@@ -325,7 +328,7 @@ describe('Template Helper Functions', () => {
         key: 'test_template',
         name: 'Test Template',
         kind: 'message',
-        content: { text: 'Test' },
+        content: { text: 'Test', inputs: [] },
       })
 
       const file = new File([fileContent], 'template.json', { type: 'application/json' })
@@ -343,13 +346,13 @@ describe('Template Helper Functions', () => {
             key: 'template1',
             name: 'Template 1',
             kind: 'message',
-            content: { text: 'Test 1' },
+            content: { text: 'Test 1', inputs: [] },
           },
           {
             key: 'template2',
             name: 'Template 2',
             kind: 'message',
-            content: { text: 'Test 2' },
+            content: { text: 'Test 2', inputs: [] },
           },
         ],
       })
