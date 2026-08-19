@@ -71,3 +71,137 @@ export function publishedTemplatesFromRows(rows: ChatbotTemplate[]) {
     content: row.content,
   }))
 }
+
+export async function viewTemplate(templateId: string): Promise<{
+  template: ChatbotTemplate
+  chatbot_id: string
+  instance_id: string
+}> {
+  const response = await fetch(`/api/template/view?id=${encodeURIComponent(templateId)}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+  })
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to view template' }))
+    throw new Error(error.error || 'Failed to view template')
+  }
+  
+  return response.json()
+}
+
+export async function downloadTemplate(
+  templateId: string,
+  format: 'json' | 'txt' = 'json',
+): Promise<void> {
+  const url = `/api/template/download?id=${encodeURIComponent(templateId)}&format=${format}`
+  const link = document.createElement('a')
+  link.href = url
+  link.download = ''
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+export async function exportTemplates(templateIds: string[]): Promise<void> {
+  const response = await fetch('/api/template/export', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({ template_ids: templateIds }),
+  })
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to export templates' }))
+    throw new Error(error.error || 'Failed to export templates')
+  }
+  
+  const blob = await response.blob()
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `templates_export_${new Date().toISOString().split('T')[0]}.json`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
+
+export async function importTemplates(
+  chatbotId: string,
+  templates: Array<{
+    key: string
+    name: string
+    description?: string
+    kind: TemplateKind
+    content: TemplateContent
+  }>,
+  overwrite = false,
+): Promise<{
+  imported: Array<{ id: string; key: string; action: 'created' | 'updated' }>
+  skipped: string[]
+  errors: string[]
+  total: number
+  success_count: number
+}> {
+  const response = await fetch('/api/template/import', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({
+      chatbot_id: chatbotId,
+      templates,
+      overwrite,
+    }),
+  })
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to import templates' }))
+    throw new Error(error.error || 'Failed to import templates')
+  }
+  
+  return response.json()
+}
+
+export async function duplicateTemplate(
+  templateId: string,
+  newName?: string,
+): Promise<ChatbotTemplate> {
+  const { template, chatbot_id } = await viewTemplate(templateId)
+  
+  const duplicatedTemplate = await createChatbotTemplate({
+    chatbotId: chatbot_id,
+    key: `${template.key}_copy`,
+    name: newName || `${template.name} (Copy)`,
+    description: template.description ?? undefined,
+    kind: template.kind as TemplateKind,
+    content: template.content as TemplateContent,
+  })
+  
+  return duplicatedTemplate
+}
+
+export async function cloneTemplateToAnotherChatbot(
+  templateId: string,
+  targetChatbotId: string,
+): Promise<ChatbotTemplate> {
+  const { template } = await viewTemplate(templateId)
+  
+  const clonedTemplate = await createChatbotTemplate({
+    chatbotId: targetChatbotId,
+    key: template.key,
+    name: template.name,
+    description: template.description ?? undefined,
+    kind: template.kind as TemplateKind,
+    content: template.content as TemplateContent,
+  })
+  
+  return clonedTemplate
+}
