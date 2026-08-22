@@ -3,6 +3,19 @@ export type VariableType = 'string' | 'number' | 'boolean' | 'date' | 'array' | 
 export type VariableScope = 'global' | 'step'
 export type ConnectionKind = 'http' | 'email' | 'payment'
 export type ConnectionVisibility = 'private' | 'global' | 'shared'
+export type IntegrationProvider =
+  | 'microsoft_onedrive'
+  | 'google_drive'
+  | 'dropbox'
+  | 'box'
+  | 'sharepoint'
+  | 'slack'
+  | 'microsoft_teams'
+  | 'google_sheets'
+  | 'notion'
+  | 's3'
+  | 'custom'
+export type IntegrationStatus = 'disconnected' | 'connected' | 'error'
 export type FlowNodeType =
   | 'message'
   | 'question'
@@ -434,6 +447,63 @@ type Tables = {
       connection_id?: string
       added_by?: string | null
       created_at?: string
+    }
+    Relationships: []
+  }
+  integrations: {
+    Row: {
+      id: string
+      instance_id: string
+      provider: IntegrationProvider
+      name: string
+      status: IntegrationStatus
+      config: Json
+      created_by: string | null
+      created_at: string
+      updated_at: string
+      deleted_at: string | null
+    }
+    Insert: {
+      id?: string
+      instance_id: string
+      provider: IntegrationProvider
+      name: string
+      status?: IntegrationStatus
+      config?: Json
+      created_by?: string | null
+      created_at?: string
+      updated_at?: string
+      deleted_at?: string | null
+    }
+    Update: {
+      id?: string
+      instance_id?: string
+      provider?: IntegrationProvider
+      name?: string
+      status?: IntegrationStatus
+      config?: Json
+      created_by?: string | null
+      created_at?: string
+      updated_at?: string
+      deleted_at?: string | null
+    }
+    Relationships: []
+  }
+  integration_secrets: {
+    Row: {
+      integration_id: string
+      secrets: Json
+      updated_at: string
+    }
+    Insert: {
+      integration_id: string
+      secrets?: Json
+      updated_at?: string
+    }
+    Update: {
+      integration_id?: string
+      secrets?: Json
+      updated_at?: string
     }
     Relationships: []
   }
@@ -1220,6 +1290,8 @@ export interface Database {
       variable_scope: VariableScope
       connection_kind: ConnectionKind
       connection_visibility: ConnectionVisibility
+      integration_provider: IntegrationProvider
+      integration_status: IntegrationStatus
       flow_node_type: FlowNodeType
       entity_kind: EntityKind
       template_kind: TemplateKind
@@ -1240,6 +1312,8 @@ export type ConnectionShare = Tables['connection_shares']['Row']
 export type ChatbotConnection = Tables['chatbot_connections']['Row']
 /** Connection metadata + optional secrets (managers only). */
 export type ConnectionWithConfig = Connection & { config?: Json | null; canManage?: boolean }
+export type Integration = Tables['integrations']['Row']
+export type IntegrationSecret = Tables['integration_secrets']['Row']
 export type ChatbotFlow = Tables['chatbot_flows']['Row']
 export type FlowNode = Tables['flow_nodes']['Row']
 export type FlowEdge = Tables['flow_edges']['Row']
