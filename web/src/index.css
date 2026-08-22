@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 @import '@xyflow/react/dist/style.css';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Sora', ui-sans-serif, system-ui, sans-serif;
@@ -22,6 +24,7 @@
   --color-warning: #d97706;
   --color-warning-soft: #fef3c7;
   --color-success: #059669;
+  --color-success-soft: #d1fae5;
   --color-node-message: #0369a1;
   --color-node-question: #0f766e;
   --color-node-http: #7c3aed;
@@ -35,6 +38,63 @@
   --shadow-soft: 0 10px 40px -16px rgb(15 23 42 / 0.18);
   --shadow-lift: 0 18px 50px -20px rgb(15 118 110 / 0.35);
   --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Unlayered so these beat @theme tokens on :root */
+.dark {
+  --color-canvas: #0b1220;
+  --color-ink: #e8eef7;
+  --color-ink-muted: #94a3b8;
+  --color-surface: #141c2b;
+  --color-surface-2: #1a2436;
+  --color-border: #2a364a;
+  --color-accent: #2dd4bf;
+  --color-accent-2: #22d3ee;
+  --color-accent-fg: #042f2e;
+  --color-accent-soft: #134e4a;
+  --color-highlight: #fb923c;
+  --color-highlight-soft: #7c2d12;
+  --color-danger: #fb7185;
+  --color-danger-soft: #4c0519;
+  --color-warning: #fbbf24;
+  --color-warning-soft: #78350f;
+  --color-success: #34d399;
+  --color-success-soft: #064e3b;
+  --color-node-message: #38bdf8;
+  --color-node-question: #2dd4bf;
+  --color-node-http: #a78bfa;
+  --color-node-email: #fb923c;
+  --color-node-condition: #facc15;
+  --color-node-loop: #2dd4bf;
+  --color-node-set: #94a3b8;
+  --color-node-operation: #818cf8;
+  --color-node-end: #cbd5e1;
+
+  --shadow-soft: 0 10px 40px -16px rgb(0 0 0 / 0.55);
+  --shadow-lift: 0 18px 50px -20px rgb(45 212 191 / 0.28);
+}
+
+/* Embeds stay light even if the operator prefers dark */
+html.ff-embed {
+  --color-canvas: #eef3f8;
+  --color-ink: #0f172a;
+  --color-ink-muted: #64748b;
+  --color-surface: #ffffff;
+  --color-surface-2: #e8eef6;
+  --color-border: #cdd8e6;
+  --color-accent: #0f766e;
+  --color-accent-2: #0891b2;
+  --color-accent-fg: #ffffff;
+  --color-accent-soft: #ccfbf1;
+  --color-highlight: #f97316;
+  --color-highlight-soft: #ffedd5;
+  --color-danger: #e11d48;
+  --color-danger-soft: #ffe4e6;
+  --color-warning: #d97706;
+  --color-warning-soft: #fef3c7;
+  --color-success: #059669;
+  --color-success-soft: #d1fae5;
+  color-scheme: light;
 }
 
 @layer base {
@@ -61,15 +121,24 @@
     background-attachment: fixed;
   }
 
+  html.dark body {
+    background-image:
+      radial-gradient(ellipse 90% 60% at 0% -10%, rgb(45 212 191 / 0.12), transparent 55%),
+      radial-gradient(ellipse 70% 50% at 100% 0%, rgb(56 189 248 / 0.1), transparent 50%),
+      radial-gradient(ellipse 50% 40% at 50% 100%, rgb(249 115 22 / 0.06), transparent 55%),
+      linear-gradient(180deg, #0a1018 0%, var(--color-canvas) 40%, #0d1520 100%);
+  }
+
+  /* Prefer selecting against accent in both themes */
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 28%, transparent);
+  }
+
   h1,
   h2,
   h3 {
     font-family: var(--font-display);
     letter-spacing: -0.03em;
-  }
-
-  ::selection {
-    background: rgb(15 118 110 / 0.2);
   }
 
   /* Compact surface when chat is framed on a client site */
@@ -102,8 +171,13 @@
   .ff-glass {
     background: color-mix(in oklab, var(--color-surface) 82%, transparent);
     backdrop-filter: blur(16px) saturate(1.2);
-    border: 1px solid color-mix(in oklab, white 55%, var(--color-border));
+    border: 1px solid color-mix(in oklab, var(--color-surface) 55%, var(--color-border));
     box-shadow: var(--shadow-soft);
+  }
+
+  .dark .ff-glass {
+    background: color-mix(in oklab, var(--color-surface) 78%, transparent);
+    border-color: color-mix(in oklab, white 8%, var(--color-border));
   }
 
   .ff-gradient-text {
@@ -113,9 +187,19 @@
     color: transparent;
   }
 
+  .dark .ff-gradient-text {
+    background: linear-gradient(120deg, #5eead4 0%, #22d3ee 55%, #38bdf8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+
   .ff-brand-mark {
     background: linear-gradient(135deg, #0f766e 0%, #0891b2 50%, #0284c7 100%);
     box-shadow: 0 8px 24px -8px rgb(15 118 110 / 0.55);
+  }
+
+  .dark .ff-brand-mark {
+    box-shadow: 0 8px 24px -8px rgb(45 212 191 / 0.4);
   }
 
   .ff-page-enter {
@@ -169,6 +253,13 @@
       radial-gradient(at 20% 20%, rgb(45 212 191 / 0.18) 0, transparent 40%),
       radial-gradient(at 80% 0%, rgb(56 189 248 / 0.16) 0, transparent 35%),
       radial-gradient(at 50% 80%, rgb(251 146 60 / 0.1) 0, transparent 40%);
+  }
+
+  .dark .ff-mesh {
+    background-image:
+      radial-gradient(at 20% 20%, rgb(45 212 191 / 0.1) 0, transparent 40%),
+      radial-gradient(at 80% 0%, rgb(56 189 248 / 0.08) 0, transparent 35%),
+      radial-gradient(at 50% 80%, rgb(251 146 60 / 0.06) 0, transparent 40%);
   }
 
   /* Overflow still scrolls; the bar is hidden (chat widget / public chat). */
