@@ -108,7 +108,6 @@ function InstanceNav() {
     { to: `/instances/${instanceId}/members`, label: 'Users', end: false },
     ...(isAdmin
       ? [
-          { to: `/instances/${instanceId}/integrations`, label: 'Integrations', end: false },
           { to: `/instances/${instanceId}/audit`, label: 'Audit', end: false },
           { to: `/instances/${instanceId}/webhooks`, label: 'Webhooks', end: false },
           { to: `/instances/${instanceId}/usage`, label: 'Usage', end: false },
