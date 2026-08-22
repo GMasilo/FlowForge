@@ -38,7 +38,7 @@ export function CurrencyAnswerField({
 
   return (
     <div className={cn('relative min-w-0 flex-1', className)}>
-      <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm font-semibold text-slate-500">
+      <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm font-semibold text-[var(--color-ink-muted)]">
         {symbol}
       </span>
       <input
@@ -54,8 +54,8 @@ export function CurrencyAnswerField({
         placeholder="0.00"
         aria-label={`Amount in ${code}`}
         className={cn(
-          'h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 py-2 pr-3 pl-10 text-sm outline-none transition',
-          'focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15',
+          'h-11 w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] py-2 pr-3 pl-10 text-sm outline-none transition',
+          'focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15',
           disabled && 'cursor-not-allowed opacity-50',
         )}
       />

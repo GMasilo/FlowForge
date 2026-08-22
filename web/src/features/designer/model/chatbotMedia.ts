@@ -45,6 +45,27 @@ export function mediaKindOf(file: Pick<ChatbotMediaFile, 'mime' | 'filename'>): 
   return 'file'
 }
 
+/** True for PDFs that browsers can usually preview inline. */
+export function isPdfMediaFile(file: Pick<ChatbotMediaFile, 'mime' | 'filename'>): boolean {
+  if ((file.mime || '').toLowerCase() === 'application/pdf') return true
+  return file.filename.split('.').pop()?.toLowerCase() === 'pdf'
+}
+
+/** Same URL with ?download=1 so /file/get serves Content-Disposition: attachment. */
+export function mediaFileDownloadUrl(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed) return trimmed
+  try {
+    const parsed = new URL(trimmed, 'https://flowforge.invalid')
+    parsed.searchParams.set('download', '1')
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return parsed.toString()
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    const joiner = trimmed.includes('?') ? '&' : '?'
+    return `${trimmed}${joiner}download=1`
+  }
+}
+
 export function readMediaFiles(config: Record<string, unknown> | undefined | null): string[] {
   const raw = config?.mediaFiles
   if (!Array.isArray(raw)) return []

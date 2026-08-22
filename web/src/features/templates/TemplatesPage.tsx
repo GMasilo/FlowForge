@@ -99,7 +99,7 @@ function CopyChip({ value }: { value: string }) {
       type="button"
       onClick={() => void copy()}
       title="Copy insert snippet"
-      className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-teal-50 px-2 py-0.5 font-mono text-[12px] text-teal-800 ring-1 ring-teal-600/15 transition hover:bg-teal-100"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-[var(--color-accent-soft)] px-2 py-0.5 font-mono text-[12px] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/20 transition hover:bg-[var(--color-accent-soft)]"
     >
       <span className="truncate">{value}</span>
       {copied ? <Check className="h-3 w-3 shrink-0" /> : <Copy className="h-3 w-3 shrink-0 opacity-60" />}
@@ -266,7 +266,7 @@ export function TemplatesPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-xs text-[var(--color-ink-muted)]">
-            <Link to={`/instances/${instance.id}`} className="hover:text-teal-700 hover:underline">
+            <Link to={`/instances/${instance.id}`} className="hover:text-[var(--color-accent)] hover:underline">
               Chatbots
             </Link>
             {' / '}
@@ -282,10 +282,10 @@ export function TemplatesPage() {
       </div>
 
       {editor ? (
-        <Card className="space-y-4 border-teal-200/80 bg-gradient-to-br from-white to-teal-50/40">
+        <Card className="space-y-4 border-[var(--color-accent)]/25 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-accent-soft)]/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-accent)]">
                 {editor.id ? 'Edit template' : 'New template'} · {TEMPLATE_KIND_META[editor.kind].label}
               </p>
               <p className="text-sm text-[var(--color-ink-muted)]">{TEMPLATE_KIND_META[editor.kind].hint}</p>
@@ -376,7 +376,7 @@ export function TemplatesPage() {
           {editable ? (
             <Card className="space-y-3">
               <div>
-                <h2 className="text-sm font-semibold text-slate-800">Create a template</h2>
+                <h2 className="text-sm font-semibold text-[var(--color-ink)]">Create a template</h2>
                 <p className="text-xs text-[var(--color-ink-muted)]">Start blank or with sample content.</p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -385,15 +385,15 @@ export function TemplatesPage() {
                   return (
                     <div
                       key={kind}
-                      className="flex flex-col gap-2 rounded-xl border border-[var(--color-border)] bg-white/80 p-3"
+                      className="flex flex-col gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-3"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="grid h-8 w-8 place-items-center rounded-lg bg-teal-50 text-teal-800">
+                        <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
                           <Icon className="h-4 w-4" />
                         </span>
                         <div>
-                          <p className="text-sm font-medium text-slate-800">{TEMPLATE_KIND_META[kind].label}</p>
-                          <p className="text-[11px] text-slate-500">{TEMPLATE_KIND_META[kind].hint}</p>
+                          <p className="text-sm font-medium text-[var(--color-ink)]">{TEMPLATE_KIND_META[kind].label}</p>
+                          <p className="text-[11px] text-[var(--color-ink-muted)]">{TEMPLATE_KIND_META[kind].hint}</p>
                         </div>
                       </div>
                       <div className="mt-auto flex gap-1.5">
@@ -413,7 +413,7 @@ export function TemplatesPage() {
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-[220px] flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-ink-muted)]" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -457,20 +457,20 @@ export function TemplatesPage() {
                     type="button"
                     onClick={() => startEdit(row)}
                     className={cn(
-                      'rounded-2xl border border-[var(--color-border)] bg-white/80 p-4 text-left shadow-[var(--shadow-soft)] transition',
-                      'hover:border-teal-300 hover:shadow-md',
+                      'rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-4 text-left shadow-[var(--shadow-soft)] transition',
+                      'hover:border-[var(--color-accent)]/40 hover:shadow-md',
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-teal-50 to-cyan-50 text-teal-800">
+                      <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-[var(--color-accent-soft)] to-[var(--color-accent-2)]/15 text-[var(--color-accent)]">
                         <Icon className="h-5 w-5" />
                       </span>
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                      <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]">
                         {TEMPLATE_KIND_META[row.kind].label}
                       </span>
                     </div>
-                    <h3 className="mt-3 text-sm font-semibold text-slate-900">{row.name}</h3>
-                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">{snippetPreview(row) || row.description || 'Empty'}</p>
+                    <h3 className="mt-3 text-sm font-semibold text-[var(--color-ink)]">{row.name}</h3>
+                    <p className="mt-1 line-clamp-2 text-xs text-[var(--color-ink-muted)]">{snippetPreview(row) || row.description || 'Empty'}</p>
                     <div className="mt-3" onClick={(e) => e.stopPropagation()}>
                       <CopyChip value={insertSnippet(row.key, row.kind)} />
                     </div>

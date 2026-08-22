@@ -50,7 +50,7 @@ function CopyChip({ value }: { value: string }) {
       type="button"
       onClick={() => void copy()}
       title="Copy"
-      className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-teal-50 px-2 py-0.5 font-mono text-[12px] text-teal-800 ring-1 ring-teal-600/15 transition hover:bg-teal-100"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-[var(--color-accent-soft)] px-2 py-0.5 font-mono text-[12px] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/20 transition hover:bg-[var(--color-accent-soft)]"
     >
       <span className="truncate">{value}</span>
       {copied ? <Check className="h-3 w-3 shrink-0" /> : <Copy className="h-3 w-3 shrink-0 opacity-60" />}
@@ -75,7 +75,7 @@ function DataSection({
       description={description}
       defaultOpen={false}
       badge={
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+        <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-ink-muted)]">
           {entries.length}
         </span>
       }
@@ -88,7 +88,7 @@ function DataSection({
             <li key={entry.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-slate-800">{entry.label}</span>
+                  <span className="font-medium text-[var(--color-ink)]">{entry.label}</span>
                   {entry.typeBadge ? <Badge>{entry.typeBadge}</Badge> : null}
                 </div>
                 {entry.detail ? <p className="text-xs text-[var(--color-ink-muted)]">{entry.detail}</p> : null}
@@ -97,7 +97,7 @@ function DataSection({
               {entry.sourceNodeKey ? (
                 <Link
                   to={`${designHref}?step=${encodeURIComponent(entry.sourceNodeKey)}`}
-                  className="shrink-0 text-xs font-medium text-teal-700 hover:underline"
+                  className="shrink-0 text-xs font-medium text-[var(--color-accent)] hover:underline"
                 >
                   Open {entry.sourceNodeKey}
                 </Link>
@@ -220,7 +220,7 @@ export function ChatbotDataPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-ink-muted)]" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -230,11 +230,11 @@ export function ChatbotDataPage() {
           />
         </div>
         <div className="flex flex-wrap gap-2 text-xs text-[var(--color-ink-muted)]">
-          <span className="rounded-full bg-slate-100 px-2.5 py-1">{counts.globals} globals</span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1">{counts.stepVars} flow vars</span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1">{counts.loopLocals} loop</span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1">{counts.stepRefs} step refs</span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1">{counts.connections} connections</span>
+          <span className="rounded-full bg-[var(--color-surface-2)] px-2.5 py-1">{counts.globals} globals</span>
+          <span className="rounded-full bg-[var(--color-surface-2)] px-2.5 py-1">{counts.stepVars} flow vars</span>
+          <span className="rounded-full bg-[var(--color-surface-2)] px-2.5 py-1">{counts.loopLocals} loop</span>
+          <span className="rounded-full bg-[var(--color-surface-2)] px-2.5 py-1">{counts.stepRefs} step refs</span>
+          <span className="rounded-full bg-[var(--color-surface-2)] px-2.5 py-1">{counts.connections} connections</span>
         </div>
       </div>
 
@@ -282,9 +282,9 @@ export function ChatbotDataPage() {
           !inventory.stepRefs.length &&
           !inventory.connections.length ? (
             <Card className={cn('flex items-start gap-3')}>
-              <Database className="mt-0.5 h-5 w-5 text-teal-700" />
+              <Database className="mt-0.5 h-5 w-5 text-[var(--color-accent)]" />
               <div>
-                <p className="font-medium text-slate-800">No data elements yet</p>
+                <p className="font-medium text-[var(--color-ink)]">No data elements yet</p>
                 <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                   Add globals in Settings, or create steps that write variables in Design.
                 </p>

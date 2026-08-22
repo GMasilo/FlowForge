@@ -520,6 +520,17 @@ export async function deleteDesignerMedia(payload: {
   }, { signal: payload.signal })
 }
 
+export async function purgeChatbotFiles(payload: {
+  instanceId: string
+  chatbotId: string
+  signal?: AbortSignal
+}): Promise<void> {
+  await postJson('/file/purge-chatbot', {
+    instance_id: payload.instanceId,
+    chatbot_id: payload.chatbotId,
+  }, { signal: payload.signal })
+}
+
 export function absoluteInstanceFileUrl(relativeOrAbsolute: string): string {
   if (/^https?:\/\//i.test(relativeOrAbsolute)) return relativeOrAbsolute
   if (!API_BASE) return relativeOrAbsolute

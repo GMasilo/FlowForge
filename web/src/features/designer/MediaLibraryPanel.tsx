@@ -116,7 +116,7 @@ export function MediaLibraryPanel({
         title="Media"
         description="Configure VITE_FLOWFORGE_API_URL to upload chatbot media."
         badge={
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+          <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-ink-muted)]">
             Offline
           </span>
         }
@@ -132,7 +132,7 @@ export function MediaLibraryPanel({
       description="Upload files for this chatbot, then attach them on steps or insert {{renderFile(media.key)}} in a message."
       defaultOpen={false}
       badge={
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+        <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-ink-muted)]">
           {files.length}
         </span>
       }
@@ -163,7 +163,7 @@ export function MediaLibraryPanel({
         ) : null
       }
     >
-      {error ? <p className="mb-3 text-xs text-rose-600">{error}</p> : null}
+      {error ? <p className="mb-3 text-xs text-[var(--color-danger)]">{error}</p> : null}
       {media.isLoading ? (
         <p className="text-sm text-[var(--color-ink-muted)]">Loading media…</p>
       ) : files.length ? (
@@ -175,28 +175,28 @@ export function MediaLibraryPanel({
             return (
               <li
                 key={file.filename}
-                className="flex gap-2 rounded-xl border border-slate-200/80 bg-white/80 p-2"
+                className="flex gap-2 rounded-xl border border-[var(--color-border)]/80 bg-[var(--color-surface)]/80 p-2"
               >
-                <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-200/70">
+                <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-[var(--color-surface-2)] ring-1 ring-[var(--color-border)]/70">
                   {kind === 'image' ? (
                     <img src={url} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <ImageIcon className="h-5 w-5 text-slate-400" />
+                    <ImageIcon className="h-5 w-5 text-[var(--color-ink-muted)]" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-slate-800" title={file.filename}>
+                  <p className="truncate text-xs font-semibold text-[var(--color-ink)]" title={file.filename}>
                     {file.filename}
                   </p>
-                  <p className="truncate font-mono text-[10px] text-teal-700">{insert}</p>
+                  <p className="truncate font-mono text-[10px] text-[var(--color-accent)]">{insert}</p>
                   <div className="mt-1 flex flex-wrap gap-1">
                     <button
                       type="button"
                       className={cn(
                         'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium',
                         copied === file.filename
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800',
+                          ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]'
+                          : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink)]',
                       )}
                       onClick={() => void copyInsert(file)}
                     >
@@ -205,7 +205,7 @@ export function MediaLibraryPanel({
                     </button>
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink)]"
                       disabled={busyFile === file.filename}
                       onClick={() => void openFile(file.filename)}
                     >
@@ -214,7 +214,7 @@ export function MediaLibraryPanel({
                     </button>
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink)]"
                       disabled={busyFile === file.filename}
                       onClick={() => void downloadFile(file.filename)}
                     >
@@ -224,7 +224,7 @@ export function MediaLibraryPanel({
                     {editable ? (
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-rose-600 hover:bg-rose-50"
+                        className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
                         disabled={remove.isPending}
                         onClick={() => {
                           if (!window.confirm(`Delete ${file.filename}? Steps that attach it will lose the file.`)) return

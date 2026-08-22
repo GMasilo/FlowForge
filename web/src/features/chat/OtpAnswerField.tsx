@@ -75,8 +75,8 @@ export function OtpAnswerField({
             refs.current[Math.min(pasted.length, count - 1)]?.focus()
           }}
           className={cn(
-            'h-11 w-9 rounded-xl border border-slate-200 bg-slate-50 text-center font-mono text-sm font-semibold outline-none transition',
-            'focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15',
+            'h-11 w-9 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] text-center font-mono text-sm font-semibold outline-none transition',
+            'focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15',
             disabled && 'opacity-50',
           )}
         />

@@ -333,6 +333,37 @@ final class InstanceFiles
         return true;
     }
 
+    /** Remove files/{instanceId}/{chatbotId} after a permanent chatbot delete. */
+    public static function deleteChatbotTree(array $config, string $instanceId, string $chatbotId): bool
+    {
+        $base = self::chatbotBase($config, $instanceId, $chatbotId);
+        if (!is_dir($base)) {
+            return false;
+        }
+        self::rmTree($base);
+        return !is_dir($base);
+    }
+
+    private static function rmTree(string $dir): void
+    {
+        $items = @scandir($dir);
+        if ($items === false) {
+            return;
+        }
+        foreach ($items as $name) {
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            $path = $dir . DIRECTORY_SEPARATOR . $name;
+            if (is_dir($path) && !is_link($path)) {
+                self::rmTree($path);
+            } else {
+                @unlink($path);
+            }
+        }
+        @rmdir($dir);
+    }
+
     /**
      * @return array{tmp: string, name: string, size: int, error: int}
      */

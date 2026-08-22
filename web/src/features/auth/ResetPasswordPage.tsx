@@ -77,7 +77,7 @@ export function ResetPasswordPage() {
       footer={
         <p>
           <Link
-            className="font-semibold text-teal-700 underline decoration-teal-700/30 underline-offset-4"
+            className="font-semibold text-[var(--color-accent)] underline decoration-[var(--color-accent)]/30 underline-offset-4"
             to="/login"
           >
             Back to sign in
@@ -93,7 +93,7 @@ export function ResetPasswordPage() {
             This reset link is invalid or has expired. Request a new password reset email.
           </FieldError>
           <Link
-            className="inline-block font-semibold text-teal-700 underline decoration-teal-700/30 underline-offset-4"
+            className="inline-block font-semibold text-[var(--color-accent)] underline decoration-[var(--color-accent)]/30 underline-offset-4"
             to="/forgot-password"
           >
             Request a new link

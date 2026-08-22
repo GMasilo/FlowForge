@@ -34,7 +34,7 @@ export function ChoiceAnswerField({
       placeholder={allowMultiple ? 'Choose options' : 'Choose an option'}
       className={cn(
         variant === 'chat' &&
-          '[&_button]:!h-11 [&_button]:!rounded-2xl [&_button]:!border-slate-200 [&_button]:!bg-slate-50',
+          '[&_button]:!h-11 [&_button]:!rounded-2xl [&_button]:!border-[var(--color-border)] [&_button]:!bg-[var(--color-surface-2)]',
         className,
       )}
     />

@@ -46,7 +46,7 @@ export function StepperAnswerField({
         disabled={disabled || current <= start}
         aria-label="Decrease"
         onClick={() => nudge(-stride)}
-        className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:border-teal-300 hover:bg-teal-50 disabled:opacity-40"
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-ink)] transition hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
       >
         <Minus className="h-4 w-4" />
       </button>
@@ -59,14 +59,14 @@ export function StepperAnswerField({
         step={stride}
         value={current}
         onChange={(e) => onChange(e.target.value)}
-        className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-center text-sm font-semibold tabular-nums outline-none transition focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15"
+        className="h-11 min-w-0 flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 text-center text-sm font-semibold tabular-nums outline-none transition focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15"
       />
       <button
         type="button"
         disabled={disabled || current >= end}
         aria-label="Increase"
         onClick={() => nudge(stride)}
-        className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:border-teal-300 hover:bg-teal-50 disabled:opacity-40"
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-ink)] transition hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
       >
         <Plus className="h-4 w-4" />
       </button>

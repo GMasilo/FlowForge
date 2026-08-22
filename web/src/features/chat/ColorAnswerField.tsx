@@ -35,7 +35,7 @@ export function ColorAnswerField({
     <div className={cn('flex min-w-0 flex-1 items-center gap-2', className)}>
       <label
         className={cn(
-          'relative grid h-11 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-slate-200 shadow-sm',
+          'relative grid h-11 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-sm',
           disabled && 'opacity-50',
         )}
         style={{ background: hex }}
@@ -62,8 +62,8 @@ export function ColorAnswerField({
         placeholder="#14b8a6"
         aria-label="Color hex"
         className={cn(
-          'h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 font-mono text-sm outline-none transition',
-          'focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15',
+          'h-11 min-w-0 flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 font-mono text-sm outline-none transition',
+          'focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15',
           disabled && 'cursor-not-allowed opacity-50',
         )}
       />

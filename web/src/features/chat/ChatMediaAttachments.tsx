@@ -1,7 +1,69 @@
-import { Download, FileText } from 'lucide-react'
+import { Download, ExternalLink, FileText } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
-import { mediaKindOf, type ChatbotMediaFile } from '@/features/designer/model/chatbotMedia'
+import {
+  isPdfMediaFile,
+  mediaFileDownloadUrl,
+  mediaKindOf,
+  type ChatbotMediaFile,
+} from '@/features/designer/model/chatbotMedia'
 import { MediaPlayCard } from '@/features/chat/ChatMediaPlayer'
+
+function FileActionChip({
+  file,
+  user,
+}: {
+  file: ChatbotMediaFile
+  user: boolean
+}) {
+  const canView = isPdfMediaFile(file)
+  const downloadUrl = mediaFileDownloadUrl(file.url)
+
+  return (
+    <div
+      className={cn(
+        'inline-flex max-w-full flex-wrap items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-medium',
+        user
+          ? 'bg-[var(--color-accent-fg)]/15 text-[var(--color-accent-fg)] ring-1 ring-[var(--color-accent-fg)]/25'
+          : 'bg-[var(--color-surface-2)] text-[var(--color-ink)] ring-1 ring-[var(--color-border)]/80',
+      )}
+    >
+      <FileText
+        className={cn(
+          'ml-1 h-3.5 w-3.5 shrink-0',
+          user ? 'text-[var(--color-accent-fg)]/70' : 'text-[var(--color-ink-muted)]',
+        )}
+      />
+      <span className="min-w-0 max-w-[10rem] truncate sm:max-w-[14rem]" title={file.filename}>
+        {file.filename}
+      </span>
+      {canView ? (
+        <a
+          href={file.url}
+          target="_blank"
+          rel="noreferrer"
+          className={cn(
+            'inline-flex items-center gap-1 rounded-lg px-2 py-1',
+            user ? 'hover:bg-[var(--color-accent-fg)]/15' : 'hover:bg-[var(--color-surface)]',
+          )}
+        >
+          <ExternalLink className="h-3 w-3 shrink-0 opacity-70" />
+          View
+        </a>
+      ) : null}
+      <a
+        href={downloadUrl}
+        download={file.filename}
+        className={cn(
+          'inline-flex items-center gap-1 rounded-lg px-2 py-1',
+          user ? 'hover:bg-[var(--color-accent-fg)]/15' : 'hover:bg-[var(--color-surface)]',
+        )}
+      >
+        <Download className="h-3 w-3 shrink-0 opacity-70" />
+        Download
+      </a>
+    </div>
+  )
+}
 
 export function ChatMediaAttachments({
   items,
@@ -27,7 +89,7 @@ export function ChatMediaAttachments({
                 alt={file.filename}
                 className={cn(
                   'max-h-56 max-w-full rounded-xl object-contain',
-                  user ? 'ring-1 ring-white/30' : 'ring-1 ring-slate-200/80',
+                  user ? 'ring-1 ring-[var(--color-accent-fg)]/30' : 'ring-1 ring-[var(--color-border)]/80',
                 )}
               />
             </a>
@@ -36,24 +98,7 @@ export function ChatMediaAttachments({
         if (kind === 'video' || kind === 'audio') {
           return <MediaPlayCard key={file.filename} file={file} kind={kind} />
         }
-        return (
-          <a
-            key={file.filename}
-            href={file.url}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(
-              'inline-flex max-w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium',
-              user
-                ? 'bg-white/15 text-white ring-1 ring-white/25 hover:bg-white/20'
-                : 'bg-slate-50 text-slate-700 ring-1 ring-slate-200/80 hover:bg-slate-100',
-            )}
-          >
-            <FileText className={cn('h-3.5 w-3.5 shrink-0', user ? 'text-white/70' : 'text-slate-400')} />
-            <span className="min-w-0 truncate">{file.filename}</span>
-            <Download className="h-3.5 w-3.5 shrink-0 opacity-50" />
-          </a>
-        )
+        return <FileActionChip key={file.filename} file={file} user={user} />
       })}
     </div>
   )

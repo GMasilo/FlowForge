@@ -282,7 +282,7 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
   ) {
     if (!seq.length) {
       if (readOnly) {
-        return <p className="px-1 py-2 text-xs text-slate-400">No actions</p>
+        return <p className="px-1 py-2 text-xs text-[var(--color-ink-muted)]">No actions</p>
       }
       return (
         <AddStepControl
@@ -310,7 +310,7 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
               key={id}
               className={cn(
                 'flex flex-col items-stretch rounded-xl transition',
-                dropTargetId === id && dragId && dragId !== id ? 'ring-2 ring-teal-400/50 ring-offset-2' : null,
+                dropTargetId === id && dragId && dragId !== id ? 'ring-2 ring-[var(--color-accent)]/50 ring-offset-2' : null,
               )}
               onDragOver={
                 readOnly || !reorderable
@@ -451,7 +451,7 @@ function FlowConnector({ faint }: { faint?: boolean }) {
       <div
         className={cn(
           'h-3 w-px',
-          faint ? 'bg-slate-200' : 'bg-slate-300',
+          faint ? 'bg-[var(--color-surface-2)]' : 'bg-[var(--color-border)]',
         )}
       />
     </div>
@@ -527,8 +527,8 @@ function StepCard({
       className={cn(
         'group relative flex w-full items-center gap-1 rounded-xl border shadow-sm transition-all duration-200',
         selected
-          ? 'border-teal-400/70 bg-white shadow-[0_10px_28px_-16px_rgb(15_118_110_/_0.55)] ring-2 ring-teal-500/15'
-          : 'border-slate-200/90 bg-white hover:border-teal-300/60 hover:shadow-md',
+          ? 'border-[var(--color-accent)]/45 bg-[var(--color-surface)] shadow-[0_10px_28px_-16px_rgb(15_118_110_/_0.55)] ring-2 ring-[var(--color-accent)]/15'
+          : 'border-[var(--color-border)]/90 bg-[var(--color-surface)] hover:border-[var(--color-accent)]/40 hover:shadow-md',
         dragging ? 'opacity-60' : null,
       )}
     >
@@ -544,7 +544,7 @@ function StepCard({
             onDragStart()
           }}
           onDragEnd={onDragEnd}
-          className="flex h-full cursor-grab items-center px-1.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing"
+          className="flex h-full cursor-grab items-center px-1.5 text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] active:cursor-grabbing"
         >
           <GripVertical className="h-4 w-4" />
         </button>
@@ -566,8 +566,8 @@ function StepCard({
           <Icon className="h-3.5 w-3.5" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-slate-800">{node.label || node.key}</span>
-          <span className="block truncate text-[11px] text-slate-500">
+          <span className="block truncate text-sm font-semibold text-[var(--color-ink)]">{node.label || node.key}</span>
+          <span className="block truncate text-[11px] text-[var(--color-ink-muted)]">
             {nodeTypeLabel(node.type)} · {node.key}
           </span>
         </span>
@@ -583,7 +583,7 @@ function StepCard({
         {hasCustomStepSettingsForNode(node.config, isFlowStart) ? (
           <span
             title={stepSettingsSummary(node.config)}
-            className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 ring-1 ring-sky-200/80"
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-[var(--color-accent-2)]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-accent-2)] ring-1 ring-sky-200/80"
           >
             <Clock3 className="h-3 w-3" />
             After
@@ -605,7 +605,7 @@ function StepCard({
                 aria-label="Move up"
                 disabled={!canMoveUp}
                 onClick={onMoveUp}
-                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+                className="rounded-md p-1 text-[var(--color-ink-muted)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink)] disabled:opacity-30"
               >
                 <ChevronUp className="h-3.5 w-3.5" />
               </button>
@@ -614,7 +614,7 @@ function StepCard({
                 aria-label="Move down"
                 disabled={!canMoveDown}
                 onClick={onMoveDown}
-                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+                className="rounded-md p-1 text-[var(--color-ink-muted)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink)] disabled:opacity-30"
               >
                 <ChevronDown className="h-3.5 w-3.5" />
               </button>
@@ -626,7 +626,7 @@ function StepCard({
             aria-label="Step actions"
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((v) => !v)}
-            className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-md p-1 text-[var(--color-ink-muted)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink)]"
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
           </button>
@@ -634,7 +634,7 @@ function StepCard({
             ? createPortal(
                 <div
                   role="menu"
-                  className="fixed z-[80] w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
+                  className="fixed z-[80] w-44 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg"
                   style={{ top: menuPos.top, left: menuPos.left }}
                 >
                   <MenuItem
@@ -667,7 +667,7 @@ function StepCard({
                   />
                   {reorderable ? (
                     <>
-                      <div className="my-1 border-t border-slate-100" />
+                      <div className="my-1 border-t border-[var(--color-border)]/60" />
                       <MenuItem
                         label="Move up"
                         disabled={!canMoveUp}
@@ -715,11 +715,11 @@ function MenuItem({
       role="menuitem"
       disabled={disabled}
       onClick={onClick}
-      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-[var(--color-ink)] transition hover:bg-[var(--color-surface-2)] disabled:opacity-40"
     >
-      {Icon ? <Icon className="h-3.5 w-3.5 text-slate-400" /> : <span className="w-3.5" />}
+      {Icon ? <Icon className="h-3.5 w-3.5 text-[var(--color-ink-muted)]" /> : <span className="w-3.5" />}
       <span className="flex-1">{label}</span>
-      {hint ? <span className="text-[10px] text-slate-400">{hint}</span> : null}
+      {hint ? <span className="text-[10px] text-[var(--color-ink-muted)]">{hint}</span> : null}
     </button>
   )
 }
@@ -780,15 +780,15 @@ function ConditionBlock({
       <div
         className={cn(
           'overflow-hidden rounded-xl border bg-[#f7f8fa] shadow-sm transition-colors',
-          selected ? 'border-amber-400/80 ring-2 ring-amber-400/20' : 'border-slate-300/90',
+          selected ? 'border-[var(--color-warning)]/50 ring-2 ring-[var(--color-warning)]/20' : 'border-[var(--color-border)]/90',
         )}
       >
-        <div className="flex items-stretch border-b border-slate-200/90 bg-white">
+        <div className="flex items-stretch border-b border-[var(--color-border)]/90 bg-[var(--color-surface)]">
           <button
             type="button"
             aria-label={collapsed ? 'Expand condition' : 'Collapse condition'}
             onClick={onToggle}
-            className="flex w-9 shrink-0 items-center justify-center border-r border-slate-200/90 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+            className="flex w-9 shrink-0 items-center justify-center border-r border-[var(--color-border)]/90 text-[var(--color-ink-muted)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink)]"
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
@@ -806,10 +806,10 @@ function ConditionBlock({
               <GitBranch className="h-3.5 w-3.5" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold text-slate-800">
+              <span className="block truncate text-sm font-semibold text-[var(--color-ink)]">
                 {node.item.node.label || node.item.node.key}
               </span>
-              <span className="block truncate text-[11px] text-slate-500">
+              <span className="block truncate text-[11px] text-[var(--color-ink-muted)]">
                 Condition · {node.item.node.key}
                 {collapsed ? ` · Yes ${yesCount} · No ${noCount}` : ' · Yes / No'}
               </span>
@@ -817,7 +817,7 @@ function ConditionBlock({
             {hasCustomStepSettingsForNode(node.item.node.config, isFlowStart) ? (
               <span
                 title={stepSettingsSummary(node.item.node.config)}
-                className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 ring-1 ring-sky-200/80"
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-[var(--color-accent-2)]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-accent-2)] ring-1 ring-sky-200/80"
               >
                 <Clock3 className="h-3 w-3" />
                 After
@@ -933,13 +933,13 @@ function ContainerActions({
   }, [open, setOpen])
 
   return (
-    <div className="flex items-center border-l border-slate-200/90 px-1.5">
+    <div className="flex items-center border-l border-[var(--color-border)]/90 px-1.5">
       <button
         ref={btnRef}
         type="button"
         aria-label="Container actions"
         onClick={() => setOpen(!open)}
-        className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+        className="rounded-md p-1.5 text-[var(--color-ink-muted)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink)]"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
@@ -947,7 +947,7 @@ function ContainerActions({
         ? createPortal(
             <div
               role="menu"
-              className="fixed z-[80] w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
+              className="fixed z-[80] w-44 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg"
               style={{ top: menuPos.top, left: menuPos.left }}
             >
               <MenuItem
@@ -1043,15 +1043,15 @@ function LoopBlock({
       <div
         className={cn(
           'overflow-hidden rounded-xl border bg-[#f7f8fa] shadow-sm transition-colors',
-          selected ? 'border-teal-400/80 ring-2 ring-teal-400/20' : 'border-slate-300/90',
+          selected ? 'border-[var(--color-accent)]/50 ring-2 ring-[var(--color-accent)]/20' : 'border-[var(--color-border)]/90',
         )}
       >
-        <div className="flex items-stretch border-b border-slate-200/90 bg-white">
+        <div className="flex items-stretch border-b border-[var(--color-border)]/90 bg-[var(--color-surface)]">
           <button
             type="button"
             aria-label={collapsed ? 'Expand loop' : 'Collapse loop'}
             onClick={onToggle}
-            className="flex w-9 shrink-0 items-center justify-center border-r border-slate-200/90 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+            className="flex w-9 shrink-0 items-center justify-center border-r border-[var(--color-border)]/90 text-[var(--color-ink-muted)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink)]"
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
@@ -1069,10 +1069,10 @@ function LoopBlock({
               <Repeat className="h-3.5 w-3.5" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold text-slate-800">
+              <span className="block truncate text-sm font-semibold text-[var(--color-ink)]">
                 {node.item.node.label || node.item.node.key}
               </span>
-              <span className="block truncate text-[11px] text-slate-500">
+              <span className="block truncate text-[11px] text-[var(--color-ink-muted)]">
                 For each · {node.item.node.key}
                 {collapsed
                   ? ` · Body ${bodyCount}`
@@ -1082,7 +1082,7 @@ function LoopBlock({
             {hasCustomStepSettingsForNode(node.item.node.config, isFlowStart) ? (
               <span
                 title={stepSettingsSummary(node.item.node.config)}
-                className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 ring-1 ring-sky-200/80"
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-[var(--color-accent-2)]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-accent-2)] ring-1 ring-sky-200/80"
               >
                 <Clock3 className="h-3 w-3" />
                 After
@@ -1172,26 +1172,26 @@ function BranchLane({
   const styles =
     tone === 'yes'
       ? {
-          rail: 'bg-emerald-500',
-          panel: 'border-emerald-200/80 bg-emerald-50/50',
-          badge: 'bg-emerald-600 text-white',
+          rail: 'bg-[var(--color-success)]',
+          panel: 'border-[var(--color-success)]/30/80 bg-[var(--color-success-soft)]/50',
+          badge: 'bg-[var(--color-success)] text-[var(--color-accent-fg)]',
         }
       : tone === 'no'
         ? {
-            rail: 'bg-rose-500',
-            panel: 'border-rose-200/80 bg-rose-50/50',
-            badge: 'bg-rose-600 text-white',
+            rail: 'bg-[var(--color-danger)]',
+            panel: 'border-[var(--color-danger)]/30 bg-[var(--color-danger-soft)]/50',
+            badge: 'bg-[var(--color-danger)] text-white',
           }
         : tone === 'body'
           ? {
-              rail: 'bg-teal-500',
-              panel: 'border-teal-200/80 bg-teal-50/40',
-              badge: 'bg-teal-700 text-white',
+              rail: 'bg-[var(--color-accent)]',
+              panel: 'border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)]/40',
+              badge: 'bg-[var(--color-accent)]$1text-[var(--color-accent-fg)]',
             }
           : {
-              rail: 'bg-slate-500',
-              panel: 'border-slate-300/80 bg-white',
-              badge: 'bg-slate-700 text-white',
+              rail: 'bg-[var(--color-ink-muted)]',
+              panel: 'border-[var(--color-border)]/80 bg-[var(--color-surface)]',
+              badge: 'bg-[var(--color-ink-muted)] text-white',
             }
 
   return (
@@ -1202,8 +1202,8 @@ function BranchLane({
           <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide', styles.badge)}>
             {title}
           </span>
-          <span className="text-[11px] text-slate-500">{subtitle}</span>
-          {empty ? <span className="text-[10px] text-slate-400">· empty</span> : null}
+          <span className="text-[11px] text-[var(--color-ink-muted)]">{subtitle}</span>
+          {empty ? <span className="text-[10px] text-[var(--color-ink-muted)]">· empty</span> : null}
         </div>
         {children}
       </div>
@@ -1293,12 +1293,12 @@ function AddStepControl({
           <div
             ref={menuRef}
             role="menu"
-            className="fixed z-[100] w-72 max-h-[min(28rem,70vh)] overflow-y-auto overflow-x-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_16px_40px_-18px_rgb(15_23_42_/_0.45)]"
+            className="fixed z-[100] w-72 max-h-[min(28rem,70vh)] overflow-y-auto overflow-x-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-[0_16px_40px_-18px_rgb(15_23_42_/_0.45)]"
             style={{ top: menuPos.top, left: menuPos.left }}
           >
             {suggestions.length ? (
               <>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-teal-700">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-accent)]">
                   <Sparkles className="h-3 w-3" />
                   Suggested
                 </div>
@@ -1310,7 +1310,7 @@ function AddStepControl({
                       type="button"
                       role="menuitem"
                       title={s.reason}
-                      className="flex w-full items-start gap-2.5 px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-teal-50 hover:text-teal-900"
+                      className="flex w-full items-start gap-2.5 px-3 py-2 text-left text-sm text-[var(--color-ink)] transition hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent)]"
                       onClick={() => onAdd(s.type, s.seed)}
                     >
                       <span className="mt-0.5 rounded-md p-1.5 text-white" style={{ background: typeColor[s.type] }}>
@@ -1318,15 +1318,15 @@ function AddStepControl({
                       </span>
                       <span className="min-w-0">
                         <span className="block font-medium">{s.label}</span>
-                        <span className="block text-[11px] leading-snug text-slate-500">{s.reason}</span>
+                        <span className="block text-[11px] leading-snug text-[var(--color-ink-muted)]">{s.reason}</span>
                       </span>
                     </button>
                   )
                 })}
-                <div className="my-1 border-t border-slate-100" />
+                <div className="my-1 border-t border-[var(--color-border)]/60" />
               </>
             ) : null}
-            <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]">
               Add an action
             </div>
             {STEP_TYPES.map((type) => {
@@ -1340,8 +1340,8 @@ function AddStepControl({
                   className={cn(
                     'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition',
                     highlighted
-                      ? 'bg-teal-50/80 font-medium text-teal-900 hover:bg-teal-50'
-                      : 'text-slate-700 hover:bg-teal-50 hover:text-teal-900',
+                      ? 'bg-[var(--color-accent-soft)]/80 font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent-soft)]'
+                      : 'text-[var(--color-ink)] hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent)]',
                   )}
                   onClick={() => onAdd(type)}
                 >
@@ -1366,10 +1366,10 @@ function AddStepControl({
         aria-expanded={open}
         onClick={() => setOpenMenu(open ? null : menuId)}
         className={cn(
-          'flex h-7 w-7 items-center justify-center rounded-full border bg-white text-slate-600 shadow-sm transition',
+          'flex h-7 w-7 items-center justify-center rounded-full border bg-[var(--color-surface)] text-[var(--color-ink-muted)] shadow-sm transition',
           open
-            ? 'border-teal-500 text-teal-700 ring-2 ring-teal-500/20'
-            : 'border-slate-300 hover:border-teal-500 hover:text-teal-700 hover:shadow',
+            ? 'border-[var(--color-accent)] text-[var(--color-accent)] ring-2 ring-[var(--color-accent)]/20'
+            : 'border-[var(--color-border)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] hover:shadow',
         )}
       >
         <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />

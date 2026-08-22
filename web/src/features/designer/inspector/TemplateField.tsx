@@ -270,7 +270,7 @@ export function TemplateField({
     <div className={cn('relative', className)}>
       <div
         className={cn(
-          'relative rounded-xl border border-[var(--color-border)] bg-white/90 px-2 py-1.5 shadow-sm transition-all duration-200 hover:border-[var(--color-accent)]/35 focus-within:border-[var(--color-accent)] focus-within:ring-4 focus-within:ring-teal-500/15',
+          'relative rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/90 px-2 py-1.5 shadow-sm transition-all duration-200 hover:border-[var(--color-accent)]/35 focus-within:border-[var(--color-accent)] focus-within:ring-4 focus-within:ring-[var(--color-accent)]/15',
           multiline ? 'min-h-24' : 'min-h-10',
           disabled && 'pointer-events-none opacity-60',
         )}
@@ -298,7 +298,7 @@ export function TemplateField({
                 <span
                   key={seg.id}
                   contentEditable={false}
-                  className="inline-flex max-w-full shrink-0 items-center gap-0.5 rounded-lg bg-teal-500/15 py-0.5 pl-2 pr-0.5 text-xs font-semibold text-teal-900 ring-1 ring-teal-500/25"
+                  className="inline-flex max-w-full shrink-0 items-center gap-0.5 rounded-lg bg-[var(--color-accent)]/$1 py-0.5 pl-2 pr-0.5 text-xs font-semibold text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <span className="truncate font-mono" title={seg.raw}>
@@ -307,7 +307,7 @@ export function TemplateField({
                   <button
                     type="button"
                     aria-label={`Remove ${seg.raw}`}
-                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-teal-800/80 transition hover:bg-teal-600/20 hover:text-teal-950"
+                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[var(--color-accent)]/80 transition hover:bg-[var(--color-accent)]/20 hover:text-[var(--color-accent)]"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -392,7 +392,7 @@ export function TemplateField({
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-teal-200/70 bg-white/95 p-1 shadow-lg backdrop-blur"
+          className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-[var(--color-accent)]/25 bg-[var(--color-surface)]/95 p-1 shadow-lg backdrop-blur"
         >
           {filtered.map((s, idx) => (
             <li key={`${s.insert}-${idx}`}>
@@ -402,7 +402,7 @@ export function TemplateField({
                 aria-selected={idx === active}
                 className={cn(
                   'flex w-full flex-col items-start rounded-lg px-2.5 py-1.5 text-left text-xs',
-                  idx === active ? 'bg-teal-50 text-teal-950' : 'hover:bg-slate-50',
+                  idx === active ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]' : 'hover:bg-[var(--color-surface-2)]',
                 )}
                 onMouseDown={(e) => {
                   e.preventDefault()
@@ -410,7 +410,7 @@ export function TemplateField({
                 }}
               >
                 <span className="font-semibold">{s.label}</span>
-                <span className="font-mono text-[11px] text-teal-700">{s.insert}</span>
+                <span className="font-mono text-[11px] text-[var(--color-accent)]">{s.insert}</span>
                 <span className="text-[10px] uppercase tracking-wide text-[var(--color-ink-muted)]">
                   {s.group}
                   {s.detail ? ` · ${s.detail}` : ''}
@@ -421,11 +421,11 @@ export function TemplateField({
         </ul>
       ) : null}
       <p className="mt-1 text-[11px] leading-snug text-[var(--color-ink-muted)]">
-        Type <code className="rounded bg-slate-100 px-1">{'{{'}</code> for vars, steps, and functions.
+        Type <code className="rounded bg-[var(--color-surface-2)] px-1">{'{{'}</code> for vars, steps, and functions.
         Expressions work inline — e.g.{' '}
-        <code className="rounded bg-slate-100 px-1">parseJson({`{{vars.jsonStr}}`})</code>,{' '}
-        <code className="rounded bg-slate-100 px-1">{`{{vars.count + 1}}`}</code>,{' '}
-        <code className="rounded bg-slate-100 px-1">{`{{if(empty(vars.x), 'n/a', vars.x)}}`}</code>.
+        <code className="rounded bg-[var(--color-surface-2)] px-1">parseJson({`{{vars.jsonStr}}`})</code>,{' '}
+        <code className="rounded bg-[var(--color-surface-2)] px-1">{`{{vars.count + 1}}`}</code>,{' '}
+        <code className="rounded bg-[var(--color-surface-2)] px-1">{`{{if(empty(vars.x), 'n/a', vars.x)}}`}</code>.
         Chips are read-only — use × to remove.
       </p>
     </div>

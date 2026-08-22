@@ -79,7 +79,7 @@ export function StepMediaPicker({
           })}
         </ul>
       ) : (
-        <p className="text-[11px] text-slate-400">None attached.</p>
+        <p className="text-[11px] text-[var(--color-ink-muted)]">None attached.</p>
       )}
       {!disabled ? (
         <div className="flex flex-wrap items-center gap-2">
@@ -135,23 +135,23 @@ function MediaChip({
   const kind = file ? mediaKindOf(file) : 'file'
   const url = file ? absoluteInstanceFileUrl(file.url) : ''
   return (
-    <li className="flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-2 py-1.5">
-      <div className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-100">
+    <li className="flex items-center gap-2 rounded-lg border border-[var(--color-border)]/80 bg-[var(--color-surface)] px-2 py-1.5">
+      <div className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-md bg-[var(--color-surface-2)]">
         {kind === 'image' && url ? (
           <img src={url} alt="" className="h-full w-full object-cover" />
         ) : (
-          <FileText className="h-3.5 w-3.5 text-slate-400" />
+          <FileText className="h-3.5 w-3.5 text-[var(--color-ink-muted)]" />
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-slate-800">{filename}</p>
-        <p className="truncate font-mono text-[10px] text-teal-700">{mediaInsert(key)}</p>
+        <p className="truncate text-xs font-medium text-[var(--color-ink)]">{filename}</p>
+        <p className="truncate font-mono text-[10px] text-[var(--color-accent)]">{mediaInsert(key)}</p>
       </div>
       {!disabled ? (
         <button
           type="button"
           aria-label={`Remove ${filename}`}
-          className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+          className="rounded-md p-1 text-[var(--color-ink-muted)] hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
           onClick={onRemove}
         >
           <Trash2 className="h-3.5 w-3.5" />

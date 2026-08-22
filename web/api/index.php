@@ -27,6 +27,7 @@ $map = [
     '/file/get' => __DIR__ . '/file/get.php',
     '/file/list' => __DIR__ . '/file/list.php',
     '/file/delete' => __DIR__ . '/file/delete.php',
+    '/file/purge-chatbot' => __DIR__ . '/file/purge-chatbot.php',
     '/payment/start' => __DIR__ . '/payment/start.php',
     '/payment/notify' => __DIR__ . '/payment/notify.php',
     '/payment/status' => __DIR__ . '/payment/status.php',

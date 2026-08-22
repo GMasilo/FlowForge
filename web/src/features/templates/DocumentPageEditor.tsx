@@ -146,7 +146,7 @@ export function DocumentPageEditor({
               {item.label}
             </Button>
           ))}
-          <label className="ml-auto flex items-center gap-1.5 text-xs text-slate-600">
+          <label className="ml-auto flex items-center gap-1.5 text-xs text-[var(--color-ink-muted)]">
             <input
               type="checkbox"
               disabled={readOnly}
@@ -159,7 +159,7 @@ export function DocumentPageEditor({
         </div>
         <div
           ref={pageRef}
-          className="relative mx-auto w-full max-w-[420px] overflow-hidden rounded-sm bg-white shadow-[0_8px_30px_rgba(15,23,42,0.12)] ring-1 ring-slate-200"
+          className="relative mx-auto w-full max-w-[420px] overflow-hidden rounded-sm bg-[var(--color-surface)] shadow-[0_8px_30px_rgba(15,23,42,0.12)] ring-1 ring-[var(--color-border)]"
           style={{ aspectRatio: '210 / 297', containerType: 'size' }}
           onPointerMove={onPagePointerMove}
           onPointerUp={endDrag}
@@ -174,13 +174,13 @@ export function DocumentPageEditor({
             guide.axis === 'v' ? (
               <div
                 key={`v-${i}-${guide.pos}`}
-                className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-teal-500"
+                className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-[var(--color-accent)]"
                 style={{ left: `${guide.pos}%` }}
               />
             ) : (
               <div
                 key={`h-${i}-${guide.pos}`}
-                className="pointer-events-none absolute right-0 left-0 z-10 h-px bg-teal-500"
+                className="pointer-events-none absolute right-0 left-0 z-10 h-px bg-[var(--color-accent)]"
                 style={{ top: `${guide.pos}%` }}
               />
             ),
@@ -200,7 +200,7 @@ export function DocumentPageEditor({
                     ? cn(active ? 'z-[1]' : '', readOnly && 'cursor-default')
                     : cn(
                         'overflow-hidden rounded-[3px] border px-1 py-0.5 text-[10px] leading-tight',
-                        active ? 'border-teal-500 ring-2 ring-teal-500/30' : 'border-slate-200 hover:border-teal-300',
+                        active ? 'border-[var(--color-accent)] ring-2 ring-[var(--color-accent)]/30' : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/40',
                         block.bold ? 'font-bold' : 'font-normal',
                         readOnly && 'cursor-default',
                       ),
@@ -235,7 +235,7 @@ export function DocumentPageEditor({
                 {active && !readOnly ? (
                   <span
                     className={cn(
-                      'absolute z-10 cursor-nwse-resize bg-teal-500',
+                      'absolute z-10 cursor-nwse-resize bg-[var(--color-accent)]',
                       divider ? 'right-0 top-1/2 h-2 w-2 -translate-y-1/2' : 'right-0 bottom-0 h-3 w-3',
                     )}
                     onPointerDown={(e) => onBlockPointerDown(e, block, 'resize')}
@@ -245,7 +245,7 @@ export function DocumentPageEditor({
             )
           })}
           {!content.blocks.length ? (
-            <p className="absolute inset-0 grid place-items-center text-center text-xs text-slate-400">
+            <p className="absolute inset-0 grid place-items-center text-center text-xs text-[var(--color-ink-muted)]">
               Add a heading, field, or signature, then drag it into place.
             </p>
           ) : null}
@@ -256,10 +256,10 @@ export function DocumentPageEditor({
           order.
         </p>
       </div>
-      <div className="space-y-3 rounded-xl border border-[var(--color-border)] bg-white/70 p-3">
+      <div className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/70 p-3">
         {selected ? (
           <>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{blockTypeLabel(selected.type)}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]">{blockTypeLabel(selected.type)}</p>
             {selected.type === 'heading' || selected.type === 'text' ? (
               <div>
                 <Label>Text</Label>
@@ -384,7 +384,7 @@ export function DocumentPageEditor({
                     />
                   </div>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
+                <label className="flex items-center gap-2 text-sm text-[var(--color-ink)]">
                   <input
                     type="checkbox"
                     disabled={readOnly}
@@ -424,7 +424,7 @@ export function DocumentPageEditor({
             </Button>
           </>
         ) : (
-          <p className="flex items-center gap-2 text-sm text-slate-500">
+          <p className="flex items-center gap-2 text-sm text-[var(--color-ink-muted)]">
             <Type className="h-4 w-4" />
             Select a block to edit its text, font, or color.
           </p>
@@ -521,7 +521,7 @@ function HexField({
       <Label>{label}</Label>
       <div className="flex items-center gap-2">
         <label
-          className="relative h-9 w-10 shrink-0 overflow-hidden rounded-lg border border-slate-200 shadow-sm"
+          className="relative h-9 w-10 shrink-0 overflow-hidden rounded-lg border border-[var(--color-border)] shadow-sm"
           style={{ background: value || 'transparent' }}
           title={label}
         >
@@ -555,7 +555,7 @@ function HexField({
             disabled={disabled}
             title="No fill"
             onClick={() => onChange('')}
-            className="h-4 w-4 rounded-sm border border-dashed border-slate-300 bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%,transparent_75%,#e2e8f0_75%)] bg-[size:6px_6px]"
+            className="h-4 w-4 rounded-sm border border-dashed border-[var(--color-border)] bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%,transparent_75%,#e2e8f0_75%)] bg-[size:6px_6px]"
           />
         ) : null}
         {COLOR_PRESETS.map((preset) => (
@@ -566,8 +566,8 @@ function HexField({
             title={preset}
             onClick={() => onChange(preset)}
             className={cn(
-              'h-4 w-4 rounded-sm border border-slate-200',
-              value.toLowerCase() === preset ? 'ring-2 ring-teal-500 ring-offset-1' : '',
+              'h-4 w-4 rounded-sm border border-[var(--color-border)]',
+              value.toLowerCase() === preset ? 'ring-2 ring-[var(--color-accent)] ring-offset-1' : '',
             )}
             style={{ background: preset }}
           />

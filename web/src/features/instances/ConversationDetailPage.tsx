@@ -94,10 +94,10 @@ export function ConversationDetailPage() {
   if (sessionQuery.error || !session) {
     return (
       <div className="space-y-3">
-        <Link to={`/instances/${instance.id}/conversations`} className="text-sm font-medium text-teal-800 hover:underline">
+        <Link to={`/instances/${instance.id}/conversations`} className="text-sm font-medium text-[var(--color-accent)] hover:underline">
           Back to conversations
         </Link>
-        <p className="text-sm text-rose-600">This conversation was not found in this organisation.</p>
+        <p className="text-sm text-[var(--color-danger)]">This conversation was not found in this organisation.</p>
       </div>
     )
   }
@@ -113,7 +113,7 @@ export function ConversationDetailPage() {
           <>
             <Link
               to={`/instances/${instance.id}/conversations`}
-              className="text-sm font-medium text-teal-800 hover:underline"
+              className="text-sm font-medium text-[var(--color-accent)] hover:underline"
             >
               All conversations
             </Link>
@@ -138,7 +138,7 @@ export function ConversationDetailPage() {
               {shownStatus === 'abandoned' && session.status === 'active' ? ' (stale)' : ''}
             </span>
             {session.visitor_key ? (
-              <span className="font-mono text-[11px] text-slate-500">
+              <span className="font-mono text-[11px] text-[var(--color-ink-muted)]">
                 visitor {session.visitor_key.slice(0, 8)}…
               </span>
             ) : null}
@@ -162,19 +162,19 @@ export function ConversationDetailPage() {
                     }
                     return (
                       <div key={event.id} className="flex flex-col items-end gap-1">
-                        <div className="max-w-[88%] rounded-[1.25rem] rounded-br-md bg-gradient-to-br from-teal-600 to-cyan-600 px-3.5 py-2.5 text-sm text-white shadow-sm">
+                        <div className="max-w-[88%] rounded-[1.25rem] rounded-br-md bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] px-3.5 py-2.5 text-sm text-[var(--color-accent-fg)] shadow-sm">
                           <UserMessageBubble message={message} />
                         </div>
-                        <p className="text-[10px] text-slate-400">{format(new Date(createdAt), 'HH:mm:ss')}</p>
+                        <p className="text-[10px] text-[var(--color-ink-muted)]">{format(new Date(createdAt), 'HH:mm:ss')}</p>
                       </div>
                     )
                   }
                   return (
                     <div key={event.id} className="flex flex-col items-start gap-1">
-                      <div className="max-w-[88%] rounded-[1.25rem] rounded-bl-md border border-slate-200/80 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm">
+                      <div className="max-w-[88%] rounded-[1.25rem] rounded-bl-md border border-[var(--color-border)]/80 bg-[var(--color-surface)] px-3.5 py-2.5 text-sm text-[var(--color-ink)] shadow-sm">
                         <ChatMessageBody text={text} />
                       </div>
-                      <p className="text-[10px] text-slate-400">{format(new Date(createdAt), 'HH:mm:ss')}</p>
+                      <p className="text-[10px] text-[var(--color-ink-muted)]">{format(new Date(createdAt), 'HH:mm:ss')}</p>
                     </div>
                   )
                 }
@@ -182,19 +182,19 @@ export function ConversationDetailPage() {
                   const payload = asRecord(event.payload)
                   const open = openRuns[event.id] === true
                   return (
-                    <div key={event.id} className="rounded-xl border border-slate-200 bg-slate-50/80">
+                    <div key={event.id} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80">
                       <button
                         type="button"
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-700"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-[var(--color-ink)]"
                         onClick={() => setOpenRuns((prev) => ({ ...prev, [event.id]: !open }))}
                       >
                         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                         <span className="font-mono">{event.node_key || 'step'}</span>
-                        <span className="text-slate-500">{String(payload.type ?? '')}</span>
-                        <span className="ml-auto capitalize text-slate-500">{String(payload.status ?? '')}</span>
+                        <span className="text-[var(--color-ink-muted)]">{String(payload.type ?? '')}</span>
+                        <span className="ml-auto capitalize text-[var(--color-ink-muted)]">{String(payload.status ?? '')}</span>
                       </button>
                       {open ? (
-                        <pre className="overflow-x-auto border-t border-slate-200 px-3 py-2 font-mono text-[11px] text-slate-700">
+                        <pre className="overflow-x-auto border-t border-[var(--color-border)] px-3 py-2 font-mono text-[11px] text-[var(--color-ink)]">
                           {JSON.stringify(payload.outputs ?? payload, null, 2)}
                         </pre>
                       ) : null}
@@ -202,7 +202,7 @@ export function ConversationDetailPage() {
                   )
                 }
                 return (
-                  <p key={event.id} className="text-center text-[11px] text-slate-500">
+                  <p key={event.id} className="text-center text-[11px] text-[var(--color-ink-muted)]">
                     {event.kind}
                     {event.node_key ? ` · ${event.node_key}` : ''}
                   </p>
@@ -214,14 +214,14 @@ export function ConversationDetailPage() {
 
         <div className="space-y-3">
           {session.error_summary ? (
-            <Card className="border-rose-200 bg-rose-50/80 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-700">Error</p>
-              <p className="mt-1 text-sm text-rose-800">{session.error_summary}</p>
+            <Card className="border-[var(--color-danger)]/30 bg-[var(--color-danger-soft)]/80 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-danger)]">Error</p>
+              <p className="mt-1 text-sm text-[var(--color-danger)]">{session.error_summary}</p>
             </Card>
           ) : null}
           <Card className="p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Variables</p>
-            <pre className="mt-2 max-h-[28rem] overflow-auto font-mono text-[11px] leading-snug text-slate-800">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]">Variables</p>
+            <pre className="mt-2 max-h-[28rem] overflow-auto font-mono text-[11px] leading-snug text-[var(--color-ink)]">
               {variablesPretty}
             </pre>
           </Card>

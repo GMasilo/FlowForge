@@ -50,5 +50,7 @@ if ($kind === InstanceFiles::KIND_CONVERSATION) {
 
 $dir = InstanceFiles::dirFor($config, $instanceId, $chatbotId, $kind, false);
 $path = $dir . DIRECTORY_SEPARATOR . $filename;
-$inline = $kind === InstanceFiles::KIND_MEDIA;
+$forceDownload = isset($_GET['download']) && !in_array(strtolower((string) $_GET['download']), ['0', 'false', 'no', ''], true);
+// Media defaults to inline (browser can preview PDFs); ?download=1 forces save dialog.
+$inline = !$forceDownload && $kind === InstanceFiles::KIND_MEDIA;
 Response::sendFile($path, $filename, InstanceFiles::mimeForFilename($filename), $inline);

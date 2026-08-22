@@ -13,6 +13,7 @@ import {
   QUESTION_ANSWER_TYPE_OPTIONS,
   DEFAULT_GENDER_CHOICES,
   DEFAULT_LIKERT_CHOICES,
+  DEFAULT_NUMBERED_CHOICES,
   DEFAULT_RANKING_ITEMS,
   DEFAULT_MATRIX_ROWS,
   COMMON_CURRENCY_CODES,
@@ -59,6 +60,8 @@ import { useDesignerStore } from '@/features/designer/store/designerStore'
 import { confirmNodeDeletionMessage, planNodeDeletion } from '@/features/designer/utils/sequenceEdit'
 import { fetchChatbotEntities } from '@/features/entities/entityApi'
 import { coerceEntityValue } from '@/features/entities/entityValueValidation'
+import { EntityFilterBuilder } from '@/features/entities/EntityFilterBuilder'
+import { normalizeEntityQuery } from '@/features/entities/entityQuery'
 import { TemplateField, type TemplateSuggestion } from '@/features/designer/inspector/TemplateField'
 import { useTemplateSuggestions } from '@/features/designer/inspector/templateSuggestions'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -378,12 +381,12 @@ function ImageChoiceEditor({
       {slots.map((opt, index) => {
         const file = images.find((f) => f.filename === opt.filename)
         return (
-          <div key={index} className="flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white p-2">
-            <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-100">
+          <div key={index} className="flex items-center gap-2 rounded-lg border border-[var(--color-border)]/80 bg-[var(--color-surface)] p-2">
+            <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-md bg-[var(--color-surface-2)]">
               {file?.url ? (
                 <img src={absoluteInstanceFileUrl(file.url)} alt="" className="h-full w-full object-cover" />
               ) : (
-                <span className="text-[9px] text-slate-400">No img</span>
+                <span className="text-[9px] text-[var(--color-ink-muted)]">No img</span>
               )}
             </div>
             <div className="min-w-0 flex-1 space-y-1">
@@ -467,7 +470,7 @@ function ImageChoiceEditor({
         ) : null}
       </div>
       {!images.length ? (
-        <p className="text-[11px] text-amber-700">
+        <p className="text-[11px] text-[var(--color-warning)]">
           Upload an image here or in the Media library, then pick it for each option.
         </p>
       ) : null}
@@ -626,13 +629,13 @@ function StepRunSettings({
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-slate-200/90 bg-slate-50/60 p-3">
+    <div className="space-y-3 rounded-xl border border-[var(--color-border)]/90 bg-[var(--color-surface-2)]/60 p-3">
       <div>
-        <h3 className="text-sm font-semibold text-slate-800">Settings</h3>
+        <h3 className="text-sm font-semibold text-[var(--color-ink)]">Settings</h3>
         <p className="text-[11px] text-[var(--color-ink-muted)]">
           Delay{isFlowStart ? '' : ', run after,'} and timeout for this step.
           {nonDefault ? (
-            <span className="ml-1 font-medium text-teal-800">Customized</span>
+            <span className="ml-1 font-medium text-[var(--color-accent)]">Customized</span>
           ) : null}
         </p>
       </div>
@@ -694,26 +697,26 @@ function StepRunSettings({
               <label
                 className={cn(
                   'flex items-start gap-2 rounded-lg px-1.5 py-1',
-                  runAfterDisabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-white/80',
+                  runAfterDisabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--color-surface)]/80',
                 )}
               >
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-teal-700 focus:ring-teal-500/30 disabled:cursor-not-allowed"
+                  className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]/30 disabled:cursor-not-allowed"
                   disabled={runAfterDisabled}
                   checked={isFlowStart ? opt.key === 'succeeded' : runAfter[opt.key]}
                   onChange={() => toggleRunAfter(opt.key)}
                 />
                 <span className="min-w-0">
-                  <span className="block text-xs font-medium text-slate-800">{opt.label}</span>
-                  <span className="block text-[10px] text-slate-500">{opt.hint}</span>
+                  <span className="block text-xs font-medium text-[var(--color-ink)]">{opt.label}</span>
+                  <span className="block text-[10px] text-[var(--color-ink-muted)]">{opt.hint}</span>
                 </span>
               </label>
             </li>
           ))}
         </ul>
         {!isFlowStart ? (
-          <p className="mt-2 text-[10px] leading-snug text-slate-500">
+          <p className="mt-2 text-[10px] leading-snug text-[var(--color-ink-muted)]">
             If the previous status isn’t checked, this step is skipped and the flow continues (so a later
             step can run after “is skipped” or “has timed out”).
           </p>
@@ -862,25 +865,25 @@ function ResponseTypeCard({
 }) {
   const varKey = outputVariable?.trim()
   return (
-    <div className="rounded-xl border border-teal-200/50 bg-teal-50/40 px-3 py-2">
-      <p className="text-xs font-medium text-teal-900">
+    <div className="rounded-xl border border-[var(--color-accent)]/20 bg-[var(--color-accent-soft)]/40 px-3 py-2">
+      <p className="text-xs font-medium text-[var(--color-accent)]">
         {title ?? (
           <>
             Returns <code className="font-mono">{dataType}</code>
           </>
         )}
-        {example ? <span className="ml-1 font-normal text-teal-800/80">· {example}</span> : null}
+        {example ? <span className="ml-1 font-normal text-[var(--color-accent)]/80">· {example}</span> : null}
       </p>
       {fields.length ? (
-        <ul className="mt-1 space-y-0.5 text-[11px] text-teal-800/90">
+        <ul className="mt-1 space-y-0.5 text-[11px] text-[var(--color-accent)]/90">
           {fields.slice(0, 12).map((p) => (
             <li key={p.path}>
               <code>{`{{steps.${stepKey}.${p.path}}}`}</code>
-              <span className="text-teal-700/70"> · {p.type}</span>
+              <span className="text-[var(--color-accent)]/70"> · {p.type}</span>
             </li>
           ))}
           {varKey ? (
-            <li className="pt-1 text-teal-700/80">
+            <li className="pt-1 text-[var(--color-accent)]/80">
               Also {'{{vars.'}
               {varKey}
               {'}}'}
@@ -897,7 +900,7 @@ function ResponseTypeCard({
           ) : null}
         </ul>
       ) : (
-        <p className="mt-1 text-[11px] text-teal-800/80">No schema fields — add them on the connection.</p>
+        <p className="mt-1 text-[11px] text-[var(--color-accent)]/80">No schema fields — add them on the connection.</p>
       )}
     </div>
   )
@@ -1522,8 +1525,8 @@ export function StepInspector({ node, connections, connectionsReady = true, read
               }}
             />
             {answerSuggestions.length && !readOnly ? (
-              <div className="mt-2 rounded-xl border border-teal-200/80 bg-teal-50/60 px-3 py-2">
-                <p className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-teal-800">
+              <div className="mt-2 rounded-xl border border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)]/60 px-3 py-2">
+                <p className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-accent)]">
                   <Sparkles className="h-3 w-3" />
                   Suggested from prompt
                 </p>
@@ -1540,8 +1543,8 @@ export function StepInspector({ node, connections, connectionsReady = true, read
                         className={cn(
                           'rounded-full border px-2.5 py-1 text-[11px] font-medium transition',
                           active
-                            ? 'border-teal-500 bg-white text-teal-800'
-                            : 'border-teal-200 bg-white text-slate-700 hover:border-teal-400 hover:text-teal-900',
+                            ? 'border-[var(--color-accent)] bg-[var(--color-surface)] text-[var(--color-accent)]'
+                            : 'border-[var(--color-accent)]/25 bg-[var(--color-surface)] text-[var(--color-ink)] hover:border-[var(--color-accent)]/50 hover:text-[var(--color-accent)]',
                         )}
                       >
                         {s.label}
@@ -1552,7 +1555,7 @@ export function StepInspector({ node, connections, connectionsReady = true, read
                     )
                   })}
                 </div>
-                <p className="mt-1.5 text-[11px] text-teal-900/70">{answerSuggestions[0]?.reason}</p>
+                <p className="mt-1.5 text-[11px] text-[var(--color-accent)]/70">{answerSuggestions[0]?.reason}</p>
               </div>
             ) : null}
           </div>
@@ -1639,6 +1642,8 @@ export function StepInspector({ node, connections, connectionsReady = true, read
                     ? DEFAULT_GENDER_CHOICES
                     : String(node.config.answerType) === 'likert'
                       ? DEFAULT_LIKERT_CHOICES
+                      : String(node.config.answerType) === 'numbered_choice'
+                        ? DEFAULT_NUMBERED_CHOICES
                       : String(node.config.answerType) === 'ranking'
                           ? DEFAULT_RANKING_ITEMS
                           : String(node.config.answerType) === 'matrix'
@@ -1828,7 +1833,7 @@ export function StepInspector({ node, connections, connectionsReady = true, read
                   placeholder="No earliest limit"
                 />
                 {earliestIssue ? (
-                  <p className="mt-1 text-[11px] text-rose-600">{earliestIssue.message}</p>
+                  <p className="mt-1 text-[11px] text-[var(--color-danger)]">{earliestIssue.message}</p>
                 ) : null}
               </div>
               <div>
@@ -1843,7 +1848,7 @@ export function StepInspector({ node, connections, connectionsReady = true, read
                   placeholder="No latest limit"
                 />
                 {latestIssue ? (
-                  <p className="mt-1 text-[11px] text-rose-600">{latestIssue.message}</p>
+                  <p className="mt-1 text-[11px] text-[var(--color-danger)]">{latestIssue.message}</p>
                 ) : null}
               </div>
             </div>
@@ -2034,7 +2039,7 @@ export function StepInspector({ node, connections, connectionsReady = true, read
                     <>
                       No email connections installed on this chatbot yet. Create one under Data, or{' '}
                       <Link
-                        className="font-medium text-teal-700 hover:underline"
+                        className="font-medium text-[var(--color-accent)] hover:underline"
                         to={`/instances/${instance.id}/connections`}
                       >
                         install from ForgeHub
@@ -2808,33 +2813,26 @@ export function StepInspector({ node, connections, connectionsReady = true, read
             </div>
           ) : null}
           {(entityOp === 'list' || entityOp === 'get') && selectedEntity?.attributes.length ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Filter attribute</Label>
-                <Select
-                  disabled={readOnly}
-                  value={String(node.config.filterAttribute ?? '')}
-                  onChange={(e) => patchConfig({ filterAttribute: e.target.value })}
-                >
-                  <option value="">(none)</option>
-                  {selectedEntity.attributes.map((a) => (
-                    <option key={a.id} value={a.key}>
-                      {a.label || a.key}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <Label>Equals</Label>
-                <TemplateField
-                  disabled={readOnly}
-                  value={String(node.config.filterEquals ?? '')}
-                  onChange={(v) => patchConfig({ filterEquals: v })}
-                  suggestions={suggestions}
-                  placeholder="{{vars.status}}"
-                />
-              </div>
-            </div>
+            <EntityFilterBuilder
+              title={entityOp === 'list' ? 'Query records' : 'Find record'}
+              mode="flow"
+              readOnly={readOnly}
+              suggestions={suggestions}
+              attributes={selectedEntity.attributes}
+              query={normalizeEntityQuery(node.config)}
+              onChange={(query) =>
+                patchConfig({
+                  filters: query.filters,
+                  filterLogic: query.filterLogic,
+                  sortAttribute: query.sortAttribute,
+                  sortDirection: query.sortDirection,
+                  limit: query.limit,
+                  // Clear legacy single-filter fields once the builder is used
+                  filterAttribute: '',
+                  filterEquals: '',
+                })
+              }
+            />
           ) : null}
           {entityOpMeta.needsFields && selectedEntity ? (
             <div className="space-y-2">
@@ -2866,7 +2864,7 @@ export function StepInspector({ node, connections, connectionsReady = true, read
                       placeholder={`{{vars.${a.key}}} or a ${a.value_type} value`}
                     />
                     {!typeOk && typeCheck && !typeCheck.ok ? (
-                      <p className="mt-1 text-[11px] text-rose-600">
+                      <p className="mt-1 text-[11px] text-[var(--color-danger)]">
                         This field is {a.value_type}. {typeCheck.error}.
                       </p>
                     ) : null}

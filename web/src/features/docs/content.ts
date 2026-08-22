@@ -905,7 +905,7 @@ export const DOC_SECTIONS: DocSection[] = [
         heading: 'First steps',
         bullets: [
           'Sign up or sign in, then open or create an organisation.',
-          'Create a chatbot from the organisation home.',
+          'Create a chatbot from the organisation home. You can start blank or from a starter template (support, leads, appointments, shop, feedback, and more) that seeds common flows, content templates, and data tables.',
           'Open Design to add steps, connect them, and configure prompts/variables.',
           'Use Preview to walk through the conversation, then Publish when ready.',
         ],
@@ -931,6 +931,37 @@ export const DOC_SECTIONS: DocSection[] = [
           'Viewer — read-only access to inspect flows and configuration.',
         ],
       },
+      {
+        heading: 'Admin section',
+        paragraphs: [
+          'Owners and admins open Admin in the organisation nav to manage chatbots, users, the recycle bin, organisation profile, usage quotas, webhooks, and the audit log. Editors and viewers keep the Chatbots workspace and can still open the Users roster.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'instance-admin',
+    title: 'Organisation admin',
+    summary: 'Owners and admins manage chatbots, users, and organisation settings from one place.',
+    body: [
+      {
+        paragraphs: [
+          'The Admin section is for instance owners and admins. It is scoped to the current organisation — you only see chatbots, users, and settings that belong to that organisation.',
+        ],
+      },
+      {
+        heading: 'What you can manage',
+        bullets: [
+          'Overview — counts for chatbots, users, recycle bin, usage, and recent audit activity.',
+          'Chatbots — inventory, publish status, and move bots to the recycle bin.',
+          'Users — invite people, change roles, and cancel pending invites.',
+          'Recycle bin — restore deleted chatbots or delete them forever.',
+          'Organisation — name, legal/contact details, and notes.',
+          'Usage — monthly conversation, email, and HTTP quotas plus the host allowlist.',
+          'Webhooks — subscribe to flow and conversation events.',
+          'Audit — recent security and admin activity.',
+        ],
+      },
     ],
   },
   {
@@ -942,12 +973,13 @@ export const DOC_SECTIONS: DocSection[] = [
         bullets: [
           'Settings — name, metadata, and chatbot-level options.',
           'Design — the flow designer (linear and canvas views), preview, and publish.',
+          'Templates — reusable email, FAQ, hours, legal, store catalogs, receipts, and downloadable files.',
           'Data — entities and records your flows can read or write.',
         ],
       },
       {
         paragraphs: [
-          'You can import and export flow JSON to copy a design between chatbots or share a sample.',
+          'When you create a chatbot, pick a starter template to seed a ready flow plus the content packs organisations commonly need (welcome, menu, hours, FAQ, legal, follow-up email). You can also import and export flow JSON to copy a design between chatbots or share a sample. Deleting a chatbot moves it to the Recycle bin. Admins can restore it or delete it forever from there.',
         ],
       },
     ],
@@ -973,7 +1005,7 @@ export const DOC_SECTIONS: DocSection[] = [
           'For each — loop over a collection.',
           'Set variable — assign a typed value.',
           'Operation — transform values (math, case, JSON path, replace, …).',
-          'Entity — list/get/create/update/delete entity records. Create/update values are checked against each column type (string, number, boolean, date, array, object).',
+          'Entity — list/get/create/update/delete entity records with a no-code query (filter conditions, AND/OR, sort, limit). Create/update values are checked against each column type (string, number, boolean, date, array, object).',
           'End — finish the conversation, optionally with a closing message and media.',
         ],
       },
@@ -1002,7 +1034,14 @@ export const DOC_SECTIONS: DocSection[] = [
     body: [
       {
         paragraphs: [
-          'Each chatbot has a Media library on the Design page. Uploads are stored per instance and chatbot. Attach files on Message, Question, and End steps so they appear with that prompt in Preview and published chat. Images, video, and audio play inline; other files show as download links.',
+          'Each chatbot has a Media library on the Design page. Uploads are stored per instance and chatbot. Attach files on Message, Question, and End steps so they appear with that prompt in Preview and published chat. Images, video, and audio play inline; PDFs show View and Download; other documents show Download.',
+        ],
+      },
+      {
+        heading: 'Open and download',
+        bullets: [
+          'In chat — PDFs attached to a step (or {{renderFile(media.key)}}) offer View and Download. Filled Downloadable file templates ({{templates.key.file}}) do the same for PDF.',
+          'In the Media panel — Open and Download for library files.',
         ],
       },
       {
@@ -1044,7 +1083,7 @@ export const DOC_SECTIONS: DocSection[] = [
           'Text, long text, name',
           'Number, stepper, slider, percentage, currency',
           'Rating, stars, NPS, Likert, mood, thumbs',
-          'Yes/No, confirm, choice, gender',
+          'Yes/No, confirm, choice, numbered choice, gender',
           'Email, phone, OTP/PIN, URL, color',
           'Address, postal code, country',
           'Date, time, date & time',
@@ -1066,6 +1105,7 @@ export const DOC_SECTIONS: DocSection[] = [
           'Phone — country code + digits (E.164) or any format',
           'Email — optional allowed-domain list',
           'Choice / gender / Likert — options list; choice/gender support multi-select',
+          'Numbered choice — show 1. Red / 2. Blue; reply with 2 (or tap) to select Blue; stored as the label',
           'File upload — allowed kinds (any / image / document / PDF) and max files; stored under api/files/{instance}/{chatbot}/conversations',
           'Signature — drawn PNG stored in the same conversation folder',
           'Image choice — picture cards from the Media library as a snapping gallery or a grid; stored as { label, filename, url, key } (or an array of those when multi-select)',
@@ -1227,13 +1267,16 @@ export const DOC_SECTIONS: DocSection[] = [
     body: [
       {
         paragraphs: [
-          'Open a chatbot’s Data tab to define entities (static or dynamic), attributes, and records. Entity steps in the designer can list, get, create, update, or delete records, optionally filtering by attribute.',
+          'Open a chatbot’s Data tab to define entities (static or dynamic), attributes, and records. Every entity has a locked unique primary key attribute `id` (auto-generated UUID on new records). Use the browse/query builder on records to filter, sort, and limit without code. Entity steps in the designer can list, get, create, update, or delete records with the same no-code query builder (conditions, AND/OR, sort, limit; values can use {{vars.*}}). Export records to Excel from the records table, or use Import Excel to create a new entity from an .xlsx/.csv file (header row, optional type row, then data).',
         ],
       },
       {
         bullets: [
           'Use output variables to capture entity results for later steps.',
           'Keep attribute keys stable — flows and filters reference them by key.',
+          'The `id` primary key cannot be renamed, removed, or edited after create.',
+          'Query operators: equals, not equals, greater/less, contains, and has a value.',
+          'Excel export writes attribute keys, a type row, then values so re-import can rebuild the entity.',
         ],
       },
     ],
@@ -1318,11 +1361,11 @@ export const DOC_SECTIONS: DocSection[] = [
   {
     id: 'analytics',
     title: 'Analytics',
-    summary: 'Drop-off, payment conversion, and top products from public chats.',
+    summary: 'Volume, completion, drop-off, and payments from public chats.',
     body: [
       {
         paragraphs: [
-          'Open Analytics in the organisation to see how far sessions reach (step.run events), how many shop carts convert to a paid intent, and which products appear in completed session variables. Filter by chatbot when several flows share the organisation. Conversation completed/failed webhooks include those same session variables.',
+          'Open Analytics in the organisation to see session volume over time, completion vs abandoned vs failed, when people chat, and how far sessions reach (step.run events). Filter by chatbot and date range. Shop carts show conversion to a paid intent and product quantities from completed session variables. Conversation completed/failed webhooks include those same session variables.',
         ],
       },
     ],
@@ -1361,6 +1404,12 @@ export const FAQ_ITEMS: FaqItem[] = [
       'Owners, admins, and editors can change designs and most chatbot settings. Viewers can inspect but not modify. Access is managed on the Users page.',
   },
   {
+    id: 'recycle-bin',
+    question: 'What happens when I delete a chatbot?',
+    answer:
+      'Delete moves it to the Recycle bin and turns off public chat. Owners and admins can restore it, or permanently delete it (and its files) from the Recycle bin. Permanent delete cannot be undone.',
+  },
+  {
     id: 'conversation-replay',
     question: 'How do I replay a public conversation?',
     answer:
@@ -1370,7 +1419,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'analytics',
     question: 'Where can I see drop-off and payment conversion?',
     answer:
-      'Open Analytics next to Conversations. Filter by chatbot to see how many sessions reached each step, how many shop carts converted to a paid intent, and which products appear in completed session variables.',
+      'Open Analytics next to Conversations. Filter by chatbot and date range to see session volume, completion, drop-off by step, when people chat, payment conversion, and products from completed session carts.',
   },
   {
     id: 'autosave-publish',

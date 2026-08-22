@@ -51,19 +51,19 @@ function RunSection({ title, data }: { title: string; data: Record<string, unkno
   if (!entries.length) {
     return (
       <div className="space-y-1">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{title}</p>
-        <p className="text-[11px] text-slate-400">No values</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]">{title}</p>
+        <p className="text-[11px] text-[var(--color-ink-muted)]">No values</p>
       </div>
     )
   }
   return (
     <div className="space-y-1.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]">{title}</p>
       <dl className="space-y-1.5">
         {entries.map(([key, value]) => (
-          <div key={key} className="rounded-lg bg-slate-50 px-2 py-1.5">
-            <dt className="text-[10px] font-medium text-slate-500">{key}</dt>
-            <dd className="mt-0.5 whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-slate-800">
+          <div key={key} className="rounded-lg bg-[var(--color-surface-2)] px-2 py-1.5">
+            <dt className="text-[10px] font-medium text-[var(--color-ink-muted)]">{key}</dt>
+            <dd className="mt-0.5 whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-[var(--color-ink)]">
               {formatValue(value)}
             </dd>
           </div>
@@ -91,50 +91,50 @@ function RunCard({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-xl border bg-white shadow-sm',
-        ok && 'border-slate-200/90',
-        skipped && 'border-amber-200',
+        'overflow-hidden rounded-xl border bg-[var(--color-surface)] shadow-sm',
+        ok && 'border-[var(--color-border)]/90',
+        skipped && 'border-[var(--color-warning)]/30',
         timedOut && 'border-orange-200',
-        failed && 'border-rose-200',
-        active && 'ring-2 ring-teal-500/30',
+        failed && 'border-[var(--color-danger)]/30',
+        active && 'ring-2 ring-[var(--color-accent)]/30',
       )}
     >
       <div className="flex w-full items-stretch">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex min-w-0 flex-1 items-start gap-2 px-2.5 py-2 text-left transition hover:bg-slate-50/80"
+          className="flex min-w-0 flex-1 items-start gap-2 px-2.5 py-2 text-left transition hover:bg-[var(--color-surface-2)]/80"
           aria-expanded={open}
         >
           {open ? (
-            <ChevronDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <ChevronDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-ink-muted)]" />
           ) : (
-            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-ink-muted)]" />
           )}
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1.5">
               {ok ? (
-                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[var(--color-success)]" />
               ) : skipped ? (
-                <CircleDot className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                <CircleDot className="h-3.5 w-3.5 shrink-0 text-[var(--color-warning)]" />
               ) : (
-                <XCircle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+                <XCircle className="h-3.5 w-3.5 shrink-0 text-[var(--color-danger)]" />
               )}
-              <span className="truncate text-xs font-semibold text-slate-800">{run.nodeLabel}</span>
+              <span className="truncate text-xs font-semibold text-[var(--color-ink)]">{run.nodeLabel}</span>
             </span>
-            <span className="mt-0.5 block truncate text-[10px] text-slate-500">
+            <span className="mt-0.5 block truncate text-[10px] text-[var(--color-ink-muted)]">
               {run.typeLabel} · {run.nodeKey}
             </span>
-            <span className="mt-1 flex items-center gap-1 text-[10px] font-medium text-slate-400">
+            <span className="mt-1 flex items-center gap-1 text-[10px] font-medium text-[var(--color-ink-muted)]">
               <Clock3 className="h-3 w-3" />
               {formatDuration(run.durationMs)}
-              <span className="text-slate-300">·</span>
+              <span className="text-[var(--color-ink-muted)]/50">·</span>
               <span
                 className={cn(
-                  ok && 'text-emerald-700',
-                  skipped && 'text-amber-700',
+                  ok && 'text-[var(--color-success)]',
+                  skipped && 'text-[var(--color-warning)]',
                   timedOut && 'text-orange-700',
-                  failed && 'text-rose-700',
+                  failed && 'text-[var(--color-danger)]',
                 )}
               >
                 {run.status}
@@ -145,7 +145,7 @@ function RunCard({
         <button
           type="button"
           onClick={onSelect}
-          className="shrink-0 border-l border-slate-100 px-2 text-[10px] font-semibold uppercase tracking-wide text-teal-700 hover:bg-teal-50/60"
+          className="shrink-0 border-l border-[var(--color-border)]/60 px-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-accent)] hover:bg-[var(--color-accent-soft)]/60"
           title="Select step"
         >
           Go
@@ -153,13 +153,13 @@ function RunCard({
       </div>
 
       {open ? (
-        <div className="space-y-3 border-t border-slate-100 bg-slate-50/40 px-2.5 py-2.5">
+        <div className="space-y-3 border-t border-[var(--color-border)]/60 bg-[var(--color-surface-2)]/40 px-2.5 py-2.5">
           <RunSection title="Inputs" data={run.inputs} />
           <RunSection title="Processed" data={run.processed} />
           <RunSection title="Outputs" data={run.outputs} />
           <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Saved as</p>
-            <p className="rounded-lg bg-teal-50/80 px-2 py-1.5 font-mono text-[11px] text-teal-900">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]">Saved as</p>
+            <p className="rounded-lg bg-[var(--color-accent-soft)]/80 px-2 py-1.5 font-mono text-[11px] text-[var(--color-accent)]">
               {run.savedAs ?? '—'}
             </p>
           </div>
@@ -207,23 +207,23 @@ export function ProblemsPanel({
   return (
     <aside
       aria-label={activeTab === 'run' ? 'Preview run history' : 'Validation problems'}
-      className="flex h-[calc(100vh-var(--ff-designer-aside-top,7.5rem)-1.5rem)] w-full flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/80 shadow-[var(--shadow-soft)] backdrop-blur-xl lg:sticky lg:top-[var(--ff-designer-aside-top,5rem)]"
+      className="flex h-[calc(100vh-var(--ff-designer-aside-top,7.5rem)-1.5rem)] w-full flex-col overflow-hidden rounded-2xl border border-[var(--color-border)]/60 bg-[var(--color-surface)]/80 shadow-[var(--shadow-soft)] backdrop-blur-xl lg:sticky lg:top-[var(--ff-designer-aside-top,5rem)]"
     >
-      <div className="shrink-0 border-b border-slate-200/80 px-3.5 py-3">
+      <div className="shrink-0 border-b border-[var(--color-border)]/80 px-3.5 py-3">
         <div className="flex items-center gap-2">
           {activeTab === 'run' ? (
-            <History className="h-4 w-4 text-teal-700" />
+            <History className="h-4 w-4 text-[var(--color-accent)]" />
           ) : (
-            <CircleDot className="h-4 w-4 text-teal-700" />
+            <CircleDot className="h-4 w-4 text-[var(--color-accent)]" />
           )}
-          <h2 className="min-w-0 flex-1 text-sm font-semibold text-slate-800">
+          <h2 className="min-w-0 flex-1 text-sm font-semibold text-[var(--color-ink)]">
             {activeTab === 'run' ? 'Run history' : 'Problems'}
           </h2>
           {activeTab === 'run' && runs.length ? (
             <button
               type="button"
               onClick={downloadRunHistory}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-teal-800 transition hover:bg-teal-50"
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-[var(--color-accent)] transition hover:bg-[var(--color-accent-soft)]"
               title="Download run history as JSON"
             >
               <Download className="h-3.5 w-3.5" />
@@ -233,20 +233,20 @@ export function ProblemsPanel({
         </div>
 
         {previewOpen ? (
-          <div className="mt-2.5 grid grid-cols-2 gap-1 rounded-xl bg-slate-100/80 p-1">
+          <div className="mt-2.5 grid grid-cols-2 gap-1 rounded-xl bg-[var(--color-surface-2)]/80 p-1">
             <button
               type="button"
               onClick={() => setTab('problems')}
               className={cn(
                 'rounded-lg px-2 py-1.5 text-[11px] font-semibold transition',
                 activeTab === 'problems'
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700',
+                  ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-sm'
+                  : 'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]',
               )}
             >
               Problems
               {errors.length ? (
-                <span className="ml-1 text-rose-600">{errors.length}</span>
+                <span className="ml-1 text-[var(--color-danger)]">{errors.length}</span>
               ) : null}
             </button>
             <button
@@ -255,18 +255,18 @@ export function ProblemsPanel({
               className={cn(
                 'rounded-lg px-2 py-1.5 text-[11px] font-semibold transition',
                 activeTab === 'run'
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700',
+                  ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-sm'
+                  : 'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]',
               )}
             >
               Run
               {runs.length ? (
-                <span className="ml-1 text-teal-700">{runs.length}</span>
+                <span className="ml-1 text-[var(--color-accent)]">{runs.length}</span>
               ) : null}
             </button>
           </div>
         ) : (
-          <p className="mt-1 text-[11px] text-slate-500">
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
             {errors.length} error{errors.length === 1 ? '' : 's'}
             {' · '}
             {warnings.length} warning{warnings.length === 1 ? '' : 's'}
@@ -274,14 +274,14 @@ export function ProblemsPanel({
         )}
 
         {activeTab === 'run' ? (
-          <p className="mt-2 text-[11px] text-slate-500">
+          <p className="mt-2 text-[11px] text-[var(--color-ink-muted)]">
             {runs.length} step{runs.length === 1 ? '' : 's'}
             {failedRuns ? ` · ${failedRuns} failed` : ''}
             {skippedRuns ? ` · ${skippedRuns} skipped` : ''}
             {!failedRuns && !skippedRuns && runs.length ? ' · all succeeded' : ''}
           </p>
         ) : previewOpen ? (
-          <p className="mt-2 text-[11px] text-slate-500">
+          <p className="mt-2 text-[11px] text-[var(--color-ink-muted)]">
             {errors.length} error{errors.length === 1 ? '' : 's'}
             {' · '}
             {warnings.length} warning{warnings.length === 1 ? '' : 's'}
@@ -294,7 +294,7 @@ export function ProblemsPanel({
           <div
             className={cn(
               'rounded-xl px-3 py-2.5',
-              scenarioResult.passed ? 'bg-emerald-50/90 text-emerald-900' : 'bg-rose-50/90 text-rose-900',
+              scenarioResult.passed ? 'bg-[var(--color-success-soft)]/90 text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)]/90 text-[var(--color-danger)]',
             )}
           >
             <p className="text-xs font-semibold">
@@ -309,11 +309,11 @@ export function ProblemsPanel({
         ) : null}
         {activeTab === 'run' ? (
           !runs.length ? (
-            <div className="flex flex-col items-start gap-2 rounded-xl bg-slate-50 px-3 py-3 text-slate-600">
-              <History className="h-4 w-4 shrink-0 text-slate-400" />
+            <div className="flex flex-col items-start gap-2 rounded-xl bg-[var(--color-surface-2)] px-3 py-3 text-[var(--color-ink-muted)]">
+              <History className="h-4 w-4 shrink-0 text-[var(--color-ink-muted)]" />
               <div>
                 <p className="text-xs font-semibold">Waiting for steps</p>
-                <p className="mt-0.5 text-[11px] text-slate-500">
+                <p className="mt-0.5 text-[11px] text-[var(--color-ink-muted)]">
                   As Preview runs, each step’s inputs, processing, outputs, and duration appear here.
                 </p>
               </div>
@@ -329,11 +329,11 @@ export function ProblemsPanel({
             ))
           )
         ) : !issues.length ? (
-          <div className="flex flex-col items-start gap-2 rounded-xl bg-emerald-50/80 px-3 py-3 text-emerald-800">
+          <div className="flex flex-col items-start gap-2 rounded-xl bg-[var(--color-success-soft)]/80 px-3 py-3 text-[var(--color-success)]">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             <div>
               <p className="text-xs font-semibold">All clear</p>
-              <p className="mt-0.5 text-[11px] text-emerald-700/80">No validation problems in this flow.</p>
+              <p className="mt-0.5 text-[11px] text-[var(--color-success)]/80">No validation problems in this flow.</p>
             </div>
           </div>
         ) : (
@@ -353,7 +353,7 @@ export function ProblemsPanel({
                     ? 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'
                     : 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
                   issue.nodeId && 'hover:brightness-[0.97]',
-                  active && 'ring-2 ring-teal-500/30',
+                  active && 'ring-2 ring-[var(--color-accent)]/30',
                   !issue.nodeId && 'cursor-default',
                 )}
               >

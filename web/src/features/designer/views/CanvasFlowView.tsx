@@ -140,10 +140,10 @@ function FlowStepNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        'relative rounded-2xl border bg-white/95 shadow-sm backdrop-blur-sm transition-shadow',
+        'relative rounded-2xl border bg-[var(--color-surface)]/95 shadow-sm backdrop-blur-sm transition-shadow',
         selected
           ? 'border-[var(--color-accent)] shadow-[0_0_0_3px_color-mix(in_oklab,var(--color-accent)_28%,transparent)]'
-          : 'border-slate-200/90 hover:border-slate-300',
+          : 'border-[var(--color-border)]/90 hover:border-[var(--color-border)]',
         (isCondition || isLoop) && 'mb-1',
       )}
       style={{ width: CANVAS_NODE_WIDTH }}
@@ -156,7 +156,7 @@ function FlowStepNode({ data, selected }: NodeProps) {
       <Handle
         type="target"
         position={Position.Top}
-        className="!h-2.5 !w-2.5 !border-2 !border-white !bg-slate-400"
+        className="!h-2.5 !w-2.5 !border-2 !border-white !bg-[var(--color-ink-muted)]"
       />
       <div className="flex items-start gap-2.5 px-3.5 py-2.5 pl-4">
         <div
@@ -169,9 +169,9 @@ function FlowStepNode({ data, selected }: NodeProps) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <div className="truncate text-sm font-semibold text-slate-800">{String(data.label)}</div>
+            <div className="truncate text-sm font-semibold text-[var(--color-ink)]">{String(data.label)}</div>
             {issueCount > 0 ? (
-              <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 ring-1 ring-rose-200">
+              <span className="rounded-md bg-[var(--color-danger-soft)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--color-danger)] ring-1 ring-rose-200">
                 {issueCount}
               </span>
             ) : null}
@@ -186,16 +186,16 @@ function FlowStepNode({ data, selected }: NodeProps) {
             {customSettings ? (
               <span
                 title={settingsTitle}
-                className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 ring-1 ring-sky-200/80"
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-[var(--color-accent-2)]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-accent-2)] ring-1 ring-sky-200/80"
               >
                 <Clock3 className="h-3 w-3" />
                 After
               </span>
             ) : null}
           </div>
-          <div className="text-[11px] font-medium text-slate-500">{nodeTypeLabel(type)}</div>
+          <div className="text-[11px] font-medium text-[var(--color-ink-muted)]">{nodeTypeLabel(type)}</div>
           {preview ? (
-            <div className="mt-0.5 truncate text-[11px] text-slate-400">{preview}</div>
+            <div className="mt-0.5 truncate text-[11px] text-[var(--color-ink-muted)]">{preview}</div>
           ) : null}
         </div>
       </div>
@@ -206,14 +206,14 @@ function FlowStepNode({ data, selected }: NodeProps) {
             id="true"
             position={Position.Bottom}
             style={{ left: '28%' }}
-            className="!h-2.5 !w-2.5 !border-2 !border-white !bg-emerald-600"
+            className="!h-2.5 !w-2.5 !border-2 !border-white !bg-[var(--color-success)]"
           />
           <Handle
             type="source"
             id="false"
             position={Position.Bottom}
             style={{ left: '72%' }}
-            className="!h-2.5 !w-2.5 !border-2 !border-white !bg-rose-600"
+            className="!h-2.5 !w-2.5 !border-2 !border-white !bg-[var(--color-danger)]"
           />
         </>
       ) : isLoop ? (
@@ -221,13 +221,13 @@ function FlowStepNode({ data, selected }: NodeProps) {
           type="source"
           id="body"
           position={Position.Bottom}
-          className="!h-2.5 !w-2.5 !border-2 !border-white !bg-teal-600"
+          className="!h-2.5 !w-2.5 !border-2 !border-white !bg-[var(--color-accent)]"
         />
       ) : (
         <Handle
           type="source"
           position={Position.Bottom}
-          className="!h-2.5 !w-2.5 !border-2 !border-white !bg-slate-500"
+          className="!h-2.5 !w-2.5 !border-2 !border-white !bg-[var(--color-ink-muted)]"
         />
       )}
     </div>
@@ -378,7 +378,7 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
   return (
     <div
       className={cn(
-        'relative overflow-hidden border border-slate-200/80 bg-[linear-gradient(160deg,#f8fafc_0%,#ffffff_42%,#f0fdfa_100%)] shadow-[var(--shadow-soft)]',
+        'relative overflow-hidden border border-[var(--color-border)]/80 bg-[linear-gradient(160deg,#f8fafc_0%,#ffffff_42%,#f0fdfa_100%)] shadow-[var(--shadow-soft)]',
         fullscreen ? 'h-full min-h-0 rounded-xl' : 'h-[min(78vh,760px)] rounded-2xl',
       )}
     >
@@ -415,11 +415,11 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#cbd5e1" />
-        <Controls showInteractive={!readOnly} className="!shadow-md !overflow-hidden !rounded-xl !border-slate-200" />
+        <Controls showInteractive={!readOnly} className="!shadow-md !overflow-hidden !rounded-xl !border-[var(--color-border)]" />
         <MiniMap
           pannable
           zoomable
-          className="!overflow-hidden !rounded-xl !border !border-slate-200 !shadow-md"
+          className="!overflow-hidden !rounded-xl !border !border-[var(--color-border)] !shadow-md"
           nodeColor={(n) => typeColor[(n.data?.type as FlowNodeType) ?? 'message'] ?? '#94a3b8'}
           maskColor="rgb(15 23 42 / 0.08)"
         />
@@ -427,7 +427,7 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
           <button
             type="button"
             onClick={() => arrange(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/95 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] shadow-sm hover:bg-[var(--color-surface-2)]"
             title="Re-arrange steps top-to-bottom (Yes left, No right)"
           >
             <LayoutGrid className="h-3.5 w-3.5" />
@@ -437,7 +437,7 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
             <button
               type="button"
               onClick={onToggleFullscreen}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/95 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] shadow-sm hover:bg-[var(--color-surface-2)]"
               title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen canvas'}
             >
               {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}

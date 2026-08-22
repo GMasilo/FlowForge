@@ -88,7 +88,7 @@ export function TestScenariosPanel({ chatbotId }: { chatbotId: string }) {
       description="Fixture globals for Preview. After a run, Design checks that listed variables exist and step keys succeeded."
       defaultOpen={false}
       badge={
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+        <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-ink-muted)]">
           {list.data?.length ?? 0}
         </span>
       }
@@ -99,7 +99,7 @@ export function TestScenariosPanel({ chatbotId }: { chatbotId: string }) {
           return (
             <Card key={row.id} className="space-y-2 p-3">
               <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-semibold text-slate-800">{row.name}</p>
+                <p className="text-sm font-semibold text-[var(--color-ink)]">{row.name}</p>
                 {editable ? (
                   <Button
                     size="sm"
@@ -112,8 +112,8 @@ export function TestScenariosPanel({ chatbotId }: { chatbotId: string }) {
                   </Button>
                 ) : null}
               </div>
-              <pre className="overflow-x-auto font-mono text-[11px] text-slate-600">{prettyJson(row.globals)}</pre>
-              <p className="text-[11px] text-slate-500">
+              <pre className="overflow-x-auto font-mono text-[11px] text-[var(--color-ink-muted)]">{prettyJson(row.globals)}</pre>
+              <p className="text-[11px] text-[var(--color-ink-muted)]">
                 Vars: {expected.variables?.join(', ') || '—'} · Steps: {expected.stepKeys?.join(', ') || '—'}
               </p>
             </Card>
@@ -121,7 +121,7 @@ export function TestScenariosPanel({ chatbotId }: { chatbotId: string }) {
         })}
 
         {editable ? (
-          <div className="space-y-2 rounded-xl border border-dashed border-slate-200 p-3">
+          <div className="space-y-2 rounded-xl border border-dashed border-[var(--color-border)] p-3">
             <Label>New scenario</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="VIP customer" />
             <Label>Globals JSON</Label>

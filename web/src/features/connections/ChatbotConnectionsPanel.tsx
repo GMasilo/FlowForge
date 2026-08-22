@@ -190,7 +190,7 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
       description="Owned by this chatbot. Private by default — promote to global or share with people for ForgeHub."
       badge={
         owned.data?.length ? (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+          <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-ink-muted)]">
             {owned.data.length}
           </span>
         ) : null
@@ -215,7 +215,7 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
       {error ? <FieldError>{error}</FieldError> : null}
 
       {open ? (
-        <form className="space-y-3 rounded-xl border border-teal-200/70 bg-teal-50/30 p-3" onSubmit={onSubmit}>
+        <form className="space-y-3 rounded-xl border border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)]/30 p-3" onSubmit={onSubmit}>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label>Name</Label>
@@ -245,7 +245,7 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
               <option value="global">Global — listed in organisation ForgeHub</option>
               <option value="shared">Shared — listed for selected people</option>
             </Select>
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
               Others never see credentials — only name, kind, and owner.
             </p>
           </div>
@@ -253,7 +253,7 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
           {form.visibility === 'shared' ? (
             <div>
               <Label>Share with</Label>
-              <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2">
+              <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
                 {memberOptions.length ? (
                   memberOptions.map((m) => (
                     <label key={m.id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -273,7 +273,7 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
                     </label>
                   ))
                 ) : (
-                  <p className="text-xs text-slate-500">No other users in this organisation.</p>
+                  <p className="text-xs text-[var(--color-ink-muted)]">No other users in this organisation.</p>
                 )}
               </div>
             </div>
@@ -328,11 +328,11 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
           {owned.data.map((c) => (
             <li
               key={c.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--color-border)] px-3 py-2"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-slate-800">{c.name}</span>
+                  <span className="font-medium text-[var(--color-ink)]">{c.name}</span>
                   <Badge>{c.kind}</Badge>
                   <Badge>
                     {c.visibility === 'private' ? (
@@ -366,10 +366,10 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
         </p>
       )}
 
-      <p className="text-[11px] text-slate-500">
+      <p className="text-[11px] text-[var(--color-ink-muted)]">
         <Users className="mr-1 inline h-3.5 w-3.5" />
         Discover shared connections in{' '}
-        <a className="font-medium text-teal-700 hover:underline" href={`/flowforge/instances/${instance.id}/connections`}>
+        <a className="font-medium text-[var(--color-accent)] hover:underline" href={`/flowforge/instances/${instance.id}/connections`}>
           ForgeHub
         </a>
         .

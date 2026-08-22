@@ -118,7 +118,7 @@ export function SignatureAnswerField({
       <canvas
         ref={canvasRef}
         className={cn(
-          'h-40 w-full touch-none rounded-2xl border border-slate-200 bg-white shadow-inner',
+          'h-40 w-full touch-none rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-inner',
           disabled && 'opacity-60',
         )}
         onPointerDown={onPointerDown}
@@ -146,7 +146,7 @@ export function SignatureAnswerField({
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send'}
         </Button>
       </div>
-      {error ? <p className="text-[11px] text-rose-600">{error}</p> : null}
+      {error ? <p className="text-[11px] text-[var(--color-danger)]">{error}</p> : null}
     </div>
   )
 }

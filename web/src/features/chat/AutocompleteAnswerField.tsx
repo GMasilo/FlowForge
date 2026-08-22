@@ -32,7 +32,7 @@ export function AutocompleteAnswerField({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search…"
-        className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm outline-none focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15"
+        className="h-11 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 text-sm outline-none focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15"
       />
       <ChoiceAnswerField
         choices={filtered}

@@ -148,8 +148,8 @@ export function WebhooksPage() {
                       onClick={() => toggleEvent(ev)}
                       className={
                         on
-                          ? 'rounded-lg bg-teal-600 px-2.5 py-1 text-xs font-medium text-white'
-                          : 'rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600'
+                          ? 'rounded-lg bg-[var(--color-accent)]$1text-[var(--color-accent-fg)]'
+                          : 'rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-xs font-medium text-[var(--color-ink-muted)]'
                       }
                     >
                       {ev}
@@ -174,15 +174,15 @@ export function WebhooksPage() {
             <Card key={hook.id} className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-semibold text-slate-800">{hook.name}</h2>
+                  <h2 className="font-semibold text-[var(--color-ink)]">{hook.name}</h2>
                   <Badge>{hook.enabled ? 'Enabled' : 'Disabled'}</Badge>
                 </div>
-                <p className="mt-1 truncate font-mono text-xs text-slate-500">{hook.url}</p>
+                <p className="mt-1 truncate font-mono text-xs text-[var(--color-ink-muted)]">{hook.url}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {hook.events.map((ev) => (
                     <span
                       key={ev}
-                      className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
+                      className="rounded-md bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-ink-muted)]"
                     >
                       {ev}
                     </span>

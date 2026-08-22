@@ -53,15 +53,33 @@ const events = [
 const stats = buildConversationAnalytics({
   sessions,
   events,
-  payments: [{ chatbot_id: 'bot', session_id: 's1', status: 'verified' }],
+  payments: [{ chatbot_id: 'bot', session_id: 's1', status: 'verified', amount: 9, currency: 'ZAR' }],
   chatbotId: 'bot',
+  now: Date.parse('2026-08-02T00:00:00.000Z'),
 })
 
 assert(stats.sessionCount === 2, 'session count')
 assert(stats.completedCount === 1, 'completed')
+assert(stats.failedCount === 1, 'failed')
 assert(stats.shopSessions === 1, 'shop sessions')
 assert(stats.paidSessions === 1, 'paid')
 assert(stats.dropOff[0]?.nodeKey === 'shop' && stats.dropOff[0].reached === 2, 'drop-off shop')
+assert(stats.dropOff[0]?.dropped === 1, 'one session left after shop')
 assert(stats.topProducts[0]?.qty === 2 && stats.topProducts[0]?.name === 'Latte', 'top product')
+assert(stats.statusBreakdown.some((s) => s.status === 'completed' && s.count === 1), 'status mix')
+assert(stats.daily.some((d) => d.sessions >= 1), 'daily series has volume')
+assert(stats.byHour.reduce((n, h) => n + h.count, 0) === 2, 'hour buckets sum to sessions')
+assert(stats.revenueByCurrency[0]?.currency === 'ZAR' && stats.revenueByCurrency[0]?.amount === 9, 'verified revenue')
+assert(Math.round(stats.completionRate) === 50, 'completion rate')
+
+const last7 = buildConversationAnalytics({
+  sessions,
+  events,
+  payments: [{ chatbot_id: 'bot', session_id: 's1', status: 'verified', amount: 9, currency: 'ZAR' }],
+  chatbotId: 'bot',
+  sinceMs: Date.parse('2026-08-10T00:00:00.000Z'),
+  now: Date.parse('2026-08-14T00:00:00.000Z'),
+})
+assert(last7.sessionCount === 0, 'range filter excludes older sessions')
 
 console.log('conversationAnalytics.check.ts: all passed')

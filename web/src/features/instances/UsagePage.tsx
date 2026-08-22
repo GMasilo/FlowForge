@@ -26,14 +26,14 @@ function QuotaBar({ used, max, label }: { used: number; max: number; label: stri
   return (
     <div>
       <div className="mb-1 flex justify-between text-sm">
-        <span className="font-medium text-slate-700">{label}</span>
-        <span className="text-slate-500">
+        <span className="font-medium text-[var(--color-ink)]">{label}</span>
+        <span className="text-[var(--color-ink-muted)]">
           {used.toLocaleString()} / {max.toLocaleString()}
         </span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className="h-2 overflow-hidden rounded-full bg-[var(--color-surface-2)]">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-teal-500 to-cyan-500 transition-all"
+          className="h-full rounded-full bg-gradient-to-r from-[var(--color-accent)] to-[var(--color-accent-2)] transition-all"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -153,7 +153,7 @@ export function UsagePage() {
       />
 
       <Card className="space-y-4">
-        <h2 className="text-base font-semibold text-slate-800">This month ({ym})</h2>
+        <h2 className="text-base font-semibold text-[var(--color-ink)]">This month ({ym})</h2>
         {row && used ? (
           <div className="space-y-4">
             <QuotaBar
@@ -171,7 +171,7 @@ export function UsagePage() {
 
       <Card>
         <form className="space-y-3" onSubmit={onSubmit}>
-          <h2 className="text-base font-semibold text-slate-800">Limits & allowlist</h2>
+          <h2 className="text-base font-semibold text-[var(--color-ink)]">Limits & allowlist</h2>
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
               <Label htmlFor="q-conv">Max conversations / month</Label>
@@ -213,7 +213,7 @@ export function UsagePage() {
               placeholder="api.example.com, hooks.partner.io"
               rows={3}
             />
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
               Comma-separated hosts. Empty means default platform policy applies.
             </p>
           </div>

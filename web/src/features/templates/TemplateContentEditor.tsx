@@ -147,7 +147,7 @@ function TemplateKindFields({
             title="Email preview"
             sandbox=""
             srcDoc={c.html || '<p style="font-family:sans-serif;color:#94a3b8;padding:24px">HTML preview appears here.</p>'}
-            className="h-[420px] w-full rounded-xl border border-[var(--color-border)] bg-white"
+            className="h-[420px] w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]"
           />
         </div>
       </div>
@@ -169,9 +169,9 @@ function TemplateKindFields({
           />
         </div>
         {c.items.map((item, index) => (
-          <div key={index} className="rounded-xl border border-[var(--color-border)] bg-white/70 p-3">
+          <div key={index} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/70 p-3">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-medium text-slate-500">Question {index + 1}</p>
+              <p className="text-xs font-medium text-[var(--color-ink-muted)]">Question {index + 1}</p>
               <Button
                 size="sm"
                 variant="ghost"
@@ -236,7 +236,7 @@ function TemplateKindFields({
           <Input disabled={readOnly} value={c.title} onChange={(e) => onChange({ ...c, title: e.target.value })} />
         </div>
         {c.items.map((item, index) => (
-          <div key={index} className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-white/70 p-3 sm:grid-cols-[1fr_1fr_8rem_auto]">
+          <div key={index} className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/70 p-3 sm:grid-cols-[1fr_1fr_8rem_auto]">
             <Input
               disabled={readOnly}
               value={item.label}
@@ -327,7 +327,7 @@ function TemplateKindFields({
           {(c.days.length ? c.days : WEEKDAYS.map((day) => ({ day, open: '09:00', close: '17:00', closed: false }))).map(
             (day, index) => (
               <div key={day.day || index} className="grid grid-cols-[7rem_1fr_1fr_auto] items-center gap-2">
-                <p className="text-sm font-medium text-slate-700">{day.day}</p>
+                <p className="text-sm font-medium text-[var(--color-ink)]">{day.day}</p>
                 <Input
                   disabled={readOnly || day.closed}
                   type="time"
@@ -346,7 +346,7 @@ function TemplateKindFields({
                     onChange({ ...c, days })
                   }}
                 />
-                <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                <label className="flex items-center gap-1.5 text-xs text-[var(--color-ink-muted)]">
                   <input
                     type="checkbox"
                     disabled={readOnly}
@@ -477,7 +477,7 @@ function TemplateKindFields({
           {c.fields.map((field, index) => (
             <div
               key={index}
-              className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-white/70 p-3 sm:grid-cols-[1fr_1fr_7.5rem_auto]"
+              className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/70 p-3 sm:grid-cols-[1fr_1fr_7.5rem_auto]"
             >
               <Input
                 disabled={readOnly}
@@ -539,7 +539,7 @@ function TemplateKindFields({
             onChange={(footer) => onChange({ ...c, footer })}
           />
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-2 text-sm text-[var(--color-ink)]">
           <input
             type="checkbox"
             disabled={readOnly}

@@ -15,7 +15,7 @@ function telHref(phone: string): string {
 }
 
 const linkClassName =
-  'inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium text-white underline decoration-white/50 underline-offset-2 transition hover:decoration-white'
+  'inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium text-[var(--color-accent-fg)] underline decoration-[var(--color-accent-fg)]/50 underline-offset-2 transition hover:decoration-[var(--color-accent-fg)]'
 
 export function UserMessageBubble({
   message,
@@ -53,7 +53,7 @@ export function UserMessageBubble({
         {color ? (
           <span className="inline-flex items-center gap-2">
             <span
-              className="h-5 w-5 shrink-0 rounded-md ring-1 ring-white/40"
+              className="h-5 w-5 shrink-0 rounded-md ring-1 ring-[var(--color-accent-fg)]/40"
               style={{ background: color }}
               aria-hidden
             />
@@ -77,7 +77,7 @@ export function UserMessageBubble({
   return (
     <div className={cn('space-y-2', className)}>
       {link.loading ? (
-        <p className="text-[11px] leading-snug text-white/70">Fetching page description…</p>
+        <p className="text-[11px] leading-snug text-[var(--color-accent-fg)]/70">Fetching page description…</p>
       ) : null}
 
       {!link.loading && hasMeta ? (
@@ -88,24 +88,26 @@ export function UserMessageBubble({
               alt=""
               width={20}
               height={20}
-              className="mt-0.5 h-5 w-5 shrink-0 rounded-md bg-white/15 object-contain ring-1 ring-white/20"
+              className="mt-0.5 h-5 w-5 shrink-0 rounded-md bg-[var(--color-accent-fg)]/15 object-contain ring-1 ring-[var(--color-accent-fg)]/20"
               loading="lazy"
               referrerPolicy="no-referrer"
               onError={() => setIconFailed(true)}
             />
           ) : null}
           <div className="min-w-0 space-y-0.5">
-            {title ? <p className="text-[13px] font-semibold leading-snug text-white">{title}</p> : null}
+            {title ? <p className="text-[13px] font-semibold leading-snug text-[var(--color-accent-fg)]">{title}</p> : null}
             {description ? (
-              <p className="text-[12px] leading-snug text-white/85">{description}</p>
+              <p className="text-[12px] leading-snug text-[var(--color-accent-fg)]/85">{description}</p>
             ) : null}
-            {site ? <p className="text-[10px] font-medium uppercase tracking-wide text-white/55">{site}</p> : null}
+            {site ? (
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--color-accent-fg)]/55">{site}</p>
+            ) : null}
           </div>
         </div>
       ) : null}
 
       {!link.loading && link.error && !description && !title ? (
-        <p className="text-[11px] leading-snug text-white/65">{link.error}</p>
+        <p className="text-[11px] leading-snug text-[var(--color-accent-fg)]/65">{link.error}</p>
       ) : null}
 
       <a

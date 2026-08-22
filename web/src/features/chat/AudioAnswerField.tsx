@@ -143,8 +143,8 @@ export function AudioAnswerField({
         </Button>
       </div>
       {blobUrl ? <audio src={blobUrl} controls className="w-full" /> : null}
-      <p className="text-[11px] text-slate-400">Up to {limit} seconds. Stored in this chatbot’s conversation folder.</p>
-      {error ? <p className="text-[11px] text-rose-600">{error}</p> : null}
+      <p className="text-[11px] text-[var(--color-ink-muted)]">Up to {limit} seconds. Stored in this chatbot’s conversation folder.</p>
+      {error ? <p className="text-[11px] text-[var(--color-danger)]">{error}</p> : null}
     </div>
   )
 }

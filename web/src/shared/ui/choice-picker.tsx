@@ -138,13 +138,13 @@ export function ChoicePicker({
           role="listbox"
           aria-multiselectable={allowMultiple || undefined}
           aria-label="Choices"
-          className="fixed z-[200] animate-[ff-rise_0.2s_var(--ease-spring)] overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-[0_20px_50px_-18px_rgb(15_23_42_/_0.45)] backdrop-blur-xl"
+          className="fixed z-[200] animate-[ff-rise_0.2s_var(--ease-spring)] overflow-hidden rounded-2xl border border-[var(--color-border)]/70 bg-[var(--color-surface)]/95 shadow-[0_20px_50px_-18px_rgb(15_23_42_/_0.45)] backdrop-blur-xl"
           style={{ top: pos.top, left: pos.left, width: pos.width }}
         >
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-teal-50/90 to-transparent" />
-          <div className="relative border-b border-slate-100 px-3 py-2.5">
-            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              <ListFilter className="h-3.5 w-3.5 text-teal-700" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-[var(--color-accent-soft)]/90 to-transparent" />
+          <div className="relative border-b border-[var(--color-border)]/60 px-3 py-2.5">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-ink-muted)]">
+              <ListFilter className="h-3.5 w-3.5 text-[var(--color-accent)]" />
               {allowMultiple ? 'Select options' : 'Select an option'}
             </p>
           </div>
@@ -161,8 +161,8 @@ export function ChoicePicker({
                     className={cn(
                       'flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm transition',
                       isOn
-                        ? 'bg-teal-50 font-medium text-teal-900'
-                        : 'text-slate-700 hover:bg-slate-50',
+                        ? 'bg-[var(--color-accent-soft)] font-medium text-[var(--color-accent)]'
+                        : 'text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]',
                     )}
                   >
                     <span
@@ -170,8 +170,8 @@ export function ChoicePicker({
                         'grid h-5 w-5 shrink-0 place-items-center rounded-md border transition',
                         allowMultiple ? 'rounded-md' : 'rounded-full',
                         isOn
-                          ? 'border-teal-600 bg-teal-600 text-white'
-                          : 'border-slate-300 bg-white text-transparent',
+                          ? 'border-[var(--color-accent)] bg-[var(--color-accent)]$1text-[var(--color-accent-fg)]'
+                          : 'border-[var(--color-border)] bg-[var(--color-surface)] text-transparent',
                       )}
                     >
                       <Check className="h-3 w-3" strokeWidth={3} />
@@ -182,17 +182,17 @@ export function ChoicePicker({
               )
             })}
             {!options.length ? (
-              <li className="px-3 py-4 text-center text-sm text-slate-400">No options</li>
+              <li className="px-3 py-4 text-center text-sm text-[var(--color-ink-muted)]">No options</li>
             ) : null}
           </ul>
           {allowMultiple ? (
-            <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2.5">
-              <p className="text-[11px] text-slate-400">
+            <div className="flex items-center justify-between gap-2 border-t border-[var(--color-border)]/60 px-3 py-2.5">
+              <p className="text-[11px] text-[var(--color-ink-muted)]">
                 {selected.length ? `${selected.length} selected` : 'None selected'}
               </p>
               <button
                 type="button"
-                className="rounded-xl bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-teal-700"
+                className="rounded-xl bg-[var(--color-accent)]$1text-[var(--color-accent-fg)] shadow-sm transition hover:bg-[var(--color-accent)]"
                 onClick={() => setOpen(false)}
               >
                 Done
@@ -222,15 +222,15 @@ export function ChoicePicker({
           }}
           onKeyDown={onTriggerKey}
           className={cn(
-            'flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-white/90 text-left shadow-sm transition-all duration-200',
-            'hover:border-[var(--color-accent)]/35 focus-visible:border-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-500/15',
+            'flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-left shadow-sm transition-all duration-200',
+            'hover:border-[var(--color-accent)]/35 focus-visible:border-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--color-accent)]/15',
             size === 'sm' ? 'h-8 px-2.5 text-xs' : 'h-10 px-3 text-sm',
             (disabled || !options.length) && 'cursor-not-allowed opacity-50',
-            open && 'border-teal-500 ring-4 ring-teal-500/15',
+            open && 'border-[var(--color-accent)] ring-4 ring-[var(--color-accent)]/15',
           )}
         >
           <ListFilter
-            className={cn('shrink-0 text-teal-700', size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4')}
+            className={cn('shrink-0 text-[var(--color-accent)]', size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4')}
           />
           <span
             className={cn(
@@ -240,12 +240,12 @@ export function ChoicePicker({
           >
             {label}
           </span>
-          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-[var(--color-ink-muted)]" />
         </button>
         {allowClear && selected.length && !disabled ? (
           <button
             type="button"
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-1.5 text-[var(--color-ink-muted)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink-muted)]"
             aria-label="Clear"
             onClick={() => onChange(allowMultiple ? [] : '')}
           >

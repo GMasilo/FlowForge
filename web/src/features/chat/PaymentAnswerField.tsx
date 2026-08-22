@@ -164,7 +164,7 @@ export function PaymentAnswerField({
   return (
     <div className={cn('flex min-w-0 flex-1 flex-col gap-2', className)}>
       {amountText ? (
-        <p className="text-sm font-semibold text-slate-800">Amount due: {amountText}</p>
+        <p className="text-sm font-semibold text-[var(--color-ink)]">Amount due: {amountText}</p>
       ) : null}
       {verify ? (
         <>
@@ -178,7 +178,7 @@ export function PaymentAnswerField({
             {payment.payLabel || 'Pay now'}
           </Button>
           {phase === 'waiting' ? (
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-[var(--color-ink-muted)]">
               Waiting for the payment provider to confirm{reference ? ` (${reference.slice(0, 8)}…)` : ''}…
             </p>
           ) : null}
@@ -208,7 +208,7 @@ export function PaymentAnswerField({
               {payment.payLabel || 'Pay now'}
             </Button>
           ) : (
-            <p className="text-sm text-slate-500">No pay link — confirm when the payment is done (cash, EFT, …).</p>
+            <p className="text-sm text-[var(--color-ink-muted)]">No pay link — confirm when the payment is done (cash, EFT, …).</p>
           )}
           <Button
             type="button"
@@ -220,7 +220,7 @@ export function PaymentAnswerField({
           </Button>
         </>
       )}
-      {error ? <p className="text-[11px] text-rose-600">{error}</p> : null}
+      {error ? <p className="text-[11px] text-[var(--color-danger)]">{error}</p> : null}
     </div>
   )
 }

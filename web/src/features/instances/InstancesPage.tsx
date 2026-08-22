@@ -248,7 +248,7 @@ export function InstancesPage() {
       />
 
       {open ? (
-        <Card className="ff-page-enter border-teal-200/60">
+        <Card className="ff-page-enter border-[var(--color-accent)]/20">
           <form className="space-y-4" onSubmit={onSubmit}>
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-base font-semibold">
@@ -410,10 +410,10 @@ export function InstancesPage() {
                 key={org.id}
                 className={cn(
                   'ff-hover-lift group relative overflow-hidden',
-                  isSelected && 'ring-2 ring-teal-500/35',
+                  isSelected && 'ring-2 ring-[var(--color-accent)]/35',
                 )}
               >
-                <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gradient-to-br from-teal-400/20 to-sky-400/10 transition-transform duration-500 group-hover:scale-125" />
+                <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gradient-to-br from-[var(--color-accent)]/20 to-[var(--color-accent-2)]/10 transition-transform duration-500 group-hover:scale-125" />
                 <div className="relative flex items-start gap-3">
                   <RowCheckbox
                     checked={isSelected}
@@ -422,7 +422,7 @@ export function InstancesPage() {
                   />
                   <Link to={`/instances/${org.id}`} className="min-w-0 flex-1">
                     <div className="flex items-start gap-3">
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-teal-500/15 to-cyan-500/15 text-teal-700 ring-1 ring-teal-600/10">
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[var(--color-accent)]/$1 to-[var(--color-accent-2)]/$1 text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/10">
                         <Building2 className="h-5 w-5" />
                       </span>
                       <div className="min-w-0 flex-1">
@@ -451,7 +451,7 @@ export function InstancesPage() {
           })}
         </div>
       ) : (
-        <Card className="ff-page-enter border-dashed border-teal-300/50 bg-teal-50/30 text-center">
+        <Card className="ff-page-enter border-dashed border-[var(--color-accent)]/40/50 bg-[var(--color-accent-soft)]/30 text-center">
           <p className="text-sm text-[var(--color-ink-muted)]">
             {list.data?.length
               ? 'No organisations match your search.'

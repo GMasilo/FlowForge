@@ -90,7 +90,7 @@ export function ImageChoiceAnswerField({
 
   if (!options.length) {
     return (
-      <p className="text-sm text-slate-500">No images are configured for this question.</p>
+      <p className="text-sm text-[var(--color-ink-muted)]">No images are configured for this question.</p>
     )
   }
 
@@ -108,21 +108,21 @@ export function ImageChoiceAnswerField({
               disabled={disabled}
               onClick={() => toggle(opt.label)}
               className={cn(
-                'overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition',
+                'overflow-hidden rounded-2xl border bg-[var(--color-surface)] text-left shadow-sm transition',
                 on
-                  ? 'border-teal-500 ring-2 ring-teal-500/30'
-                  : 'border-slate-200 hover:border-teal-300',
+                  ? 'border-[var(--color-accent)] ring-2 ring-[var(--color-accent)]/30'
+                  : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/40',
                 disabled && 'cursor-not-allowed opacity-50',
               )}
             >
               {opt.url ? (
                 <img src={opt.url} alt="" className="h-24 w-full object-cover sm:h-28" />
               ) : (
-                <div className="grid h-24 place-items-center bg-slate-100 text-[11px] text-slate-400 sm:h-28">
+                <div className="grid h-24 place-items-center bg-[var(--color-surface-2)] text-[11px] text-[var(--color-ink-muted)] sm:h-28">
                   Missing image
                 </div>
               )}
-              <span className="block truncate px-2.5 py-2 text-xs font-semibold text-slate-800">{opt.label}</span>
+              <span className="block truncate px-2.5 py-2 text-xs font-semibold text-[var(--color-ink)]">{opt.label}</span>
             </button>
           )
         })}
@@ -207,8 +207,8 @@ function ImageChoiceGallery({
             disabled={disabled || !canPrev}
             onClick={() => scrollToIndex(focused - 1)}
             className={cn(
-              'absolute top-[42%] left-0 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-sm transition',
-              canPrev ? 'hover:border-teal-300 hover:text-teal-800' : 'opacity-30',
+              'absolute top-[42%] left-0 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/95 text-[var(--color-ink)] shadow-sm transition',
+              canPrev ? 'hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]' : 'opacity-30',
               disabled && 'cursor-not-allowed',
             )}
           >
@@ -220,8 +220,8 @@ function ImageChoiceGallery({
             disabled={disabled || !canNext}
             onClick={() => scrollToIndex(focused + 1)}
             className={cn(
-              'absolute top-[42%] right-0 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-sm transition',
-              canNext ? 'hover:border-teal-300 hover:text-teal-800' : 'opacity-30',
+              'absolute top-[42%] right-0 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/95 text-[var(--color-ink)] shadow-sm transition',
+              canNext ? 'hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]' : 'opacity-30',
               disabled && 'cursor-not-allowed',
             )}
           >
@@ -268,22 +268,22 @@ function ImageChoiceGallery({
               disabled={disabled}
               onClick={() => selectCard(opt.label, index)}
               className={cn(
-                'w-[13rem] shrink-0 snap-center overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition duration-300 ease-out',
+                'w-[13rem] shrink-0 snap-center overflow-hidden rounded-2xl border bg-[var(--color-surface)] text-left shadow-sm transition duration-300 ease-out',
                 centered ? 'scale-100 opacity-100' : 'scale-90 opacity-60',
                 on
-                  ? 'border-teal-500 ring-2 ring-teal-500/30'
-                  : 'border-slate-200 hover:border-teal-300',
+                  ? 'border-[var(--color-accent)] ring-2 ring-[var(--color-accent)]/30'
+                  : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/40',
                 disabled && 'cursor-not-allowed',
               )}
             >
               {opt.url ? (
                 <img src={opt.url} alt="" className="h-40 w-full object-cover sm:h-44" />
               ) : (
-                <div className="grid h-40 place-items-center bg-slate-100 text-[11px] text-slate-400 sm:h-44">
+                <div className="grid h-40 place-items-center bg-[var(--color-surface-2)] text-[11px] text-[var(--color-ink-muted)] sm:h-44">
                   Missing image
                 </div>
               )}
-              <span className="block truncate px-3 py-2.5 text-sm font-semibold text-slate-800">
+              <span className="block truncate px-3 py-2.5 text-sm font-semibold text-[var(--color-ink)]">
                 {opt.label}
               </span>
             </button>
@@ -302,7 +302,7 @@ function ImageChoiceGallery({
               onClick={() => scrollToIndex(index)}
               className={cn(
                 'h-1.5 rounded-full transition-all',
-                index === focused ? 'w-5 bg-teal-600' : 'w-1.5 bg-slate-300 hover:bg-slate-400',
+                index === focused ? 'w-5 bg-[var(--color-accent)]' : 'w-1.5 bg-[var(--color-border)] hover:bg-[var(--color-ink-muted)]',
               )}
             />
           ))}

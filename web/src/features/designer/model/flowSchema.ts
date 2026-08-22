@@ -111,6 +111,7 @@ export const questionAnswerTypes = [
   'datetime',
   'boolean',
   'choice',
+  'numbered_choice',
   'gender',
   'rating',
   'slider',
@@ -164,6 +165,11 @@ export const QUESTION_ANSWER_TYPE_OPTIONS: Array<{
   { value: 'boolean', label: 'Yes / No', hint: 'Boolean yes or no' },
   { value: 'confirm', label: 'Confirm', hint: 'Checkbox agreement before continuing' },
   { value: 'choice', label: 'Choice', hint: 'Pick from a list' },
+  {
+    value: 'numbered_choice',
+    label: 'Numbered choice',
+    hint: 'Reply with 1, 2, … to pick from a numbered list',
+  },
   { value: 'gender', label: 'Gender', hint: 'Gender selection' },
   { value: 'email', label: 'Email', hint: 'Email address; optional domain allowlist' },
   { value: 'phone', label: 'Phone number', hint: 'Country code + digits' },
@@ -430,9 +436,12 @@ export function normalizeAllowedEmailDomains(raw: unknown): string[] {
   return out
 }
 
+export const DEFAULT_NUMBERED_CHOICES = ['Red', 'Blue', 'Green'] as const
+
 export function answerTypeUsesChoices(answerType: string): boolean {
   return (
     answerType === 'choice' ||
+    answerType === 'numbered_choice' ||
     answerType === 'gender' ||
     answerType === 'likert' ||
     answerType === 'ranking' ||
@@ -834,6 +843,7 @@ export function describeQuestionResponse(
     case 'datetime':
       return wrapQuestionResponse('string', '2026-08-14T14:30')
     case 'choice':
+    case 'numbered_choice':
     case 'gender':
     case 'autocomplete':
       return allowMultiple
@@ -1230,15 +1240,30 @@ export const ENTITY_OPERATIONS = [
 
 export type EntityOperation = (typeof ENTITY_OPERATIONS)[number]['value']
 
+export const entityFilterClauseSchema = z.object({
+  attribute: z.string().default(''),
+  operator: z.enum(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'exists']).default('eq'),
+  value: z.string().default(''),
+})
+
 export const entityConfigSchema = z.object({
   entityId: z.string().default(''),
   operation: z.enum(['list', 'get', 'create', 'update', 'delete']).default('list'),
   /** Template / expression resolving to a record UUID (get/update/delete). */
   recordId: z.string().default(''),
-  /** Optional attribute key to filter list/get. */
+  /**
+   * Legacy single equality filter (list/get). Prefer `filters`.
+   * Still accepted and migrated at runtime via normalizeEntityQuery.
+   */
   filterAttribute: z.string().default(''),
-  /** Template value the filter attribute must equal. */
   filterEquals: z.string().default(''),
+  /** No-code query clauses for list/get. */
+  filters: z.array(entityFilterClauseSchema).default([]),
+  filterLogic: z.enum(['and', 'or']).default('and'),
+  sortAttribute: z.string().default(''),
+  sortDirection: z.enum(['asc', 'desc']).default('asc'),
+  /** Max rows after filter/sort (literal or template). */
+  limit: z.string().default(''),
   /** Attr key → template value for create/update. */
   fieldMap: z.record(z.string(), z.string()).default({}),
   outputVariable: z.string().default(''),

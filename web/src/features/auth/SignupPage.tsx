@@ -87,7 +87,7 @@ export function SignupPage() {
   return (
     <div className="relative flex min-h-full items-center justify-center overflow-hidden px-4 py-12">
       <div className="pointer-events-none absolute inset-0 ff-mesh" />
-      <div className="pointer-events-none absolute -left-24 top-20 h-72 w-72 rounded-full bg-teal-400/20 blur-3xl" />
+      <div className="pointer-events-none absolute -left-24 top-20 h-72 w-72 rounded-full bg-[var(--color-accent)]/20 blur-3xl" />
       <div className="pointer-events-none absolute -right-16 bottom-10 h-80 w-80 rounded-full bg-orange-300/15 blur-3xl" />
 
       <div className="ff-page-enter relative z-10 w-full max-w-md">
@@ -101,7 +101,7 @@ export function SignupPage() {
           <p className="mt-3 text-sm text-[var(--color-ink-muted)]">
             {orgName ? (
               <>
-                Join <span className="font-medium text-slate-700">{orgName}</span>
+                Join <span className="font-medium text-[var(--color-ink)]">{orgName}</span>
               </>
             ) : inviteLoading ? (
               'Checking your invite…'
@@ -110,7 +110,7 @@ export function SignupPage() {
             )}
           </p>
         </div>
-        <Card className="border-white/70 p-6 shadow-[var(--shadow-lift)]">
+        <Card className="border-[var(--color-border)]/70 p-6 shadow-[var(--shadow-lift)]">
           {inviteLoading ? (
             <p className="text-sm text-[var(--color-ink-muted)]">Loading invite…</p>
           ) : inviteError ? (
@@ -167,22 +167,22 @@ export function SignupPage() {
           <p>
             Already have an account?{' '}
             <Link
-              className="font-semibold text-teal-700 underline decoration-teal-700/30 underline-offset-4"
+              className="font-semibold text-[var(--color-accent)] underline decoration-[var(--color-accent)]/30 underline-offset-4"
               to="/login"
             >
               Sign in
             </Link>
           </p>
           <p className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
-            <Link className="hover:text-teal-800" to="/help">
+            <Link className="hover:text-[var(--color-accent)]" to="/help">
               Help
             </Link>
             <span className="text-[var(--color-border)]">·</span>
-            <Link className="hover:text-teal-800" to="/docs">
+            <Link className="hover:text-[var(--color-accent)]" to="/docs">
               Docs
             </Link>
             <span className="text-[var(--color-border)]">·</span>
-            <Link className="hover:text-teal-800" to="/faq">
+            <Link className="hover:text-[var(--color-accent)]" to="/faq">
               FAQ
             </Link>
           </p>

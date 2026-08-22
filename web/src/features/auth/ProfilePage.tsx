@@ -10,6 +10,7 @@ import { FieldError } from '@/shared/ui/field-error'
 import { PageHeader } from '@/shared/ui/page-header'
 import { InitialsAvatar } from '@/shared/ui/initials-avatar'
 import { SuperuserBadge } from '@/shared/ui/superuser-badge'
+import { ThemePicker } from '@/shared/ui/theme-toggle'
 
 export function ProfilePage() {
   const { user, profile, isSuperuser, refreshProfile } = useAuth()
@@ -55,9 +56,9 @@ export function ProfilePage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader title="Profile" description="Your FlowForge account details." />
 
-      <Card className="ff-page-enter overflow-hidden border-teal-200/50 p-0">
-        <div className="relative border-b border-[var(--color-border)] bg-gradient-to-br from-teal-50/80 via-white to-cyan-50/60 px-6 py-8">
-          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-teal-400/15 blur-3xl" />
+      <Card className="ff-page-enter overflow-hidden border-[var(--color-accent)]/25 p-0">
+        <div className="relative border-b border-[var(--color-border)] bg-gradient-to-br from-[var(--color-accent-soft)]/80 via-[var(--color-surface)] to-[var(--color-accent-soft)]/40 px-6 py-8">
+          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-[var(--color-accent)]/15 blur-3xl" />
           <div className="relative flex flex-wrap items-center gap-5">
             <InitialsAvatar
               name={profile?.display_name}
@@ -68,7 +69,7 @@ export function ProfilePage() {
             />
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-slate-900">
+                <h2 className="truncate font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-[var(--color-ink)]">
                   {name}
                 </h2>
                 {isSuperuser ? <SuperuserBadge /> : null}
@@ -108,7 +109,10 @@ export function ProfilePage() {
 
           {error ? <FieldError>{error}</FieldError> : null}
           {info ? (
-            <p className="rounded-xl border border-teal-200/80 bg-teal-50/80 px-3 py-2 text-sm text-teal-900" role="status">
+            <p
+              className="rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent-soft)]/80 px-3 py-2 text-sm text-[var(--color-ink)]"
+              role="status"
+            >
               {info}
             </p>
           ) : null}
@@ -119,6 +123,18 @@ export function ProfilePage() {
             </Button>
           </div>
         </form>
+      </Card>
+
+      <Card className="ff-page-enter space-y-3">
+        <div>
+          <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight text-[var(--color-ink)]">
+            Appearance
+          </h2>
+          <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+            Choose light, dark, or match your device. Saved on this browser.
+          </p>
+        </div>
+        <ThemePicker />
       </Card>
     </div>
   )

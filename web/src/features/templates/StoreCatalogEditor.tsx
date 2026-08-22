@@ -164,13 +164,13 @@ export function StoreCatalogEditor({
           {content.products.map((product, index) => {
             const file = images.find((f) => f.filename === product.image)
             return (
-              <div key={product.id} className="space-y-2 rounded-xl border border-[var(--color-border)] bg-white/70 p-3">
+              <div key={product.id} className="space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/70 p-3">
                 <div className="flex items-start gap-2">
-                  <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-100">
+                  <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-[var(--color-surface-2)]">
                     {file?.url ? (
                       <img src={file.url} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <span className="text-[10px] text-slate-400">No img</span>
+                      <span className="text-[10px] text-[var(--color-ink-muted)]">No img</span>
                     )}
                   </div>
                   <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
@@ -287,7 +287,7 @@ export function StoreCatalogEditor({
           {fees.map((fee, index) => (
             <div
               key={fee.id}
-              className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-white/70 p-3 sm:grid-cols-[minmax(0,1.2fr)_7.5rem_6.5rem_auto]"
+              className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/70 p-3 sm:grid-cols-[minmax(0,1.2fr)_7.5rem_6.5rem_auto]"
             >
               <Input
                 disabled={readOnly}
@@ -364,7 +364,7 @@ export function StoreCatalogEditor({
           This is what visitors see on a Shop question. Add products, then use a Question step with
           answer type Shop.
         </p>
-        <div className="rounded-2xl border border-[var(--color-border)] bg-white p-3 shadow-sm">
+        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-sm">
           <ShopAnswerField catalog={content} media={media} preview />
         </div>
       </div>

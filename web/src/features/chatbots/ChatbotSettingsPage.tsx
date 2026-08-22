@@ -286,12 +286,12 @@ export function ChatbotSettingsPage() {
             />
           </div>
           {publicEnabled && !isPublished ? (
-            <p className="text-xs text-amber-800">
+            <p className="text-xs text-[var(--color-warning)]">
               This chatbot is not published yet. Publish from Design before public chat will work.
             </p>
           ) : null}
           {publicUrl ? (
-            <p className="break-all text-xs text-teal-800">
+            <p className="break-all text-xs text-[var(--color-accent)]">
               Public URL:{' '}
               <a href={publicUrl} className="font-medium underline" target="_blank" rel="noreferrer">
                 {publicUrl}
@@ -299,9 +299,9 @@ export function ChatbotSettingsPage() {
             </p>
           ) : null}
           {embedUrl ? (
-            <div className="space-y-3 rounded-xl border border-teal-200/70 bg-teal-50/40 p-3">
-              <p className="text-xs font-medium text-teal-900">Website embed</p>
-              <p className="break-all text-[11px] text-teal-800">
+            <div className="space-y-3 rounded-xl border border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)]/40 p-3">
+              <p className="text-xs font-medium text-[var(--color-accent)]">Website embed</p>
+              <p className="break-all text-[11px] text-[var(--color-accent)]">
                 Embed URL:{' '}
                 <a href={embedUrl} className="font-medium underline" target="_blank" rel="noreferrer">
                   {embedUrl}

@@ -119,7 +119,7 @@ export function HomeRedirect() {
   }
 
   return (
-    <Card className="ff-page-enter mx-auto max-w-lg space-y-5 border-dashed border-teal-300/50 bg-teal-50/30 text-center">
+    <Card className="ff-page-enter mx-auto max-w-lg space-y-5 border-dashed border-[var(--color-accent)]/40/50 bg-[var(--color-accent-soft)]/30 text-center">
       <div>
         <h1 className="text-lg font-semibold">No organisation yet</h1>
         <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
@@ -130,7 +130,7 @@ export function HomeRedirect() {
           {user?.email ? (
             <>
               {' '}
-              (<span className="font-medium text-slate-700">{user.email}</span>)
+              (<span className="font-medium text-[var(--color-ink)]">{user.email}</span>)
             </>
           ) : null}
           .
@@ -142,10 +142,10 @@ export function HomeRedirect() {
           {checkingInvites ? 'Checking…' : 'Check for invites'}
         </Button>
         {checkError ? <FieldError>{checkError}</FieldError> : null}
-        {checkMessage ? <p className="text-sm text-teal-800">{checkMessage}</p> : null}
+        {checkMessage ? <p className="text-sm text-[var(--color-accent)]">{checkMessage}</p> : null}
       </div>
 
-      <form className="space-y-3 border-t border-teal-200/60 pt-5 text-left" onSubmit={onLookupInvite}>
+      <form className="space-y-3 border-t border-[var(--color-accent)]/20 pt-5 text-left" onSubmit={onLookupInvite}>
         <div>
           <Label htmlFor="invite-token">Have an invite link or token?</Label>
           <Input
@@ -159,9 +159,9 @@ export function HomeRedirect() {
         {lookupError ? <FieldError>{lookupError}</FieldError> : null}
         {lookupOrgName ? (
           <p className="text-sm text-[var(--color-ink-muted)]">
-            Invite for <span className="font-medium text-slate-700">{lookupOrgName}</span>. Invites
+            Invite for <span className="font-medium text-[var(--color-ink)]">{lookupOrgName}</span>. Invites
             are claimed automatically when your email matches. Ask an admin to re-invite this
-            email: <span className="font-medium text-slate-700">{user?.email ?? 'your account'}</span>
+            email: <span className="font-medium text-[var(--color-ink)]">{user?.email ?? 'your account'}</span>
           </p>
         ) : null}
         <Button type="submit" variant="secondary" className="w-full" disabled={lookupLoading}>
@@ -169,16 +169,16 @@ export function HomeRedirect() {
         </Button>
       </form>
 
-      <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t border-teal-200/60 pt-4 text-xs text-[var(--color-ink-muted)]">
-        <Link className="hover:text-teal-800" to="/help">
+      <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t border-[var(--color-accent)]/20 pt-4 text-xs text-[var(--color-ink-muted)]">
+        <Link className="hover:text-[var(--color-accent)]" to="/help">
           Help
         </Link>
         <span className="text-[var(--color-border)]">·</span>
-        <Link className="hover:text-teal-800" to="/docs">
+        <Link className="hover:text-[var(--color-accent)]" to="/docs">
           Docs
         </Link>
         <span className="text-[var(--color-border)]">·</span>
-        <Link className="hover:text-teal-800" to="/faq">
+        <Link className="hover:text-[var(--color-accent)]" to="/faq">
           FAQ
         </Link>
       </p>

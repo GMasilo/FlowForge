@@ -33,8 +33,8 @@ export function StarsAnswerField({
             title={belowMin ? `Minimum is ${lo}` : undefined}
             onClick={() => onSelect(n)}
             className={cn(
-              'grid h-11 w-11 place-items-center rounded-2xl text-amber-400 transition',
-              'hover:bg-amber-50 hover:text-amber-500 active:scale-95',
+              'grid h-11 w-11 place-items-center rounded-2xl text-[var(--color-warning)] transition',
+              'hover:bg-[var(--color-warning-soft)] hover:text-[var(--color-warning)] active:scale-95',
               'disabled:cursor-not-allowed disabled:opacity-50',
               belowMin && 'opacity-30',
             )}

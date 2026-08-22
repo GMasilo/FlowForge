@@ -16,6 +16,7 @@ Base URL: `https://gkjtt.co.za/flowforge/api/`
 | GET | `/file/get` | none (media) / JWT or `session_id` (conversation) | Stream a stored instance file |
 | GET | `/file/list` | JWT | List media or conversation files for a chatbot |
 | POST | `/file/delete` | JWT (editor+) | Delete a stored instance file |
+| POST | `/file/purge-chatbot` | JWT (admin+) | Remove a chatbot’s media and conversation folders (recycle bin permanent delete) |
 
 All authenticated JSON requests require:
 

@@ -45,7 +45,7 @@ export function ForgotPasswordPage() {
         <p>
           Remembered it?{' '}
           <Link
-            className="font-semibold text-teal-700 underline decoration-teal-700/30 underline-offset-4"
+            className="font-semibold text-[var(--color-accent)] underline decoration-[var(--color-accent)]/30 underline-offset-4"
             to="/login"
           >
             Sign in
@@ -55,13 +55,13 @@ export function ForgotPasswordPage() {
     >
       {sent ? (
         <div className="space-y-3 text-sm text-[var(--color-ink-muted)]">
-          <p className="font-medium text-slate-700">Check your email</p>
+          <p className="font-medium text-[var(--color-ink)]">Check your email</p>
           <p>
-            If an account exists for <span className="font-medium text-slate-700">{email}</span>, we
+            If an account exists for <span className="font-medium text-[var(--color-ink)]">{email}</span>, we
             sent a password reset link. Open it to continue.
           </p>
           <Link
-            className="inline-block font-semibold text-teal-700 underline decoration-teal-700/30 underline-offset-4"
+            className="inline-block font-semibold text-[var(--color-accent)] underline decoration-[var(--color-accent)]/30 underline-offset-4"
             to="/login"
           >
             Back to sign in

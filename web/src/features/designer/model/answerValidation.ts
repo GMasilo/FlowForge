@@ -26,6 +26,40 @@ import {
   shopCartDisplayText,
 } from '@/features/templates/templateModel'
 
+/** Map "2", "2.", "#2", or a label to the choice value. */
+export function resolveNumberedChoiceInput(raw: string, choices: string[]): string | null {
+  const text = raw.trim()
+  if (!text || !choices.length) return null
+
+  const exact = choices.find((c) => c === text)
+  if (exact) return exact
+  const lower = text.toLowerCase()
+  const byLabel = choices.find((c) => c.toLowerCase() === lower)
+  if (byLabel) return byLabel
+
+  const numbered = text.match(/^#?\s*(\d+)\s*[.)]?\s*$/)
+  if (numbered) {
+    const index = Number(numbered[1]) - 1
+    if (Number.isInteger(index) && index >= 0 && index < choices.length) {
+      return choices[index]!
+    }
+    return null
+  }
+
+  // "2 Blue" or "2. Blue"
+  const withLabel = text.match(/^#?\s*(\d+)\s*[.)]\s*(.+)$/)
+  if (withLabel) {
+    const index = Number(withLabel[1]) - 1
+    const label = withLabel[2]!.trim()
+    if (Number.isInteger(index) && index >= 0 && index < choices.length) {
+      const atIndex = choices[index]!
+      if (!label || atIndex.toLowerCase() === label.toLowerCase()) return atIndex
+    }
+  }
+
+  return null
+}
+
 export type AnswerValidationResult =
   | { ok: true; value: unknown; displayText: string }
   | { ok: false; error: string }
@@ -455,28 +489,48 @@ export function validateQuestionAnswer(
 
   if (
     answerType === 'choice' ||
+    answerType === 'numbered_choice' ||
     answerType === 'gender' ||
     answerType === 'likert' ||
     answerType === 'autocomplete'
   ) {
     const choices = options?.choices ?? resolveQuestionChoices(config as Record<string, unknown>)
-    const selected = (Array.isArray(answer) ? answer : answer ? [answer] : [])
+    const selectedRaw = (Array.isArray(answer) ? answer : answer ? [answer] : [])
       .map((s) => String(s).trim())
       .filter(Boolean)
 
-    if (!selected.length) {
+    if (!selectedRaw.length) {
       if (!required) return { ok: true, value: allowMultiple ? [] : null, displayText: '' }
-      return { ok: false, error: 'Please select an option.' }
+      return {
+        ok: false,
+        error:
+          answerType === 'numbered_choice'
+            ? 'Reply with a number from the list (e.g. 2), or pick an option.'
+            : 'Please select an option.',
+      }
     }
 
-    if (!allowMultiple && selected.length > 1) {
+    if (!allowMultiple && selectedRaw.length > 1) {
       return { ok: false, error: 'Please select only one option.' }
     }
 
-    for (const s of selected) {
-      if (choices.length && !choices.includes(s)) {
+    const selected: string[] = []
+    for (const s of selectedRaw) {
+      const resolved =
+        answerType === 'numbered_choice' ? resolveNumberedChoiceInput(s, choices) : s
+      if (!resolved) {
+        return {
+          ok: false,
+          error:
+            answerType === 'numbered_choice'
+              ? `"${s}" is not a valid number or option.`
+              : `"${s}" is not a valid option.`,
+        }
+      }
+      if (answerType !== 'numbered_choice' && choices.length && !choices.includes(resolved)) {
         return { ok: false, error: `"${s}" is not a valid option.` }
       }
+      selected.push(resolved)
     }
 
     if (allowMultiple) {
@@ -496,7 +550,14 @@ export function validateQuestionAnswer(
       return { ok: true, value: unique, displayText: unique.join(', ') }
     }
 
-    return { ok: true, value: selected[0], displayText: selected[0] }
+    const value = selected[0]!
+    if (answerType === 'numbered_choice') {
+      const index = choices.indexOf(value)
+      const displayText = index >= 0 ? `${index + 1}. ${value}` : value
+      return { ok: true, value, displayText }
+    }
+
+    return { ok: true, value, displayText: value }
   }
 
   const text = Array.isArray(answer) ? answer.join(', ').trim() : String(answer ?? '').trim()

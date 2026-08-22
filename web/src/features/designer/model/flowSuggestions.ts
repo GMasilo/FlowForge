@@ -231,6 +231,7 @@ function inferVariableName(raw: string, answerType: QuestionAnswerType): string 
     matrix: 'ratings',
     image_choice: 'choice',
     choice: 'choice',
+    numbered_choice: 'choice',
     autocomplete: 'selection',
   }
 
@@ -421,6 +422,12 @@ function ruleHits(raw: string): RuleHit[] {
   if (/\b(search (?:for|and (?:select|pick))|type to search|start typing)\b/.test(text)) {
     add('autocomplete', 0.84, 'Prompt looks like a searchable list', choices ? { choices } : undefined)
   }
+  if (/\b(reply with (?:a |the )?number|select the (?:appropriate )?number|type (?:a |the )?number|enter (?:a |the )?number|respond with (?:a |the )?number)\b/.test(text) && choices && choices.length >= 2) {
+    add('numbered_choice', 0.96, 'Prompt asks for a numbered response', { choices })
+  }
+  if (choices && choices.length >= 2 && /(?:^|\n)\s*\d+[.)]/.test(stripTemplates(raw))) {
+    add('numbered_choice', 0.9, 'Prompt shows a numbered list', { choices })
+  }
   if (/\b(describe|tell us (?:more )?about|comments?|feedback|anything else|in your own words)\b/.test(text)) {
     add('long_text', 0.8, 'Prompt asks for a longer written answer')
   }
@@ -456,6 +463,7 @@ function resolveConflicts(hits: RuleHit[]): RuleHit[] {
   }
 
   if (has('confirm')) bump('confirm', ['boolean'])
+  if (has('numbered_choice')) bump('numbered_choice', ['choice', 'boolean', 'text', 'long_text', 'number'])
   if (has('choice')) bump('choice', ['boolean', 'text', 'long_text'])
   if (has('otp')) bump('otp', ['number', 'password'])
   if (has('stars')) bump('stars', ['rating', 'number'])

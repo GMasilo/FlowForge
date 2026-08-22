@@ -1739,8 +1739,6 @@ export async function runEntityStep(
   const entityId = String(node.config.entityId ?? '').trim()
   const outputKey = String(node.config.outputVariable ?? '').trim()
   const recordIdRaw = String(node.config.recordId ?? '')
-  const filterAttribute = String(node.config.filterAttribute ?? '').trim()
-  const filterEqualsRaw = String(node.config.filterEquals ?? '')
   const fieldMap =
     node.config.fieldMap && typeof node.config.fieldMap === 'object' && !Array.isArray(node.config.fieldMap)
       ? (node.config.fieldMap as Record<string, string>)
@@ -1751,12 +1749,21 @@ export async function runEntityStep(
   let outputs: Record<string, unknown> = {}
   let processed: Record<string, unknown> = {}
 
+  const { normalizeEntityQuery } = await import('@/features/entities/entityQuery')
+  const querySpec = normalizeEntityQuery(node.config)
+
   const inputs = {
     operation,
     entityId,
     recordId: recordIdRaw || undefined,
-    filterAttribute: filterAttribute || undefined,
-    filterEquals: filterEqualsRaw || undefined,
+    filters: querySpec.filters.length ? querySpec.filters : undefined,
+    filterLogic: querySpec.filters.length ? querySpec.filterLogic : undefined,
+    sortAttribute: querySpec.sortAttribute || undefined,
+    sortDirection: querySpec.sortAttribute ? querySpec.sortDirection : undefined,
+    limit: querySpec.limit || undefined,
+    // legacy echo for older run logs
+    filterAttribute: String(node.config.filterAttribute ?? '').trim() || undefined,
+    filterEquals: String(node.config.filterEquals ?? '') || undefined,
     fieldMap: Object.keys(fieldMap).length ? fieldMap : undefined,
   }
 
@@ -1774,16 +1781,26 @@ export async function runEntityStep(
     const {
       createDynamicRecord,
       deleteDynamicRecord,
-      filterRecords,
       listEntityRecords,
       toRecordPayload,
       updateDynamicRecord,
     } = await import('@/features/entities/entityApi')
+    const { queryEntityRecords } = await import('@/features/entities/entityQuery')
 
     const recordId = recordIdRaw ? String(resolveValue(recordIdRaw, next.vars, next.stepOutputs, next.media, next.templates) ?? '') : ''
-    const filterEquals = filterEqualsRaw
-      ? resolveValue(filterEqualsRaw, next.vars, next.stepOutputs, next.media, next.templates)
-      : undefined
+
+    const resolvedFilterValues = querySpec.filters.map((clause) =>
+      clause.operator === 'exists'
+        ? undefined
+        : resolveValue(clause.value, next.vars, next.stepOutputs, next.media, next.templates),
+    )
+    const resolvedLimitRaw = querySpec.limit
+      ? resolveValue(querySpec.limit, next.vars, next.stepOutputs, next.media, next.templates)
+      : ''
+    const resolvedQuery = {
+      ...querySpec,
+      limit: resolvedLimitRaw == null || resolvedLimitRaw === '' ? '' : String(resolvedLimitRaw),
+    }
 
     const incomingFields: Record<string, unknown> = {}
     for (const [k, tmpl] of Object.entries(fieldMap)) {
@@ -1812,7 +1829,8 @@ export async function runEntityStep(
       entityKey: entity.key,
       entityKind: entity.kind,
       recordId: recordId || undefined,
-      filterEquals,
+      query: resolvedQuery,
+      resolvedFilterValues,
       resolvedFields: Object.keys(resolvedFields).length ? resolvedFields : undefined,
     }
 
@@ -1822,7 +1840,9 @@ export async function runEntityStep(
 
     if (operation === 'list' || operation === 'get') {
       let rows = await listEntityRecords(entity)
-      if (filterAttribute) rows = filterRecords(rows, filterAttribute, filterEquals)
+      rows = queryEntityRecords(rows, resolvedQuery, {
+        resolveValue: (_clause, index) => resolvedFilterValues[index],
+      })
       if (operation === 'get') {
         if (recordId) rows = rows.filter((r) => r.id === recordId)
         const one = rows[0] ?? null

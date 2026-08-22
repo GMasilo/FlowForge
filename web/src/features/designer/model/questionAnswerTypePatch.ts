@@ -3,6 +3,7 @@ import {
   DEFAULT_GENDER_CHOICES,
   DEFAULT_LIKERT_CHOICES,
   DEFAULT_MATRIX_ROWS,
+  DEFAULT_NUMBERED_CHOICES,
   DEFAULT_RANKING_ITEMS,
   answerTypeUsesChoices,
   answerTypeUsesScaleLabels,
@@ -23,6 +24,13 @@ export function buildQuestionAnswerTypePatch(
     if (!existing.length) {
       patch.choices = answerType === 'likert' ? [...DEFAULT_LIKERT_CHOICES] : [...DEFAULT_GENDER_CHOICES]
     }
+  }
+  if (answerType === 'numbered_choice') {
+    patch.allowMultiple = false
+    patch.minSelections = null
+    patch.maxSelections = null
+    const existing = Array.isArray(config.choices) ? (config.choices as string[]).filter(Boolean) : []
+    if (!existing.length) patch.choices = [...DEFAULT_NUMBERED_CHOICES]
   }
   if (answerType === 'likert' || answerType === 'ranking' || answerType === 'matrix') {
     patch.allowMultiple = false

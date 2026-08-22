@@ -55,7 +55,7 @@ export function ShopAnswerField({
 
   if (!products.length) {
     return (
-      <p className="text-sm text-slate-500">This store has no products yet. Add categories and products on the Templates tab.</p>
+      <p className="text-sm text-[var(--color-ink-muted)]">This store has no products yet. Add categories and products on the Templates tab.</p>
     )
   }
 
@@ -63,13 +63,13 @@ export function ShopAnswerField({
     <div className={cn('flex min-h-0 flex-col gap-3', className)}>
       {catalog.storeName.trim() ? (
         <div className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-teal-50 text-teal-800">
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
             <ShoppingBag className="h-4 w-4" />
           </span>
           <div>
-            <p className="text-sm font-semibold text-slate-800">{catalog.storeName.trim()}</p>
+            <p className="text-sm font-semibold text-[var(--color-ink)]">{catalog.storeName.trim()}</p>
             {catalog.intro.trim() ? (
-              <p className="text-[11px] text-slate-500">{catalog.intro.trim()}</p>
+              <p className="text-[11px] text-[var(--color-ink-muted)]">{catalog.intro.trim()}</p>
             ) : null}
           </div>
         </div>
@@ -107,17 +107,17 @@ export function ShopAnswerField({
           />
         ))}
         {!visible.length ? (
-          <p className="col-span-2 py-6 text-center text-sm text-slate-500">No products in this category.</p>
+          <p className="col-span-2 py-6 text-center text-sm text-[var(--color-ink-muted)]">No products in this category.</p>
         ) : null}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+      <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80 p-3">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-            <ShoppingCart className="h-4 w-4 text-teal-700" />
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--color-ink)]">
+            <ShoppingCart className="h-4 w-4 text-[var(--color-accent)]" />
             Cart
           </p>
-          <p className="text-sm font-semibold text-teal-800">
+          <p className="text-sm font-semibold text-[var(--color-accent)]">
             {cart.itemCount
               ? `${cart.itemCount} · ${formatTemplateMoney(cart.total, cart.currency)}`
               : 'Empty'}
@@ -126,41 +126,41 @@ export function ShopAnswerField({
         {cart.items.length ? (
           <ul className="mb-3 space-y-1.5">
             {cart.items.map((line) => (
-              <li key={line.id} className="flex items-center justify-between gap-2 text-xs text-slate-600">
+              <li key={line.id} className="flex items-center justify-between gap-2 text-xs text-[var(--color-ink-muted)]">
                 <span className="min-w-0 truncate">
                   {line.name} × {line.qty}
                 </span>
-                <span className="shrink-0 font-medium text-slate-800">
+                <span className="shrink-0 font-medium text-[var(--color-ink)]">
                   {formatTemplateMoney(line.lineTotal, cart.currency)}
                 </span>
               </li>
             ))}
             {cart.fees.length || cart.subtotal !== cart.total ? (
-              <li className="flex items-center justify-between gap-2 border-t border-slate-200/80 pt-1.5 text-xs text-slate-500">
+              <li className="flex items-center justify-between gap-2 border-t border-[var(--color-border)]/80 pt-1.5 text-xs text-[var(--color-ink-muted)]">
                 <span>Subtotal</span>
                 <span className="shrink-0">{formatTemplateMoney(cart.subtotal, cart.currency)}</span>
               </li>
             ) : null}
             {cart.fees.map((fee) => (
-              <li key={fee.id} className="flex items-center justify-between gap-2 text-xs text-slate-600">
+              <li key={fee.id} className="flex items-center justify-between gap-2 text-xs text-[var(--color-ink-muted)]">
                 <span className="min-w-0 truncate">
                   {fee.name}
                   {fee.kind === 'percent' ? ` (${fee.amount}%)` : ''}
                 </span>
-                <span className="shrink-0 font-medium text-slate-800">
+                <span className="shrink-0 font-medium text-[var(--color-ink)]">
                   {formatTemplateMoney(fee.value, cart.currency)}
                 </span>
               </li>
             ))}
             {cart.fees.length ? (
-              <li className="flex items-center justify-between gap-2 pt-0.5 text-xs font-semibold text-slate-800">
+              <li className="flex items-center justify-between gap-2 pt-0.5 text-xs font-semibold text-[var(--color-ink)]">
                 <span>Total</span>
                 <span className="shrink-0">{formatTemplateMoney(cart.total, cart.currency)}</span>
               </li>
             ) : null}
           </ul>
         ) : (
-          <p className="mb-3 text-[11px] text-slate-500">
+          <p className="mb-3 text-[11px] text-[var(--color-ink-muted)]">
             {catalog.cartHint.trim() || 'Add products, then checkout to continue.'}
           </p>
         )}
@@ -173,7 +173,7 @@ export function ShopAnswerField({
           {cart.itemCount ? ` · ${formatTemplateMoney(cart.total, cart.currency)}` : ''}
         </Button>
         {preview ? (
-          <p className="mt-1.5 text-center text-[11px] text-slate-500">
+          <p className="mt-1.5 text-center text-[11px] text-[var(--color-ink-muted)]">
             Preview only — in chat, Checkout saves the cart and continues the flow.
           </p>
         ) : null}
@@ -200,8 +200,8 @@ function CategoryChip({
       className={cn(
         'rounded-full border px-3 py-1 text-xs font-medium transition',
         active
-          ? 'border-teal-500 bg-teal-50 text-teal-800'
-          : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300',
+          ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
+          : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-ink-muted)] hover:border-[var(--color-accent)]/40',
       )}
     >
       {label}
@@ -230,38 +230,38 @@ function ProductCard({
   const soldOut = maxQty <= 0
   const atCap = qty >= maxQty
   return (
-    <div className="flex min-h-min flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="grid h-20 shrink-0 place-items-center overflow-hidden rounded-t-2xl bg-slate-100">
+    <div className="flex min-h-min flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
+      <div className="grid h-20 shrink-0 place-items-center overflow-hidden rounded-t-2xl bg-[var(--color-surface-2)]">
         {imageUrl ? (
           <img src={imageUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <span className="text-lg font-semibold text-slate-400">{initial}</span>
+          <span className="text-lg font-semibold text-[var(--color-ink-muted)]">{initial}</span>
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-2.5">
-        <p className="truncate text-sm font-semibold text-slate-800">{product.name}</p>
+        <p className="truncate text-sm font-semibold text-[var(--color-ink)]">{product.name}</p>
         {product.description.trim() ? (
-          <p className="line-clamp-2 text-[11px] leading-snug text-slate-500">{product.description}</p>
+          <p className="line-clamp-2 text-[11px] leading-snug text-[var(--color-ink-muted)]">{product.description}</p>
         ) : null}
-        <p className="text-sm font-semibold text-teal-800">{formatTemplateMoney(product.price, currency)}</p>
+        <p className="text-sm font-semibold text-[var(--color-accent)]">{formatTemplateMoney(product.price, currency)}</p>
         {soldOut ? (
-          <p className="mt-auto text-center text-[11px] font-medium text-slate-500">Sold out</p>
+          <p className="mt-auto text-center text-[11px] font-medium text-[var(--color-ink-muted)]">Sold out</p>
         ) : qty > 0 ? (
-          <div className="mt-auto flex shrink-0 items-center justify-between rounded-xl border border-teal-200 bg-teal-50/70 px-1 py-0.5">
+          <div className="mt-auto flex shrink-0 items-center justify-between rounded-xl border border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)]/70 px-1 py-0.5">
             <button
               type="button"
               aria-label={`Remove one ${product.name}`}
-              className="grid h-7 w-7 place-items-center rounded-lg text-teal-800 hover:bg-white"
+              className="grid h-7 w-7 place-items-center rounded-lg text-[var(--color-accent)] hover:bg-[var(--color-surface)]"
               onClick={onDec}
             >
               <Minus className="h-3.5 w-3.5" />
             </button>
-            <span className="text-sm font-semibold text-slate-800">{qty}</span>
+            <span className="text-sm font-semibold text-[var(--color-ink)]">{qty}</span>
             <button
               type="button"
               aria-label={`Add another ${product.name}`}
               disabled={atCap}
-              className="grid h-7 w-7 place-items-center rounded-lg text-teal-800 hover:bg-white disabled:opacity-40"
+              className="grid h-7 w-7 place-items-center rounded-lg text-[var(--color-accent)] hover:bg-[var(--color-surface)] disabled:opacity-40"
               onClick={onAdd}
             >
               <Plus className="h-3.5 w-3.5" />

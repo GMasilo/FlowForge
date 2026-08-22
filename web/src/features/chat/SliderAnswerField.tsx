@@ -50,14 +50,14 @@ export function SliderAnswerField({
   return (
     <div className={cn('flex min-w-0 flex-1 flex-col gap-2 px-0.5', className)}>
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[11px] font-medium text-slate-500">
+        <span className="text-[11px] font-medium text-[var(--color-ink-muted)]">
           {minLabel?.trim() || `${start}${suffix ?? ''}`}
         </span>
-        <span className="rounded-full bg-teal-50 px-2.5 py-0.5 text-sm font-semibold tabular-nums text-teal-800 ring-1 ring-teal-200/80">
+        <span className="rounded-full bg-[var(--color-accent-soft)] px-2.5 py-0.5 text-sm font-semibold tabular-nums text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
           {current}
           {suffix ?? ''}
         </span>
-        <span className="text-[11px] font-medium text-slate-500">
+        <span className="text-[11px] font-medium text-[var(--color-ink-muted)]">
           {maxLabel?.trim() || `${end}${suffix ?? ''}`}
         </span>
       </div>
@@ -72,10 +72,10 @@ export function SliderAnswerField({
         onChange={(e) => onChange(e.target.value)}
         aria-label="Slider value"
         className={cn(
-          'h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-teal-600',
+          'h-2 w-full cursor-pointer appearance-none rounded-full bg-[var(--color-surface-2)] accent-[var(--color-accent)]',
           'disabled:cursor-not-allowed disabled:opacity-50',
           '[&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none',
-          '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-teal-600',
+          '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--color-accent)]',
           '[&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:ring-2 [&::-webkit-slider-thumb]:ring-white',
         )}
         style={{

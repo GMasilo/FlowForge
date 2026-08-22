@@ -16,12 +16,12 @@ export function displaySessionStatus(
 export function sessionStatusTone(status: ConversationSession['status']) {
   switch (status) {
     case 'completed':
-      return 'bg-emerald-50 text-emerald-800'
+      return 'bg-[var(--color-success-soft)] text-[var(--color-success)]'
     case 'failed':
-      return 'bg-rose-50 text-rose-800'
+      return 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'
     case 'abandoned':
-      return 'bg-amber-50 text-amber-800'
+      return 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]'
     default:
-      return 'bg-sky-50 text-sky-800'
+      return 'bg-[var(--color-accent-2)]/10 text-[var(--color-accent-2)]'
   }
 }

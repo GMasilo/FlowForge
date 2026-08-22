@@ -41,6 +41,7 @@ import { ColorAnswerField } from '@/features/chat/ColorAnswerField'
 import { ThumbsAnswerField } from '@/features/chat/ThumbsAnswerField'
 import { MoodAnswerField } from '@/features/chat/MoodAnswerField'
 import { LikertAnswerField } from '@/features/chat/LikertAnswerField'
+import { NumberedChoiceAnswerField } from '@/features/chat/NumberedChoiceAnswerField'
 import { StepperAnswerField } from '@/features/chat/StepperAnswerField'
 import { CurrencyAnswerField } from '@/features/chat/CurrencyAnswerField'
 import { OtpAnswerField } from '@/features/chat/OtpAnswerField'
@@ -512,6 +513,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
   const isThumbs = waiting?.answerType === 'thumbs'
   const isMood = waiting?.answerType === 'mood'
   const isLikert = waiting?.answerType === 'likert'
+  const isNumberedChoice = waiting?.answerType === 'numbered_choice'
   const isStepper = waiting?.answerType === 'stepper'
   const isCurrency = waiting?.answerType === 'currency'
   const isOtp = waiting?.answerType === 'otp'
@@ -552,6 +554,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
       : 'I agree'
   const likertChoices =
     waiting?.choices?.length ? waiting.choices : [...DEFAULT_LIKERT_CHOICES]
+  const numberedChoices = waiting?.choices?.length ? waiting.choices : []
   const ratingOptions = useMemo(() => {
     const lo = Math.min(ratingMin, ratingMax)
     const hi = Math.max(ratingMin, ratingMax)
@@ -566,6 +569,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     isThumbs ||
     isMood ||
     isLikert ||
+    isNumberedChoice ||
     isFile ||
     isSignature ||
     isImageChoice ||
@@ -675,22 +679,24 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
         <div
           className={cn(
             'pointer-events-auto relative flex h-[min(640px,72vh)] w-[min(100vw-2.5rem,380px)] flex-col overflow-hidden',
-            'rounded-[1.75rem] border border-white/70 bg-white/95 shadow-[0_25px_80px_-20px_rgb(15_23_42_/_0.45)] backdrop-blur-2xl',
+            'rounded-[1.75rem] border border-[var(--color-border)]/70 bg-[var(--color-surface)]/95 shadow-[0_25px_80px_-20px_rgb(15_23_42_/_0.45)] backdrop-blur-2xl',
             'animate-[ff-rise_0.4s_var(--ease-spring)]',
           )}
         >
           <ChatMediaPlayerProvider>
-          <div className="relative overflow-hidden rounded-t-[1.75rem] border-b border-white/40 px-4 py-3.5">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600" />
-            <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/15 blur-2xl" />
-            <div className="pointer-events-none absolute -bottom-10 left-10 h-24 w-24 rounded-full bg-cyan-300/30 blur-2xl" />
-            <div className="relative flex items-center justify-between gap-3 text-white">
+          <div className="relative overflow-hidden rounded-t-[1.75rem] border-b border-[var(--color-border)]/40 px-4 py-3.5">
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--color-accent)] via-[var(--color-accent)] to-[var(--color-accent-2)]" />
+            <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-[var(--color-accent-fg)]/15 blur-2xl" />
+            <div className="pointer-events-none absolute -bottom-10 left-10 h-24 w-24 rounded-full bg-[var(--color-accent-2)]/30 blur-2xl" />
+            <div className="relative flex items-center justify-between gap-3 text-[var(--color-accent-fg)]">
               <div className="flex min-w-0 items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-2xl bg-white/20 shadow-inner ring-1 ring-white/30 backdrop-blur">
+                <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[var(--color-accent-fg)]/15 shadow-inner ring-1 ring-[var(--color-accent-fg)]/25 backdrop-blur">
                   <Sparkles className="h-4 w-4" />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75">Preview</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent-fg)]/75">
+                    Preview
+                  </p>
                   <h2 className="truncate font-[family-name:var(--font-display)] text-base font-semibold leading-tight">
                     {botName.data ?? 'Chatbot'}
                   </h2>
@@ -702,13 +708,13 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                     value={scenarioId}
                     onChange={(e) => setScenarioId(e.target.value)}
                     aria-label="Test scenario"
-                    className="mr-1 max-w-[9.5rem] rounded-lg border-0 bg-white/20 px-2 py-1 text-[11px] font-semibold text-white outline-none ring-1 ring-white/30"
+                    className="mr-1 max-w-[9.5rem] rounded-lg border-0 bg-[var(--color-accent-fg)]/15 px-2 py-1 text-[11px] font-semibold text-[var(--color-accent-fg)] outline-none ring-1 ring-[var(--color-accent-fg)]/25"
                   >
-                    <option value="" className="text-slate-800">
+                    <option value="" className="text-[var(--color-ink)]">
                       Live globals
                     </option>
                     {scenarios.map((s) => (
-                      <option key={s.id} value={s.id} className="text-slate-800">
+                      <option key={s.id} value={s.id} className="text-[var(--color-ink)]">
                         {s.name}
                       </option>
                     ))}
@@ -716,7 +722,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 ) : null}
                 <button
                   type="button"
-                  className="rounded-xl p-2 text-white/85 transition hover:bg-white/15 hover:text-white"
+                  className="rounded-xl p-2 text-[var(--color-accent-fg)]/85 transition hover:bg-[var(--color-accent-fg)]/15 hover:text-[var(--color-accent-fg)]"
                   onClick={restart}
                   aria-label="Restart conversation"
                 >
@@ -724,7 +730,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </button>
                 <button
                   type="button"
-                  className="rounded-xl p-2 text-white/85 transition hover:bg-white/15 hover:text-white"
+                  className="rounded-xl p-2 text-[var(--color-accent-fg)]/85 transition hover:bg-[var(--color-accent-fg)]/15 hover:text-[var(--color-accent-fg)]"
                   onClick={() => onOpenChange(false)}
                   aria-label="Minimize"
                 >
@@ -732,7 +738,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </button>
                 <button
                   type="button"
-                  className="rounded-xl p-2 text-white/85 transition hover:bg-white/15 hover:text-white"
+                  className="rounded-xl p-2 text-[var(--color-accent-fg)]/85 transition hover:bg-[var(--color-accent-fg)]/15 hover:text-[var(--color-accent-fg)]"
                   onClick={() => onOpenChange(false)}
                   aria-label="Close"
                 >
@@ -744,7 +750,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
 
           <div
             ref={scrollerRef}
-            className="ff-hide-scrollbar relative flex-1 space-y-3.5 overflow-y-auto bg-gradient-to-b from-slate-50/80 via-white to-cyan-50/40 px-3.5 py-4"
+            className="ff-hide-scrollbar relative flex-1 space-y-3.5 overflow-y-auto bg-gradient-to-b from-[var(--color-surface-2)]/80 via-[var(--color-surface)] to-[var(--color-accent-2)]/40 px-3.5 py-4"
           >
             {!state?.messages.length && state?.phase.kind === 'typing' ? (
               <p className="text-center text-xs text-[var(--color-ink-muted)]">Starting conversation…</p>
@@ -759,7 +765,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 )}
               >
                 {m.role === 'system' ? (
-                  <div className="max-w-[92%] rounded-full bg-slate-200/70 px-3 py-1 text-center text-[11px] text-slate-600">
+                  <div className="max-w-[92%] rounded-full bg-[var(--color-surface-2)]/70 px-3 py-1 text-center text-[11px] text-[var(--color-ink-muted)]">
                     {m.text}
                   </div>
                 ) : (
@@ -767,8 +773,8 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                     className={cn(
                       'max-w-[88%] px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
                       m.role === 'user'
-                        ? 'rounded-[1.25rem] rounded-br-md bg-gradient-to-br from-teal-600 to-cyan-600 text-white'
-                        : 'rounded-[1.25rem] rounded-bl-md border border-slate-200/80 bg-white text-slate-800',
+                        ? 'rounded-[1.25rem] rounded-br-md bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] text-[var(--color-accent-fg)]'
+                        : 'rounded-[1.25rem] rounded-bl-md border border-[var(--color-border)]/80 bg-[var(--color-surface)] text-[var(--color-ink)]',
                     )}
                   >
                     {m.role === 'user' ? (
@@ -783,7 +789,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 <time
                   dateTime={m.createdAt}
                   className={cn(
-                    'px-1 text-[10px] font-medium tracking-wide text-slate-400',
+                    'px-1 text-[10px] font-medium tracking-wide text-[var(--color-ink-muted)]',
                     m.role === 'user' ? 'text-right' : m.role === 'system' ? 'text-center' : 'text-left',
                   )}
                 >
@@ -794,21 +800,21 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
 
             {state?.phase.kind === 'typing' ? (
               <div className="flex flex-col items-start gap-1">
-                <div className="flex items-center gap-1.5 rounded-[1.25rem] rounded-bl-md border border-slate-200/80 bg-white px-3.5 py-3 shadow-sm">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-500 [animation-delay:0ms]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-500 [animation-delay:150ms]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-500 [animation-delay:300ms]" />
+                <div className="flex items-center gap-1.5 rounded-[1.25rem] rounded-bl-md border border-[var(--color-border)]/80 bg-[var(--color-surface)] px-3.5 py-3 shadow-sm">
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-accent)] [animation-delay:0ms]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-accent-2)] [animation-delay:150ms]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-accent-2)]/100 [animation-delay:300ms]" />
                 </div>
               </div>
             ) : null}
 
             {state?.phase.kind === 'finished' ? (
-              <p className="pt-1 text-center text-xs text-slate-400">Conversation ended</p>
+              <p className="pt-1 text-center text-xs text-[var(--color-ink-muted)]">Conversation ended</p>
             ) : null}
           </div>
 
           {waiting && waiting.answerType === 'boolean' ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
               <div className="flex gap-2">
                 <Button className="flex-1 rounded-2xl" onClick={() => setState(submitPreviewAnswer(state!, nodes, edges, 'true'))}>
                   Yes
@@ -827,13 +833,13 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </Button>
               ) : null}
               {waiting.validationError ? (
-                <p className="text-[11px] text-rose-600">{waiting.validationError}</p>
+                <p className="text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
               ) : null}
             </div>
           ) : null}
 
           {waiting && isThumbs ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
               <ThumbsAnswerField
                 onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
               />
@@ -843,13 +849,13 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </Button>
               ) : null}
               {waiting.validationError ? (
-                <p className="text-[11px] text-rose-600">{waiting.validationError}</p>
+                <p className="text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
               ) : null}
             </div>
           ) : null}
 
           {waiting && isMood ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
               <MoodAnswerField
                 onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
               />
@@ -859,13 +865,13 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </Button>
               ) : null}
               {waiting.validationError ? (
-                <p className="text-[11px] text-rose-600">{waiting.validationError}</p>
+                <p className="text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
               ) : null}
             </div>
           ) : null}
 
           {waiting && isLikert ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
               <LikertAnswerField
                 choices={likertChoices}
                 onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
@@ -876,19 +882,36 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </Button>
               ) : null}
               {waiting.validationError ? (
-                <p className="text-[11px] text-rose-600">{waiting.validationError}</p>
+                <p className="text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {waiting && isNumberedChoice ? (
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
+              <NumberedChoiceAnswerField
+                choices={numberedChoices}
+                onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
+              />
+              {waitingOptional ? (
+                <Button variant="ghost" className="rounded-2xl self-start" onClick={onSkipOptional}>
+                  Skip
+                </Button>
+              ) : null}
+              {waiting.validationError ? (
+                <p className="text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
               ) : null}
             </div>
           ) : null}
 
           {waiting && isRating && ratingOptions.length ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
               <div className="flex flex-wrap gap-2">
                 {ratingOptions.map((n) => (
                   <button
                     key={n}
                     type="button"
-                    className="grid h-10 w-10 place-items-center rounded-full border border-teal-200 bg-teal-50/80 text-sm font-semibold text-teal-800 transition hover:border-teal-400 hover:bg-teal-100"
+                    className="grid h-10 w-10 place-items-center rounded-full border border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)]/80 text-sm font-semibold text-[var(--color-accent)] transition hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent-soft)]"
                     onClick={() => setState(submitPreviewAnswer(state!, nodes, edges, String(n)))}
                   >
                     {n}
@@ -901,13 +924,13 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </Button>
               ) : null}
               {waiting.validationError ? (
-                <p className="text-[11px] text-rose-600">{waiting.validationError}</p>
+                <p className="text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
               ) : null}
             </div>
           ) : null}
 
           {waiting && isStars ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
               <StarsAnswerField
                 min={starsMin}
                 max={starsMax}
@@ -919,13 +942,13 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </Button>
               ) : null}
               {waiting.validationError ? (
-                <p className="text-[11px] text-rose-600">{waiting.validationError}</p>
+                <p className="text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
               ) : null}
             </div>
           ) : null}
 
           {waiting && isNps ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
               <NpsAnswerField
                 min={npsMin}
                 max={npsMax}
@@ -947,13 +970,13 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </Button>
               ) : null}
               {waiting.validationError ? (
-                <p className="text-[11px] text-rose-600">{waiting.validationError}</p>
+                <p className="text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
               ) : null}
             </div>
           ) : null}
 
           {waiting && isFile ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
               <FileAnswerField
                 accept={normalizeFileAccept(waitingCfg.fileAccept)}
                 maxFiles={normalizeMaxFiles(waitingCfg.maxFiles)}
@@ -966,13 +989,13 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </Button>
               ) : null}
               {waiting.validationError ? (
-                <p className="text-[11px] text-rose-600">{waiting.validationError}</p>
+                <p className="text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
               ) : null}
             </div>
           ) : null}
 
           {waiting && isSignature ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
               <SignatureAnswerField
                 storeCtx={answerStoreCtx}
                 onSubmit={(value) => setState(submitPreviewAnswer(state!, nodes, edges, value))}
@@ -983,13 +1006,13 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </Button>
               ) : null}
               {waiting.validationError ? (
-                <p className="text-[11px] text-rose-600">{waiting.validationError}</p>
+                <p className="text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
               ) : null}
             </div>
           ) : null}
 
           {waiting && isImageChoice ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
               <ImageChoiceAnswerField
                 className={imageChoiceLayout === 'gallery' ? '-mx-3.5' : undefined}
                 layout={imageChoiceLayout}
@@ -1040,13 +1063,13 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </Button>
               ) : null}
               {waiting.validationError ? (
-                <p className="text-[11px] text-rose-600">{waiting.validationError}</p>
+                <p className="text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
               ) : null}
             </div>
           ) : null}
 
           {waiting && isExtended ? (
-            <div className="ff-hide-scrollbar flex min-h-0 max-h-[min(32rem,70%)] flex-col overflow-y-auto border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="ff-hide-scrollbar flex min-h-0 max-h-[min(32rem,70%)] flex-col overflow-y-auto border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-3.5 py-3">
               <ExtendedAnswerPanel
                 answerType={waiting.answerType}
                 config={waitingCfg}
@@ -1104,7 +1127,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           {waiting &&
           waiting.answerType !== 'boolean' &&
           !usesDedicatedAnswerUi ? (
-            <div className="rounded-b-[1.75rem] border-t border-slate-100 bg-white/95 px-3 py-3">
+            <div className="rounded-b-[1.75rem] border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/95 px-3 py-3">
               <form onSubmit={onSubmit} className="flex items-end gap-2">
                 {isChoiceType ? (
                   <ChoiceAnswerField
@@ -1190,7 +1213,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                   <textarea
                     ref={inputRef as RefObject<HTMLTextAreaElement>}
                     className={cn(
-                      'flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm outline-none transition focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15',
+                      'flex-1 resize-none rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15',
                       waiting.answerType === 'address' ? 'min-h-[108px]' : 'min-h-[88px]',
                     )}
                     value={draft}
@@ -1232,7 +1255,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 ) : (
                   <input
                     ref={inputRef as RefObject<HTMLInputElement>}
-                    className="h-11 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm outline-none transition focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15"
+                    className="h-11 flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15"
                     value={draft}
                     onChange={(e) => {
                       const next = e.target.value
@@ -1274,11 +1297,11 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </Button>
               </form>
               {waiting.validationError ? (
-                <p className="mt-2 px-1 text-[11px] text-rose-600">{waiting.validationError}</p>
+                <p className="mt-2 px-1 text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
               ) : null}
               {otpHasEmailConnection ? (
                 <div className="mt-2 flex items-center justify-between gap-2 px-1">
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-[var(--color-ink-muted)]">
                     {waiting.otpDelivery === 'pending' || !state?.otpChallenge
                       ? 'Sending verification code…'
                       : waiting.otpDelivery === 'failed'
@@ -1321,7 +1344,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
               ) : null}
               {waitingOptional ? (
                 <div className="mt-2 flex items-center justify-between gap-2 px-1">
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-[var(--color-ink-muted)]">
                     {waitingTimeoutSec > 0
                       ? `Optional · times out after ${waitingTimeoutSec}s`
                       : 'Optional — you can skip'}
@@ -1335,18 +1358,18 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {!waiting && state?.phase.kind !== 'finished' && state?.phase.kind !== 'waiting_input' ? (
-            <div className="border-t border-slate-100 bg-white/80 px-4 py-2.5 text-center text-[11px] text-slate-400">
+            <div className="border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/80 px-4 py-2.5 text-center text-[11px] text-[var(--color-ink-muted)]">
               Flow is running…
             </div>
           ) : null}
 
           {varEntries.length ? (
-            <details className="border-t border-slate-100 bg-slate-50/90 px-4 py-2 text-xs">
-              <summary className="cursor-pointer font-medium text-slate-500">Variables ({varEntries.length})</summary>
+            <details className="border-t border-[var(--color-border)]/60 bg-[var(--color-surface-2)]/90 px-4 py-2 text-xs">
+              <summary className="cursor-pointer font-medium text-[var(--color-ink-muted)]">Variables ({varEntries.length})</summary>
               <ul className="mt-2 max-h-24 space-y-1 overflow-y-auto font-mono text-[11px]">
                 {varEntries.map(([k, v]) => (
                   <li key={k} className="truncate">
-                    <span className="text-teal-700">{k}</span> = {JSON.stringify(v)}
+                    <span className="text-[var(--color-accent)]">{k}</span> = {JSON.stringify(v)}
                   </li>
                 ))}
               </ul>
@@ -1361,15 +1384,15 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
         onClick={() => onOpenChange(!open)}
         aria-label={open ? 'Close chat preview' : 'Open chat preview'}
         className={cn(
-          'pointer-events-auto group relative grid h-14 w-14 place-items-center rounded-[1.35rem] text-white transition-all duration-300',
-          'bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600',
+          'pointer-events-auto group relative grid h-14 w-14 place-items-center rounded-[1.35rem] text-[var(--color-accent-fg)] transition-all duration-300',
+          'bg-gradient-to-br from-[var(--color-accent)] via-[var(--color-accent)] to-[var(--color-accent-2)]',
           'shadow-[0_16px_40px_-12px_rgb(15_118_110_/_0.7)]',
           'hover:scale-105 hover:shadow-[0_20px_48px_-12px_rgb(8_145_178_/_0.75)] active:scale-95',
           open && 'rotate-0',
         )}
       >
-        <span className="pointer-events-none absolute inset-0 rounded-[1.35rem] bg-white/10 opacity-0 transition group-hover:opacity-100" />
-        <span className="pointer-events-none absolute -inset-1 animate-[ff-pulse-soft_2.4s_ease-in-out_infinite] rounded-[1.55rem] bg-teal-400/25 blur-md" />
+        <span className="pointer-events-none absolute inset-0 rounded-[1.35rem] bg-[var(--color-accent-fg)]/10 opacity-0 transition group-hover:opacity-100" />
+        <span className="pointer-events-none absolute -inset-1 animate-[ff-pulse-soft_2.4s_ease-in-out_infinite] rounded-[1.55rem] bg-[var(--color-accent)]/25 blur-md" />
         {open ? <Minimize2 className="relative h-5 w-5" /> : <MessageCircle className="relative h-6 w-6" />}
       </button>
     </div>,

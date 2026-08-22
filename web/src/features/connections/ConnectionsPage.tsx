@@ -94,8 +94,8 @@ function blankForm(chatbotId = ''): FormState {
 }
 
 function kindAccent(kind: ConnectionKind) {
-  if (kind === 'http') return 'from-teal-500 via-cyan-500 to-sky-500'
-  if (kind === 'payment') return 'from-emerald-500 via-teal-500 to-cyan-500'
+  if (kind === 'http') return 'from-[var(--color-accent)] via-[var(--color-accent-2)] to-[var(--color-accent-2)]'
+  if (kind === 'payment') return 'from-emerald-500 via-[var(--color-accent)] to-[var(--color-accent-2)]'
   return 'from-orange-500 via-amber-500 to-yellow-500'
 }
 
@@ -120,15 +120,15 @@ export function ConnectionsPage() {
         description={`Manage your integrations for ${instance.name}, or discover shared ones in ForgeHub.`}
       />
 
-      <div className="flex w-fit rounded-xl border border-[var(--color-border)]/80 bg-slate-50/80 p-1">
+      <div className="flex w-fit rounded-xl border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/80 p-1">
         <button
           type="button"
           onClick={() => setTab('mine')}
           className={cn(
             'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition',
             tab === 'mine'
-              ? 'bg-[var(--color-accent)] text-white shadow-sm'
-              : 'text-slate-600 hover:bg-white hover:text-slate-900',
+              ? 'bg-[var(--color-accent)]$1text-[var(--color-accent-fg)] shadow-sm'
+              : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]',
           )}
         >
           <Lock className="h-3.5 w-3.5" />
@@ -140,8 +140,8 @@ export function ConnectionsPage() {
           className={cn(
             'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition',
             tab === 'forgehub'
-              ? 'bg-[var(--color-accent)] text-white shadow-sm'
-              : 'text-slate-600 hover:bg-white hover:text-slate-900',
+              ? 'bg-[var(--color-accent)]$1text-[var(--color-accent-fg)] shadow-sm'
+              : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]',
           )}
         >
           <Sparkles className="h-3.5 w-3.5" />
@@ -330,7 +330,7 @@ function MyConnectionsTab({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-ink-muted)]" />
           <Input
             className="pl-9"
             value={query}
@@ -359,8 +359,8 @@ function MyConnectionsTab({
       </div>
 
       {open ? (
-        <Card className="space-y-3 border-teal-200/70 bg-teal-50/30">
-          <h2 className="text-base font-semibold text-slate-800">
+        <Card className="space-y-3 border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)]/30">
+          <h2 className="text-base font-semibold text-[var(--color-ink)]">
             {form.id ? 'Edit connection' : 'New connection'}
           </h2>
           <form className="space-y-3" onSubmit={onSubmit}>
@@ -413,7 +413,7 @@ function MyConnectionsTab({
             {form.visibility === 'shared' ? (
               <div>
                 <Label>Share with</Label>
-                <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2">
+                <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
                   {memberOptions.length ? (
                     memberOptions.map((m) => (
                       <label key={m.id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -433,7 +433,7 @@ function MyConnectionsTab({
                       </label>
                     ))
                   ) : (
-                    <p className="text-xs text-slate-500">No other users in this organisation.</p>
+                    <p className="text-xs text-[var(--color-ink-muted)]">No other users in this organisation.</p>
                   )}
                 </div>
               </div>
@@ -489,18 +489,18 @@ function MyConnectionsTab({
           {filtered.map((c) => (
             <article
               key={c.id}
-              className="group flex aspect-square flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[var(--shadow-soft)] transition hover:-translate-y-0.5 hover:border-teal-200"
+              className="group flex aspect-square flex-col overflow-hidden rounded-2xl border border-[var(--color-border)]/90 bg-[var(--color-surface)] shadow-[var(--shadow-soft)] transition hover:-translate-y-0.5 hover:border-[var(--color-accent)]/25"
             >
               <div className={cn('relative h-[38%] bg-gradient-to-br', kindAccent(c.kind))}>
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.35),transparent_50%)]" />
-                <div className="absolute bottom-3 left-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/95 text-slate-800 shadow-md">
+                <div className="absolute bottom-3 left-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-surface)]/95 text-[var(--color-ink)] shadow-md">
                   {<KindIcon kind={c.kind} />}
                 </div>
               </div>
               <div className="flex min-h-0 flex-1 flex-col gap-2 p-3 pt-4">
                 <div className="min-w-0">
-                  <h3 className="truncate text-sm font-semibold text-slate-900">{c.name}</h3>
-                  <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                  <h3 className="truncate text-sm font-semibold text-[var(--color-ink)]">{c.name}</h3>
+                  <p className="mt-0.5 truncate text-[11px] text-[var(--color-ink-muted)]">
                     <Workflow className="mr-1 inline h-3 w-3" />
                     {c.chatbot_name ?? 'Chatbot'}
                   </p>
@@ -509,7 +509,7 @@ function MyConnectionsTab({
                   <Badge>{c.kind}</Badge>
                   <Badge>{visibilityLabel(c.visibility)}</Badge>
                 </div>
-                <p className="text-[10px] text-slate-400">
+                <p className="text-[10px] text-[var(--color-ink-muted)]">
                   Updated {formatDistanceToNow(new Date(c.updated_at), { addSuffix: true })}
                 </p>
                 {editable && c.canManage !== false ? (
@@ -523,7 +523,7 @@ function MyConnectionsTab({
                     </Button>
                   </div>
                 ) : (
-                  <p className="mt-auto text-[11px] text-slate-400">Full details available to you as owner.</p>
+                  <p className="mt-auto text-[11px] text-[var(--color-ink-muted)]">Full details available to you as owner.</p>
                 )}
               </div>
             </article>
@@ -531,7 +531,7 @@ function MyConnectionsTab({
         </div>
       ) : (
         <Card className="border-dashed text-center">
-          <PlugZap className="mx-auto h-8 w-8 text-slate-400" />
+          <PlugZap className="mx-auto h-8 w-8 text-[var(--color-ink-muted)]" />
           <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
             {query || kindFilter !== 'all'
               ? 'No connections match your filters.'
@@ -650,20 +650,20 @@ function ForgeHubTab({
 
   return (
     <div className="space-y-5">
-      <div className="relative overflow-hidden rounded-2xl border border-teal-200/60 bg-gradient-to-br from-teal-50 via-white to-cyan-50 p-5 shadow-[var(--shadow-soft)]">
-        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-teal-400/20 blur-2xl" />
+      <div className="relative overflow-hidden rounded-2xl border border-[var(--color-accent)]/20 bg-gradient-to-br from-[var(--color-accent-soft)] via-[var(--color-surface)] to-[var(--color-accent-2)]/15 p-5 shadow-[var(--shadow-soft)]">
+        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-[var(--color-accent)]/20 blur-2xl" />
         <div className="relative flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-teal-600/10 px-2.5 py-1 text-[11px] font-semibold text-teal-800">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-accent)]/10 px-2.5 py-1 text-[11px] font-semibold text-[var(--color-accent)]">
               <Sparkles className="h-3.5 w-3.5" />
               ForgeHub
             </div>
-            <h2 className="mt-2 text-xl font-semibold text-slate-900">Discover shared integrations</h2>
-            <p className="mt-1 max-w-xl text-sm text-slate-600">
+            <h2 className="mt-2 text-xl font-semibold text-[var(--color-ink)]">Discover shared integrations</h2>
+            <p className="mt-1 max-w-xl text-sm text-[var(--color-ink-muted)]">
               Browse connections published in your organisation. Credentials stay locked — install into a chatbot to use
               them in flows.
             </p>
-            <div className="mt-3 flex flex-wrap gap-3 text-[11px] font-medium text-slate-500">
+            <div className="mt-3 flex flex-wrap gap-3 text-[11px] font-medium text-[var(--color-ink-muted)]">
               <span>{stats.total} listed</span>
               <span>·</span>
               <span>{stats.global} global</span>
@@ -697,7 +697,7 @@ function ForgeHubTab({
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-ink-muted)]" />
           <Input
             className="pl-9"
             value={query}
@@ -728,8 +728,8 @@ function ForgeHubTab({
           className={cn(
             'inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition',
             installedOnly
-              ? 'border-teal-300 bg-teal-50 text-teal-800'
-              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+              ? 'border-[var(--color-accent)]/40 bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
+              : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-2)]',
             !targetChatbotId && 'opacity-50',
           )}
           title={targetChatbotId ? 'Show only installed' : 'Select a chatbot first'}
@@ -739,7 +739,7 @@ function ForgeHubTab({
         </button>
         <button
           type="button"
-          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-slate-500 hover:bg-slate-50"
+          className="inline-flex items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-2)]"
           title={sortMode === 'name-asc' ? 'Sorted A–Z' : sortMode === 'name-desc' ? 'Sorted Z–A' : 'Sorted by recent'}
           onClick={() =>
             setSortMode((m) => (m === 'name-asc' ? 'name-desc' : m === 'name-desc' ? 'recent' : 'name-asc'))
@@ -767,7 +767,7 @@ function ForgeHubTab({
         </div>
       ) : (
         <Card className="border-dashed text-center">
-          <Sparkles className="mx-auto h-8 w-8 text-slate-400" />
+          <Sparkles className="mx-auto h-8 w-8 text-[var(--color-ink-muted)]" />
           <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
             {query || kindFilter !== 'all' || scopeFilter !== 'all' || installedOnly
               ? 'No ForgeHub listings match your filters.'
@@ -795,42 +795,42 @@ function ForgeHubCard({
   onRemove: () => void
 }) {
   return (
-    <article className="group flex aspect-square flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[var(--shadow-soft)] transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md">
+    <article className="group flex aspect-square flex-col overflow-hidden rounded-2xl border border-[var(--color-border)]/90 bg-[var(--color-surface)] shadow-[var(--shadow-soft)] transition hover:-translate-y-0.5 hover:border-[var(--color-accent)]/25 hover:shadow-md">
       <div className={cn('relative h-[40%] bg-gradient-to-br', kindAccent(c.kind))}>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(255,255,255,0.4),transparent_45%)]" />
         <div className="absolute left-3 top-3 flex gap-1">
           {c.visibility === 'global' ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-surface)]/90 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-accent)]">
               <Globe className="h-3 w-3" />
               Global
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-sky-800">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-surface)]/90 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-accent-2)]">
               <Share2 className="h-3 w-3" />
               Shared
             </span>
           )}
           {c.linked_to_chatbot ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)] px-2 py-0.5 text-[10px] font-semibold text-white">
               <Check className="h-3 w-3" />
               Installed
             </span>
           ) : null}
         </div>
-        <div className="absolute bottom-3 left-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/95 text-slate-800 shadow-md ring-1 ring-black/5">
+        <div className="absolute bottom-3 left-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-surface)]/95 text-[var(--color-ink)] shadow-md ring-1 ring-black/5">
           {<KindIcon kind={c.kind} />}
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 p-3 pt-4">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-slate-900">{c.name}</h3>
-          <p className="mt-0.5 truncate text-[11px] text-slate-500">by {c.chatbot_name ?? 'another chatbot'}</p>
+          <h3 className="truncate text-sm font-semibold text-[var(--color-ink)]">{c.name}</h3>
+          <p className="mt-0.5 truncate text-[11px] text-[var(--color-ink-muted)]">by {c.chatbot_name ?? 'another chatbot'}</p>
         </div>
         <div className="flex flex-wrap gap-1">
           <Badge>{c.kind.toUpperCase()}</Badge>
           <Badge>No secrets shown</Badge>
         </div>
-        <p className="text-[10px] text-slate-400">
+        <p className="text-[10px] text-[var(--color-ink-muted)]">
           Updated {formatDistanceToNow(new Date(c.updated_at), { addSuffix: true })}
         </p>
         {editable ? (
@@ -859,7 +859,7 @@ function ForgeHubCard({
             )}
           </div>
         ) : (
-          <p className="mt-auto text-[11px] text-slate-400">Editors can install into a chatbot.</p>
+          <p className="mt-auto text-[11px] text-[var(--color-ink-muted)]">Editors can install into a chatbot.</p>
         )}
       </div>
     </article>

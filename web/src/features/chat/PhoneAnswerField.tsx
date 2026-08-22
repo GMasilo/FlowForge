@@ -171,19 +171,19 @@ export function PhoneAnswerField({
           id={panelId}
           role="listbox"
           aria-label="Country calling codes"
-          className="fixed z-[200] animate-[ff-rise_0.2s_var(--ease-spring)] overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-[0_20px_50px_-18px_rgb(15_23_42_/_0.45)] backdrop-blur-xl"
+          className="fixed z-[200] animate-[ff-rise_0.2s_var(--ease-spring)] overflow-hidden rounded-2xl border border-[var(--color-border)]/70 bg-[var(--color-surface)]/95 shadow-[0_20px_50px_-18px_rgb(15_23_42_/_0.45)] backdrop-blur-xl"
           style={{ top: pos.top, left: pos.left, width: pos.width }}
         >
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-teal-50/90 to-transparent" />
-          <div className="relative border-b border-slate-100 p-2.5">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-[var(--color-accent-soft)]/90 to-transparent" />
+          <div className="relative border-b border-[var(--color-border)]/60 p-2.5">
             <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-ink-muted)]" />
               <input
                 ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search country or +code…"
-                className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-8 pr-3 text-sm outline-none transition focus:border-teal-400 focus:ring-4 focus:ring-teal-500/15"
+                className="h-9 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] pl-8 pr-3 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-4 focus:ring-[var(--color-accent)]/15"
                 aria-label="Search calling codes"
               />
             </div>
@@ -201,22 +201,22 @@ export function PhoneAnswerField({
                     className={cn(
                       'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition',
                       isOn
-                        ? 'bg-teal-50 font-medium text-teal-900'
-                        : 'text-slate-700 hover:bg-slate-50',
+                        ? 'bg-[var(--color-accent-soft)] font-medium text-[var(--color-accent)]'
+                        : 'text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]',
                     )}
                   >
                     <span
                       className={cn(
                         'grid h-5 w-5 shrink-0 place-items-center rounded-full border transition',
                         isOn
-                          ? 'border-teal-600 bg-teal-600 text-white'
-                          : 'border-slate-300 bg-white text-transparent',
+                          ? 'border-[var(--color-accent)] bg-[var(--color-accent)]$1text-[var(--color-accent-fg)]'
+                          : 'border-[var(--color-border)] bg-[var(--color-surface)] text-transparent',
                       )}
                     >
                       <Check className="h-3 w-3" strokeWidth={3} />
                     </span>
                     <span className="min-w-0 flex-1 truncate">{option.name}</span>
-                    <span className="shrink-0 font-mono text-xs font-semibold text-slate-500">
+                    <span className="shrink-0 font-mono text-xs font-semibold text-[var(--color-ink-muted)]">
                       +{option.dial}
                     </span>
                   </button>
@@ -224,7 +224,7 @@ export function PhoneAnswerField({
               )
             })}
             {!options.length ? (
-              <li className="px-3 py-4 text-center text-sm text-slate-400">No matching countries</li>
+              <li className="px-3 py-4 text-center text-sm text-[var(--color-ink-muted)]">No matching countries</li>
             ) : null}
           </ul>
         </div>,
@@ -250,15 +250,15 @@ export function PhoneAnswerField({
         }}
         onKeyDown={onTriggerKey}
         className={cn(
-          'flex shrink-0 items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 font-mono text-sm font-semibold text-slate-800 shadow-sm transition',
-          'hover:border-teal-400/50 focus-visible:border-teal-400 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-500/15',
+          'flex shrink-0 items-center gap-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] font-mono text-sm font-semibold text-[var(--color-ink)] shadow-sm transition',
+          'hover:border-[var(--color-accent)]/50/50 focus-visible:border-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--color-accent)]/15',
           sizeMd ? 'h-11 px-2.5' : 'h-10 px-2 text-xs',
           disabled && 'cursor-not-allowed opacity-50',
-          open && 'border-teal-500 ring-4 ring-teal-500/15',
+          open && 'border-[var(--color-accent)] ring-4 ring-[var(--color-accent)]/15',
         )}
       >
         <span>+{selected.dial}</span>
-        <ChevronsUpDown className="h-3.5 w-3.5 text-slate-400" />
+        <ChevronsUpDown className="h-3.5 w-3.5 text-[var(--color-ink-muted)]" />
       </button>
 
       <input
@@ -278,8 +278,8 @@ export function PhoneAnswerField({
         placeholder="Phone number"
         aria-label="Phone number"
         className={cn(
-          'min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 text-sm outline-none transition',
-          'focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15',
+          'min-w-0 flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] text-sm outline-none transition',
+          'focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15',
           sizeMd ? 'h-11 px-3.5' : 'h-10 px-3',
           disabled && 'cursor-not-allowed opacity-50',
         )}

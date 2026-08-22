@@ -16,7 +16,7 @@ export function ThumbsAnswerField({
         type="button"
         disabled={disabled}
         onClick={() => onSelect('up')}
-        className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-teal-200 bg-teal-50/80 px-3 py-3 text-sm font-semibold text-teal-800 transition hover:border-teal-400 hover:bg-teal-100 disabled:opacity-50"
+        className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)]/80 px-3 py-3 text-sm font-semibold text-[var(--color-accent)] transition hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent-soft)] disabled:opacity-50"
       >
         <ThumbsUp className="h-4 w-4" />
         Up
@@ -25,7 +25,7 @@ export function ThumbsAnswerField({
         type="button"
         disabled={disabled}
         onClick={() => onSelect('down')}
-        className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 disabled:opacity-50"
+        className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-3 text-sm font-semibold text-[var(--color-ink)] transition hover:border-[var(--color-border)] hover:bg-[var(--color-surface-2)] disabled:opacity-50"
       >
         <ThumbsDown className="h-4 w-4" />
         Down

@@ -6,9 +6,15 @@ import { downloadJson } from '@/shared/lib/downloadJson'
 import {
   buildFlowExport,
   safeDownloadBasename,
+  type FlowEntityDefExport,
+  type FlowTemplateExport,
+  type FlowTestScenarioExport,
 } from '@/features/designer/utils/flowTransfer'
 import { useDesignerStore } from '@/features/designer/store/designerStore'
 import { loadChatbotEntities, loadFlowBundle } from '@/features/chatbots/chatbotFlowTransfer'
+import { fetchChatbotEntities } from '@/features/entities/entityApi'
+import { fetchChatbotTemplates } from '@/features/templates/templateApi'
+import { fetchChatbotTestScenarios } from '@/features/designer/preview/testScenarioApi'
 
 const tabs = [
   { end: true, suffix: '', label: 'Settings', icon: Settings2 },
@@ -36,13 +42,57 @@ export function ChatbotSubNav({
     setError(null)
     try {
       const store = useDesignerStore.getState()
-      const [bundle, entities] = await Promise.all([
+      const [bundle, entities, entityRows, templateRows, scenarioRows] = await Promise.all([
         loadFlowBundle(chatbotId),
         loadChatbotEntities(chatbotId),
+        fetchChatbotEntities(chatbotId),
+        fetchChatbotTemplates(chatbotId),
+        fetchChatbotTestScenarios(chatbotId),
       ])
 
       const nodes = store.flowId === bundle.flow.id ? store.nodes : bundle.nodes
       const edges = store.flowId === bundle.flow.id ? store.edges : bundle.edges
+
+      const entityDefs: FlowEntityDefExport[] = entityRows.map((row) => ({
+        id: row.id,
+        key: row.key,
+        name: row.name,
+        description: row.description,
+        kind: row.kind,
+        attributes: row.attributes.map((a) => ({
+          key: a.key,
+          label: a.label,
+          value_type: a.value_type,
+          required: a.required,
+          is_identifier: a.is_identifier,
+          is_unique: a.is_unique,
+          default_value: a.default_value,
+          sort_order: a.sort_order,
+        })),
+        records: (row.static_records ?? []).map((r) =>
+          r.values && typeof r.values === 'object' && !Array.isArray(r.values)
+            ? (r.values as Record<string, unknown>)
+            : {},
+        ),
+      }))
+      const templates: FlowTemplateExport[] = templateRows.map((row) => ({
+        key: row.key,
+        name: row.name,
+        description: row.description,
+        kind: row.kind,
+        content: row.content,
+      }))
+      const testScenarios: FlowTestScenarioExport[] = scenarioRows.map((row) => ({
+        name: row.name,
+        globals:
+          row.globals && typeof row.globals === 'object' && !Array.isArray(row.globals)
+            ? (row.globals as Record<string, unknown>)
+            : {},
+        expected:
+          row.expected && typeof row.expected === 'object' && !Array.isArray(row.expected)
+            ? (row.expected as { variables?: string[]; stepKeys?: string[] })
+            : {},
+      }))
 
       const payload = buildFlowExport({
         chatbot: bundle.chatbot,
@@ -51,6 +101,9 @@ export function ChatbotSubNav({
         nodes,
         edges,
         entities,
+        entityDefs,
+        templates,
+        testScenarios,
       })
       const stamp = new Date().toISOString().slice(0, 10)
       downloadJson(
@@ -70,7 +123,7 @@ export function ChatbotSubNav({
       <div className="flex flex-wrap items-center justify-end gap-2">
         <nav
           aria-label="Chatbot sections"
-          className="flex w-fit rounded-xl border border-[var(--color-border)]/80 bg-slate-50/80 p-1"
+          className="flex w-fit rounded-xl border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/80 p-1"
         >
           {tabs.map(({ end, suffix, label, icon: Icon }) => (
             <NavLink
@@ -81,8 +134,8 @@ export function ChatbotSubNav({
                 cn(
                   'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition',
                   isActive
-                    ? 'bg-[var(--color-accent)] text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-white hover:text-slate-900',
+                    ? 'bg-[var(--color-accent)]$1text-[var(--color-accent-fg)] shadow-sm'
+                    : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]',
                 )
               }
             >
@@ -94,7 +147,7 @@ export function ChatbotSubNav({
 
         <div
           aria-label="Flow transfer"
-          className="flex w-fit rounded-xl border border-[var(--color-border)]/80 bg-slate-50/80 p-1"
+          className="flex w-fit rounded-xl border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/80 p-1"
         >
           <button
             type="button"
@@ -102,7 +155,7 @@ export function ChatbotSubNav({
             onClick={() => void onExport()}
             className={cn(
               'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition',
-              'text-slate-600 hover:bg-white hover:text-slate-900 disabled:opacity-50',
+              'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)] disabled:opacity-50',
             )}
             title="Export chatbot flow as JSON"
           >
@@ -111,7 +164,7 @@ export function ChatbotSubNav({
           </button>
         </div>
       </div>
-      {error ? <p className="max-w-md text-right text-[11px] text-rose-600">{error}</p> : null}
+      {error ? <p className="max-w-md text-right text-[11px] text-[var(--color-danger)]">{error}</p> : null}
     </div>
   )
 }

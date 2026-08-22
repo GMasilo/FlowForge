@@ -8,6 +8,13 @@ import type {
   VariableType,
 } from '@/shared/types/database'
 import { validateAndCoerceEntityValues } from '@/features/entities/entityValueValidation'
+import {
+  ENTITY_PRIMARY_KEY,
+  ensurePrimaryKeyValue,
+  entityPrimaryKeyAttribute,
+  isEntityPrimaryKey,
+} from '@/features/entities/entityPrimaryKey'
+import { queryEntityRecords } from '@/features/entities/entityQuery'
 
 export type EntityWithMeta = ChatbotEntity & {
   attributes: EntityAttribute[]
@@ -93,7 +100,67 @@ export async function createEntity(input: {
     .select('*')
     .single()
   if (error) throw error
+  await ensureEntityPrimaryKey(data.id)
   return data
+}
+
+/** Ensure the entity has a locked unique primary-key attribute `id`. */
+export async function ensureEntityPrimaryKey(entityId: string): Promise<EntityAttribute> {
+  const pk = entityPrimaryKeyAttribute(-1)
+  const { data: existing, error: lookupError } = await supabase
+    .from('entity_attributes')
+    .select('*')
+    .eq('entity_id', entityId)
+    .eq('key', ENTITY_PRIMARY_KEY)
+    .maybeSingle()
+  if (lookupError) throw lookupError
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from('entity_attributes')
+      .update({
+        label: existing.label?.trim() || pk.label,
+        value_type: pk.value_type,
+        required: true,
+        is_identifier: true,
+        is_unique: true,
+        sort_order: existing.sort_order <= 0 ? existing.sort_order : -1,
+      })
+      .eq('id', existing.id)
+      .select('*')
+      .single()
+    if (error) throw error
+    await clearOtherIdentifiers(entityId)
+    return data
+  }
+
+  const { data, error } = await supabase
+    .from('entity_attributes')
+    .insert({
+      entity_id: entityId,
+      key: pk.key,
+      label: pk.label,
+      value_type: pk.value_type,
+      required: true,
+      is_identifier: true,
+      is_unique: true,
+      sort_order: pk.sort_order,
+    })
+    .select('*')
+    .single()
+  if (error) throw error
+  await clearOtherIdentifiers(entityId)
+  return data
+}
+
+async function clearOtherIdentifiers(entityId: string): Promise<void> {
+  const { error } = await supabase
+    .from('entity_attributes')
+    .update({ is_identifier: false })
+    .eq('entity_id', entityId)
+    .neq('key', ENTITY_PRIMARY_KEY)
+    .eq('is_identifier', true)
+  if (error) throw error
 }
 
 export async function updateEntity(
@@ -126,15 +193,52 @@ export async function upsertAttribute(input: {
   default_value?: Json | null
   sort_order?: number
 }): Promise<EntityAttribute> {
+  const key = input.key.trim()
+  if (!key) throw new Error('Attribute key is required')
+
+  if (input.id) {
+    const { data: current, error: currentError } = await supabase
+      .from('entity_attributes')
+      .select('key')
+      .eq('id', input.id)
+      .single()
+    if (currentError) throw currentError
+    if (isEntityPrimaryKey(current.key)) {
+      if (!isEntityPrimaryKey(key)) throw new Error('Primary key attribute key must remain "id"')
+      const { data, error } = await supabase
+        .from('entity_attributes')
+        .update({
+          key: ENTITY_PRIMARY_KEY,
+          label: input.label?.trim() || 'Id',
+          value_type: 'string',
+          required: true,
+          is_identifier: true,
+          is_unique: true,
+          default_value: null,
+          sort_order: input.sort_order ?? -1,
+        })
+        .eq('id', input.id)
+        .select('*')
+        .single()
+      if (error) throw error
+      await clearOtherIdentifiers(input.entityId)
+      return data
+    }
+    if (isEntityPrimaryKey(key)) throw new Error('Primary key "id" already exists on this entity')
+  } else if (isEntityPrimaryKey(key)) {
+    return ensureEntityPrimaryKey(input.entityId)
+  }
+
+  const isIdentifier = !!input.is_identifier
   if (input.id) {
     const { data, error } = await supabase
       .from('entity_attributes')
       .update({
-        key: input.key.trim(),
+        key,
         label: input.label?.trim() || null,
         value_type: input.value_type,
         required: !!input.required,
-        is_identifier: !!input.is_identifier,
+        is_identifier: false,
         is_unique: !!input.is_unique,
         default_value: input.default_value ?? null,
         sort_order: input.sort_order ?? 0,
@@ -143,17 +247,18 @@ export async function upsertAttribute(input: {
       .select('*')
       .single()
     if (error) throw error
+    if (isIdentifier) await ensureEntityPrimaryKey(input.entityId)
     return data
   }
   const { data, error } = await supabase
     .from('entity_attributes')
     .insert({
       entity_id: input.entityId,
-      key: input.key.trim(),
+      key,
       label: input.label?.trim() || null,
       value_type: input.value_type,
       required: !!input.required,
-      is_identifier: !!input.is_identifier,
+      is_identifier: false,
       is_unique: !!input.is_unique,
       default_value: input.default_value ?? null,
       sort_order: input.sort_order ?? 0,
@@ -161,6 +266,7 @@ export async function upsertAttribute(input: {
     .select('*')
     .single()
   if (error) throw error
+  if (isIdentifier) await ensureEntityPrimaryKey(input.entityId)
   return data
 }
 
@@ -208,6 +314,13 @@ export async function assertUniqueAttributeValues(args: {
 }
 
 export async function deleteAttribute(id: string): Promise<void> {
+  const { data, error: lookupError } = await supabase
+    .from('entity_attributes')
+    .select('key')
+    .eq('id', id)
+    .single()
+  if (lookupError) throw lookupError
+  if (isEntityPrimaryKey(data.key)) throw new Error('Primary key "id" cannot be removed')
   const { error } = await supabase.from('entity_attributes').delete().eq('id', id)
   if (error) throw error
 }
@@ -232,11 +345,15 @@ async function coerceValuesForEntity(
 }
 
 export async function createStaticRecord(entityId: string, values: Record<string, unknown>, sortOrder = 0) {
-  const coerced = await coerceValuesForEntity(entityId, values)
+  await ensureEntityPrimaryKey(entityId)
+  const withPk = ensurePrimaryKeyValue(values)
+  const recordId = String(withPk[ENTITY_PRIMARY_KEY])
+  const coerced = await coerceValuesForEntity(entityId, withPk)
+  coerced[ENTITY_PRIMARY_KEY] = recordId
   await assertUniqueAttributeValues({ entityId, kind: 'static', values: coerced })
   const { data, error } = await supabase
     .from('entity_static_records')
-    .insert({ entity_id: entityId, values: coerced as Json, sort_order: sortOrder })
+    .insert({ id: recordId, entity_id: entityId, values: coerced as Json, sort_order: sortOrder })
     .select('*')
     .single()
   if (error) throw error
@@ -245,12 +362,33 @@ export async function createStaticRecord(entityId: string, values: Record<string
 
 export async function updateStaticRecord(id: string, values: Record<string, unknown>, entityId?: string) {
   let resolvedEntityId = entityId
+  let previousValues: Record<string, unknown> = {}
   if (!resolvedEntityId) {
-    const { data, error } = await supabase.from('entity_static_records').select('entity_id').eq('id', id).single()
+    const { data, error } = await supabase
+      .from('entity_static_records')
+      .select('entity_id, values')
+      .eq('id', id)
+      .single()
     if (error) throw error
     resolvedEntityId = data.entity_id
+    previousValues = asValues(data.values)
+  } else {
+    const { data, error } = await supabase.from('entity_static_records').select('values').eq('id', id).single()
+    if (error) throw error
+    previousValues = asValues(data.values)
   }
-  const coerced = await coerceValuesForEntity(resolvedEntityId, values)
+  await ensureEntityPrimaryKey(resolvedEntityId)
+  const lockedId = String(previousValues[ENTITY_PRIMARY_KEY] ?? id)
+  if (
+    values[ENTITY_PRIMARY_KEY] !== undefined &&
+    !isBlankPk(values[ENTITY_PRIMARY_KEY]) &&
+    String(values[ENTITY_PRIMARY_KEY]) !== lockedId
+  ) {
+    throw new Error('Primary key "id" cannot be changed')
+  }
+  const withPk = ensurePrimaryKeyValue(values, { existingId: lockedId })
+  const coerced = await coerceValuesForEntity(resolvedEntityId, withPk)
+  coerced[ENTITY_PRIMARY_KEY] = lockedId
   await assertUniqueAttributeValues({
     entityId: resolvedEntityId,
     kind: 'static',
@@ -259,6 +397,10 @@ export async function updateStaticRecord(id: string, values: Record<string, unkn
   })
   const { error } = await supabase.from('entity_static_records').update({ values: coerced as Json }).eq('id', id)
   if (error) throw error
+}
+
+function isBlankPk(value: unknown): boolean {
+  return value === undefined || value === null || (typeof value === 'string' && value.trim() === '')
 }
 
 export async function deleteStaticRecord(id: string) {
@@ -296,11 +438,15 @@ export async function listEntityRecords(entity: Pick<ChatbotEntity, 'id' | 'kind
 }
 
 export async function createDynamicRecord(entityId: string, values: Record<string, unknown>) {
-  const coerced = await coerceValuesForEntity(entityId, values)
+  await ensureEntityPrimaryKey(entityId)
+  const withPk = ensurePrimaryKeyValue(values)
+  const recordId = String(withPk[ENTITY_PRIMARY_KEY])
+  const coerced = await coerceValuesForEntity(entityId, withPk)
+  coerced[ENTITY_PRIMARY_KEY] = recordId
   await assertUniqueAttributeValues({ entityId, kind: 'dynamic', values: coerced })
   const { data, error } = await supabase
     .from('entity_dynamic_records')
-    .insert({ entity_id: entityId, values: coerced as Json })
+    .insert({ id: recordId, entity_id: entityId, values: coerced as Json })
     .select('*')
     .single()
   if (error) throw error
@@ -320,9 +466,20 @@ export async function updateDynamicRecord(
   if (existingError) throw existingError
 
   const entityId = options?.entityId ?? existing.entity_id
+  await ensureEntityPrimaryKey(entityId)
   const prev = asValues(existing.values)
-  const coerced = await coerceValuesForEntity(entityId, values, { partial: options?.merge === true })
+  const lockedId = String(prev[ENTITY_PRIMARY_KEY] ?? id)
+  if (
+    values[ENTITY_PRIMARY_KEY] !== undefined &&
+    !isBlankPk(values[ENTITY_PRIMARY_KEY]) &&
+    String(values[ENTITY_PRIMARY_KEY]) !== lockedId
+  ) {
+    throw new Error('Primary key "id" cannot be changed')
+  }
+  const withPk = ensurePrimaryKeyValue(values, { existingId: lockedId })
+  const coerced = await coerceValuesForEntity(entityId, withPk, { partial: options?.merge === true })
   const nextValues = options?.merge ? { ...prev, ...coerced } : coerced
+  nextValues[ENTITY_PRIMARY_KEY] = lockedId
 
   await assertUniqueAttributeValues({
     entityId,
@@ -352,10 +509,19 @@ export function filterRecords(
   attribute: string,
   equals: unknown,
 ): EntityRecordView[] {
-  const attr = attribute.trim()
-  if (!attr) return records
-  const needle = equals == null ? '' : String(equals)
-  return records.filter((r) => String(r.values[attr] ?? '') === needle)
+  return queryEntityRecords(
+    records,
+    {
+      filters: attribute.trim()
+        ? [{ attribute: attribute.trim(), operator: 'eq', value: equals == null ? '' : String(equals) }]
+        : [],
+      filterLogic: 'and',
+      sortAttribute: '',
+      sortDirection: 'asc',
+      limit: '',
+    },
+    { resolveValue: () => equals },
+  )
 }
 
 export function toRecordPayload(row: EntityRecordView): Record<string, unknown> {

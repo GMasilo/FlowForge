@@ -47,11 +47,11 @@ export function NpsAnswerField({
                 'grid h-9 w-9 place-items-center rounded-xl border text-sm font-semibold transition active:scale-95',
                 'disabled:cursor-not-allowed disabled:opacity-50',
                 tone === 'rose' &&
-                  'border-rose-200 bg-rose-50 text-rose-800 hover:border-rose-400 hover:bg-rose-100',
+                  'border-[var(--color-danger)]/30 bg-[var(--color-danger-soft)] text-[var(--color-danger)] hover:border-[var(--color-danger)]/50 hover:bg-[var(--color-danger-soft)]',
                 tone === 'amber' &&
-                  'border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-400 hover:bg-amber-100',
+                  'border-[var(--color-warning)]/30 bg-[var(--color-warning-soft)] text-[var(--color-warning)] hover:border-[var(--color-warning)]/50 hover:bg-[var(--color-warning-soft)]',
                 tone === 'teal' &&
-                  'border-teal-200 bg-teal-50 text-teal-800 hover:border-teal-400 hover:bg-teal-100',
+                  'border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)] text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent-soft)]',
               )}
             >
               {n}
@@ -59,7 +59,7 @@ export function NpsAnswerField({
           )
         })}
       </div>
-      <div className="flex justify-between gap-3 px-0.5 text-[10px] font-medium text-slate-400">
+      <div className="flex justify-between gap-3 px-0.5 text-[10px] font-medium text-[var(--color-ink-muted)]">
         <span>{minLabel}</span>
         <span className="text-right">{maxLabel}</span>
       </div>

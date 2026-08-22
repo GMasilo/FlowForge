@@ -20,8 +20,8 @@ export function LikertAnswerField({
           disabled={disabled}
           onClick={() => onSelect(choice)}
           className={cn(
-            'rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition',
-            'hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900 disabled:opacity-50',
+            'rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-left text-sm font-medium text-[var(--color-ink)] transition',
+            'hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent)] disabled:opacity-50',
           )}
         >
           {choice}

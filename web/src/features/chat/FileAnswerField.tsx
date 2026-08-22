@@ -75,15 +75,15 @@ export function FileAnswerField({
           {picked.map((file, i) => (
             <li
               key={`${file.name}-${i}`}
-              className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+              className="flex items-center gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm"
             >
-              <FileText className="h-4 w-4 shrink-0 text-slate-400" />
-              <span className="min-w-0 flex-1 truncate font-medium text-slate-800">{file.name}</span>
+              <FileText className="h-4 w-4 shrink-0 text-[var(--color-ink-muted)]" />
+              <span className="min-w-0 flex-1 truncate font-medium text-[var(--color-ink)]">{file.name}</span>
               <button
                 type="button"
                 disabled={disabled || busy}
                 aria-label={`Remove ${file.name}`}
-                className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                className="rounded-md p-1 text-[var(--color-ink-muted)] hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)] disabled:opacity-50"
                 onClick={() => setPicked(picked.filter((_, idx) => idx !== i))}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -124,7 +124,7 @@ export function FileAnswerField({
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send'}
         </Button>
       </div>
-      {error ? <p className="text-[11px] text-rose-600">{error}</p> : null}
+      {error ? <p className="text-[11px] text-[var(--color-danger)]">{error}</p> : null}
     </div>
   )
 }

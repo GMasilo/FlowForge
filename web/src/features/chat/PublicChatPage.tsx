@@ -38,6 +38,7 @@ import { ColorAnswerField } from '@/features/chat/ColorAnswerField'
 import { ThumbsAnswerField } from '@/features/chat/ThumbsAnswerField'
 import { MoodAnswerField } from '@/features/chat/MoodAnswerField'
 import { LikertAnswerField } from '@/features/chat/LikertAnswerField'
+import { NumberedChoiceAnswerField } from '@/features/chat/NumberedChoiceAnswerField'
 import { StepperAnswerField } from '@/features/chat/StepperAnswerField'
 import { CurrencyAnswerField } from '@/features/chat/CurrencyAnswerField'
 import { OtpAnswerField } from '@/features/chat/OtpAnswerField'
@@ -425,6 +426,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   const isThumbs = waiting?.answerType === 'thumbs'
   const isMood = waiting?.answerType === 'mood'
   const isLikert = waiting?.answerType === 'likert'
+  const isNumberedChoice = waiting?.answerType === 'numbered_choice'
   const isStepper = waiting?.answerType === 'stepper'
   const isCurrency = waiting?.answerType === 'currency'
   const isOtp = waiting?.answerType === 'otp'
@@ -462,6 +464,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       ? waitingCfg.confirmLabel
       : 'I agree'
   const likertChoices = waiting?.choices?.length ? waiting.choices : [...DEFAULT_LIKERT_CHOICES]
+  const numberedChoices = waiting?.choices?.length ? waiting.choices : []
   const ratingOptions = useMemo(() => {
     const lo = Math.min(ratingMin, ratingMax)
     const hi = Math.max(ratingMin, ratingMax)
@@ -476,6 +479,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     isThumbs ||
     isMood ||
     isLikert ||
+    isNumberedChoice ||
     isFile ||
     isSignature ||
     isImageChoice ||
@@ -567,13 +571,13 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         className={cn(
           'flex items-center justify-center px-4',
           embed
-            ? 'min-h-[240px] bg-white'
-            : 'min-h-full bg-gradient-to-br from-slate-50 via-teal-50/40 to-cyan-50/50',
+            ? 'min-h-[240px] bg-[var(--color-surface)]'
+            : 'min-h-full bg-gradient-to-br from-[var(--color-surface-2)] via-[var(--color-accent-soft)]/40 to-[var(--color-accent-2)]/15',
         )}
       >
-        <div className="max-w-md rounded-2xl border border-rose-200 bg-white p-6 text-center shadow-sm">
-          <h1 className="text-lg font-semibold text-slate-800">Unavailable</h1>
-          <p className="mt-2 text-sm text-rose-700">{bootError}</p>
+        <div className="max-w-md rounded-2xl border border-[var(--color-danger)]/30 bg-[var(--color-surface)] p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-[var(--color-ink)]">Unavailable</h1>
+          <p className="mt-2 text-sm text-[var(--color-danger)]">{bootError}</p>
         </div>
       </div>
     )
@@ -586,11 +590,11 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         className={cn(
           'flex items-center justify-center',
           embed
-            ? 'min-h-[240px] bg-white'
-            : 'min-h-full bg-gradient-to-br from-slate-50 via-teal-50/40 to-cyan-50/50',
+            ? 'min-h-[240px] bg-[var(--color-surface)]'
+            : 'min-h-full bg-gradient-to-br from-[var(--color-surface-2)] via-[var(--color-accent-soft)]/40 to-[var(--color-accent-2)]/15',
         )}
       >
-        <p className="text-sm text-slate-500">Starting conversation…</p>
+        <p className="text-sm text-[var(--color-ink-muted)]">Starting conversation…</p>
       </div>
     )
   }
@@ -601,23 +605,23 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       className={cn(
         'relative flex flex-col',
         embed
-          ? 'h-full min-h-[320px] overflow-hidden bg-white'
-          : 'h-full min-h-full overflow-hidden bg-gradient-to-br from-slate-50 via-teal-50/30 to-cyan-50/40',
+          ? 'h-full min-h-[320px] overflow-hidden bg-[var(--color-surface)]'
+          : 'h-full min-h-full overflow-hidden bg-gradient-to-br from-[var(--color-surface-2)] via-[var(--color-accent-soft)]/30 to-[var(--color-accent-2)]/40',
       )}
     >
       <ChatMediaPlayerProvider>
       <header
         className={cn(
-          'text-white shadow-sm',
+          'text-[var(--color-accent-fg)] shadow-sm',
           embed
-            ? 'border-b border-teal-700/20 bg-teal-700 px-3 py-2.5'
-            : 'border-b border-white/60 bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600 px-4 py-4',
+            ? 'border-b border-[var(--color-accent)]/25 bg-[var(--color-accent)] px-3 py-2.5'
+            : 'border-b border-[var(--color-border)]/60 bg-gradient-to-br from-[var(--color-accent)] via-[var(--color-accent)] to-[var(--color-accent-2)] px-4 py-4',
         )}
       >
         <div className={cn('flex items-center gap-3', embed ? '' : 'mx-auto max-w-2xl')}>
           <span
             className={cn(
-              'grid place-items-center rounded-2xl bg-white/20 ring-1 ring-white/30',
+              'grid place-items-center rounded-2xl bg-[var(--color-accent-fg)]/15 ring-1 ring-[var(--color-accent-fg)]/25',
               embed ? 'h-8 w-8' : 'h-10 w-10',
             )}
           >
@@ -625,7 +629,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
           </span>
           <div className="min-w-0">
             {!embed ? (
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent-fg)]/75">
                 FlowForge
               </p>
             ) : null}
@@ -651,7 +655,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         {state.messages.map((m) =>
           m.role === 'user' ? (
             <div key={m.id} className="flex justify-end">
-              <div className="max-w-[88%] rounded-[1.25rem] rounded-br-md bg-gradient-to-br from-teal-600 to-cyan-600 px-3.5 py-2.5 text-sm leading-relaxed text-white shadow-sm">
+              <div className="max-w-[88%] rounded-[1.25rem] rounded-br-md bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] px-3.5 py-2.5 text-sm leading-relaxed text-[var(--color-accent-fg)] shadow-sm">
                 <UserMessageBubble message={m} />
               </div>
             </div>
@@ -661,31 +665,31 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
               className={cn(
                 'max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm',
                 m.role === 'bot'
-                  ? 'bg-white text-slate-800 ring-1 ring-slate-200/80'
-                  : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60',
+                  ? 'bg-[var(--color-surface)] text-[var(--color-ink)] ring-1 ring-[var(--color-border)]/80'
+                  : 'bg-[var(--color-surface-2)] text-[var(--color-ink-muted)] ring-1 ring-[var(--color-border)]/60',
               )}
             >
               <ChatMessageBody text={m.text} attachments={m.media} />
-              <p className="mt-1 text-[10px] text-slate-400">{prettyTimestamp(m.createdAt)}</p>
+              <p className="mt-1 text-[10px] text-[var(--color-ink-muted)]">{prettyTimestamp(m.createdAt)}</p>
             </div>
           ),
         )}
         {state.phase.kind === 'typing' ? (
-          <div className="inline-flex items-center gap-1 rounded-2xl bg-white px-3 py-2 text-slate-400 ring-1 ring-slate-200/80">
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-500 [animation-delay:0ms]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-500 [animation-delay:120ms]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-500 [animation-delay:240ms]" />
+          <div className="inline-flex items-center gap-1 rounded-2xl bg-[var(--color-surface)] px-3 py-2 text-[var(--color-ink-muted)] ring-1 ring-[var(--color-border)]/80">
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-accent)] [animation-delay:0ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-accent)] [animation-delay:120ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-accent)] [animation-delay:240ms]" />
           </div>
         ) : null}
         {state.phase.kind === 'finished' ? (
-          <p className="text-center text-xs text-slate-400">Conversation complete</p>
+          <p className="text-center text-xs text-[var(--color-ink-muted)]">Conversation complete</p>
         ) : null}
       </div>
 
       {waiting && isThumbs ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <ThumbsAnswerField
@@ -696,7 +700,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isMood ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <MoodAnswerField
@@ -707,7 +711,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isLikert ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <LikertAnswerField
@@ -716,13 +720,26 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
           />
         </div>
       ) : null}
+      {waiting && isNumberedChoice ? (
+        <div
+          className={cn(
+            'w-full border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3',
+            embed ? '' : 'mx-auto max-w-2xl',
+          )}
+        >
+          <NumberedChoiceAnswerField
+            choices={numberedChoices}
+            onSelect={(v) => setState(submitPreviewAnswer(state, nodes, edges, v))}
+          />
+        </div>
+      ) : null}
       {waiting && isRating && ratingOptions.length ? (
-        <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-2 border-t border-slate-100 bg-white/90 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3">
           {ratingOptions.map((n) => (
             <button
               key={n}
               type="button"
-              className="grid h-10 w-10 place-items-center rounded-full border border-teal-200 bg-teal-50/80 text-sm font-semibold text-teal-800"
+              className="grid h-10 w-10 place-items-center rounded-full border border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)]/80 text-sm font-semibold text-[var(--color-accent)]"
               onClick={() => setState(submitPreviewAnswer(state, nodes, edges, String(n)))}
             >
               {n}
@@ -733,7 +750,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isStars ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <StarsAnswerField
@@ -746,7 +763,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isNps ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -763,7 +780,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isFile ? (
         <div
           className={cn(
-            'flex w-full flex-col gap-2 border-t border-slate-100 bg-white/90 px-4 py-3',
+            'flex w-full flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -784,7 +801,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isSignature ? (
         <div
           className={cn(
-            'flex w-full flex-col gap-2 border-t border-slate-100 bg-white/90 px-4 py-3',
+            'flex w-full flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -803,7 +820,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isImageChoice ? (
         <div
           className={cn(
-            'flex w-full flex-col gap-2 border-t border-slate-100 bg-white/90 px-4 py-3',
+            'flex w-full flex-col gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -862,7 +879,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isExtended ? (
         <div
           className={cn(
-            'ff-hide-scrollbar flex w-full min-h-0 max-h-[min(36rem,70vh)] flex-col gap-2 overflow-y-auto border-t border-slate-100 bg-white/90 px-4 py-3',
+            'ff-hide-scrollbar flex w-full min-h-0 max-h-[min(36rem,70vh)] flex-col gap-2 overflow-y-auto border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -930,7 +947,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       !usesDedicatedAnswerUi ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/95 px-4 py-3',
+            'w-full border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/95 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <form onSubmit={onSubmit} className="flex items-end gap-2">
@@ -996,7 +1013,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
             ) : waiting.answerType === 'long_text' || waiting.answerType === 'address' ? (
               <textarea
                 ref={inputRef as RefObject<HTMLTextAreaElement>}
-                className="min-h-[88px] flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm outline-none focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15"
+                className="min-h-[88px] flex-1 resize-none rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder={placeholderForAnswer(waiting.answerType, waitingOptional)}
@@ -1031,7 +1048,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
             ) : (
               <input
                 ref={inputRef as RefObject<HTMLInputElement>}
-                className="h-11 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm outline-none focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15"
+                className="h-11 flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 text-sm outline-none focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder={placeholderForAnswer(waiting.answerType, waitingOptional)}
@@ -1064,7 +1081,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
             </Button>
           </form>
           {waiting.validationError ? (
-            <p className="mt-2 text-[11px] text-rose-600">{waiting.validationError}</p>
+            <p className="mt-2 text-[11px] text-[var(--color-danger)]">{waiting.validationError}</p>
           ) : null}
           {isOtp ? (
             <div className="mt-2 flex justify-end">
@@ -1103,7 +1120,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       ) : null}
 
       {waiting?.answerType === 'boolean' ? (
-        <div className="mx-auto flex w-full max-w-2xl gap-2 border-t border-slate-100 bg-white/90 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-2xl gap-2 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 px-4 py-3">
           <Button onClick={() => setState(submitPreviewAnswer(state, nodes, edges, 'true'))}>
             Yes
           </Button>

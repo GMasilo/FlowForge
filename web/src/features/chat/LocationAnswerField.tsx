@@ -54,7 +54,7 @@ export function LocationAnswerField({
         {coords ? 'Update location' : 'Use my location'}
       </Button>
       {coords ? (
-        <p className="text-[12px] text-slate-600">
+        <p className="text-[12px] text-[var(--color-ink-muted)]">
           {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
           {coords.accuracy != null ? ` · ±${Math.round(coords.accuracy)}m` : ''}
         </p>
@@ -65,7 +65,7 @@ export function LocationAnswerField({
         value={label}
         onChange={(e) => setLabel(e.target.value)}
         placeholder="Label (optional, e.g. office)"
-        className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm outline-none focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15"
+        className="h-11 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 text-sm outline-none focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15"
       />
       <Button
         type="button"
@@ -78,7 +78,7 @@ export function LocationAnswerField({
       >
         Send
       </Button>
-      {error ? <p className="text-[11px] text-rose-600">{error}</p> : null}
+      {error ? <p className="text-[11px] text-[var(--color-danger)]">{error}</p> : null}
     </div>
   )
 }

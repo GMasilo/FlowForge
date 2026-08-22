@@ -43,6 +43,7 @@ export type QuestionAnswerType =
   | 'datetime'
   | 'boolean'
   | 'choice'
+  | 'numbered_choice'
   | 'gender'
   | 'rating'
   | 'slider'
@@ -1176,6 +1177,10 @@ export interface Database {
         Returns: undefined
       }
       restore_chatbot: {
+        Args: { p_chatbot_id: string }
+        Returns: undefined
+      }
+      permanently_delete_chatbot: {
         Args: { p_chatbot_id: string }
         Returns: undefined
       }

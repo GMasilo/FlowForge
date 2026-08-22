@@ -78,7 +78,7 @@ function DesignerHistoryButtons() {
   const canUndo = useDesignerStore((s) => s.canUndo)
   const canRedo = useDesignerStore((s) => s.canRedo)
   return (
-    <div className="flex rounded-xl border border-[var(--color-border)]/80 bg-slate-50/80 p-1">
+    <div className="flex rounded-xl border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/80 p-1">
       <Button
         size="sm"
         variant="ghost"
@@ -607,7 +607,7 @@ export function DesignerPage() {
       <div className="space-y-2">
         {canvasSuggestions.length ? (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-teal-800">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-accent)]">
               <Sparkles className="h-3 w-3" />
               Suggested
             </span>
@@ -617,7 +617,7 @@ export function DesignerPage() {
                 size="sm"
                 variant="secondary"
                 title={s.reason}
-                className="border-teal-300/80 bg-teal-50 text-teal-900 hover:border-teal-400"
+                className="border-[var(--color-accent)]/35 bg-[var(--color-accent-soft)] text-[var(--color-accent)] hover:border-[var(--color-accent)]/50"
                 onClick={() => addNode(s.type, selectedNodeId, s.seed)}
               >
                 + {s.label}
@@ -690,15 +690,15 @@ export function DesignerPage() {
     >
       <div
         ref={toolbarRef}
-        className="sticky top-14 z-[15] flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/60 bg-white/90 p-4 shadow-[var(--shadow-soft)] backdrop-blur-xl"
+        className="sticky top-14 z-[15] flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--color-border)]/60 bg-[var(--color-surface)]/90 p-4 shadow-[var(--shadow-soft)] backdrop-blur-xl"
       >
         <div>
           <div className="text-xs text-[var(--color-ink-muted)]">
-            <Link to={`/instances/${instance.id}`} className="hover:text-teal-700 hover:underline">
+            <Link to={`/instances/${instance.id}`} className="hover:text-[var(--color-accent)] hover:underline">
               Chatbots
             </Link>
             {' / '}
-            <Link to={`/instances/${instance.id}/chatbots/${chatbotId}`} className="hover:text-teal-700 hover:underline">
+            <Link to={`/instances/${instance.id}/chatbots/${chatbotId}`} className="hover:text-[var(--color-accent)] hover:underline">
               {chatbot.data?.name}
             </Link>
           </div>
@@ -710,10 +710,10 @@ export function DesignerPage() {
               <div
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium',
-                  saveStatus.kind === 'saving' && 'bg-sky-50 text-sky-700',
-                  saveStatus.kind === 'dirty' && 'bg-amber-50 text-amber-700',
-                  saveStatus.kind === 'saved' && 'bg-emerald-50 text-emerald-700',
-                  saveStatus.kind === 'idle' && 'bg-slate-100 text-slate-500',
+                  saveStatus.kind === 'saving' && 'bg-[var(--color-accent-2)]/10 text-[var(--color-accent-2)]',
+                  saveStatus.kind === 'dirty' && 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
+                  saveStatus.kind === 'saved' && 'bg-[var(--color-success-soft)] text-[var(--color-success)]',
+                  saveStatus.kind === 'idle' && 'bg-[var(--color-surface-2)] text-[var(--color-ink-muted)]',
                 )}
                 title={lastSavedAt ? lastSavedAt.toLocaleString() : undefined}
               >
@@ -726,7 +726,7 @@ export function DesignerPage() {
                 )}
                 {saveStatus.label}
                 {errorCount > 0 ? (
-                  <span className="text-rose-600">
+                  <span className="text-[var(--color-danger)]">
                     · {errorCount} issue{errorCount === 1 ? '' : 's'}
                   </span>
                 ) : null}
@@ -736,9 +736,9 @@ export function DesignerPage() {
               <div
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium',
-                  publishStatus.kind === 'live' && 'bg-emerald-50 text-emerald-800',
-                  publishStatus.kind === 'draft' && 'bg-amber-50 text-amber-800',
-                  publishStatus.kind === 'never' && 'bg-slate-100 text-slate-600',
+                  publishStatus.kind === 'live' && 'bg-[var(--color-success-soft)] text-[var(--color-success)]',
+                  publishStatus.kind === 'draft' && 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
+                  publishStatus.kind === 'never' && 'bg-[var(--color-surface-2)] text-[var(--color-ink-muted)]',
                 )}
                 title={
                   publishStatus.kind === 'never'
@@ -757,7 +757,7 @@ export function DesignerPage() {
             <ChatbotSubNav instanceId={instance.id} chatbotId={chatbotId} />
           ) : null}
           {editable ? <DesignerHistoryButtons /> : null}
-          <div className="flex rounded-xl border border-[var(--color-border)]/80 bg-slate-50/80 p-1">
+          <div className="flex rounded-xl border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/80 p-1">
             <Button
               size="sm"
               variant={viewMode === 'linear' ? 'primary' : 'ghost'}
@@ -826,7 +826,7 @@ export function DesignerPage() {
       {showHistory ? (
         <Card className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-800">Publish history</h2>
+            <h2 className="text-sm font-semibold text-[var(--color-ink)]">Publish history</h2>
             <Button size="sm" variant="ghost" onClick={() => setShowHistory(false)}>
               Close
             </Button>
@@ -834,16 +834,16 @@ export function DesignerPage() {
           {publishHistory.isLoading ? (
             <p className="text-sm text-[var(--color-ink-muted)]">Loading…</p>
           ) : publishHistory.data?.length ? (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-[var(--color-border)]/60">
               {publishHistory.data.map((row) => (
                 <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                   <div>
-                    <span className="font-medium text-slate-800">v{row.version}</span>
-                    <span className="ml-2 text-[11px] text-slate-500">
+                    <span className="font-medium text-[var(--color-ink)]">v{row.version}</span>
+                    <span className="ml-2 text-[11px] text-[var(--color-ink-muted)]">
                       {formatDistanceToNow(new Date(row.published_at), { addSuffix: true })}
                     </span>
                     {row.note ? (
-                      <span className="mt-0.5 block text-[11px] text-slate-400">{row.note}</span>
+                      <span className="mt-0.5 block text-[11px] text-[var(--color-ink-muted)]">{row.note}</span>
                     ) : null}
                   </div>
                   {editable ? (
@@ -888,11 +888,11 @@ export function DesignerPage() {
 
       {canvasFullscreen && viewMode === 'canvas'
         ? createPortal(
-            <div className="fixed inset-0 z-[80] flex flex-col bg-slate-100/95 backdrop-blur-[2px]">
-              <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 shadow-sm">
+            <div className="fixed inset-0 z-[80] flex flex-col bg-[var(--color-surface-2)]/95 backdrop-blur-[2px]">
+              <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--color-border)]/80 bg-[var(--color-surface)]/90 px-4 py-3 shadow-sm">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-slate-800">Canvas · {chatbot.data?.name ?? 'Flow'}</div>
-                  <div className="text-[11px] text-slate-500">Wider editing view — press Esc to exit</div>
+                  <div className="text-sm font-semibold text-[var(--color-ink)]">Canvas · {chatbot.data?.name ?? 'Flow'}</div>
+                  <div className="text-[11px] text-[var(--color-ink-muted)]">Wider editing view — press Esc to exit</div>
                 </div>
                 {canvasPalette}
                 {editable ? <DesignerHistoryButtons /> : null}
@@ -903,7 +903,7 @@ export function DesignerPage() {
                 <button
                   type="button"
                   aria-label="Close fullscreen"
-                  className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                  className="rounded-lg p-1.5 text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink)]"
                   onClick={() => setCanvasFullscreen(false)}
                 >
                   <X className="h-4 w-4" />

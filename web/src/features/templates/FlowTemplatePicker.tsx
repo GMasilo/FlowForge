@@ -75,7 +75,7 @@ export function FlowTemplatePicker({
       <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
         {hint ?? 'Uses the live template at send/preview time via {{templates.key}}.'}{' '}
         {href ? (
-          <Link className="font-medium text-teal-700 hover:underline" to={href}>
+          <Link className="font-medium text-[var(--color-accent)] hover:underline" to={href}>
             Manage templates
           </Link>
         ) : null}
@@ -120,7 +120,7 @@ export function InsertTemplateControl({
       <button
         type="button"
         disabled={readOnly || !picked}
-        className="text-xs font-medium text-teal-700 hover:underline disabled:opacity-40"
+        className="text-xs font-medium text-[var(--color-accent)] hover:underline disabled:opacity-40"
         onClick={() => {
           const row = rows.find((r) => r.key === picked)
           if (!row) return

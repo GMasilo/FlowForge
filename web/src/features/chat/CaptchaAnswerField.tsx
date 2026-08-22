@@ -83,7 +83,7 @@ export function CaptchaAnswerField({
           ref={canvasRef}
           width={240}
           height={72}
-          className="h-[72px] w-[240px] max-w-full rounded-2xl border border-slate-200 bg-slate-50"
+          className="h-[72px] w-[240px] max-w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)]"
           aria-label="Captcha puzzle"
         />
         {onRefresh ? (
@@ -116,8 +116,8 @@ export function CaptchaAnswerField({
           placeholder="Type the answer"
           aria-label="Captcha answer"
           className={cn(
-            'h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm outline-none transition',
-            'focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15',
+            'h-11 min-w-0 flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 text-sm outline-none transition',
+            'focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15',
             disabled && 'cursor-not-allowed opacity-50',
           )}
         />

@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '@/features/auth/AuthProvider'
+import { ThemeProvider } from '@/shared/theme/ThemeProvider'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { SignupPage } from '@/features/auth/SignupPage'
@@ -18,6 +19,11 @@ import { UsagePage } from '@/features/instances/UsagePage'
 import { ConversationsPage } from '@/features/instances/ConversationsPage'
 import { ConversationDetailPage } from '@/features/instances/ConversationDetailPage'
 import { AnalyticsPage } from '@/features/instances/AnalyticsPage'
+import { RecycleBinPage } from '@/features/chatbots/RecycleBinPage'
+import { AdminLayout, LegacyAdminRedirect, MembersRoute } from '@/features/admin/AdminLayout'
+import { AdminOverviewPage } from '@/features/admin/AdminOverviewPage'
+import { AdminChatbotsPage } from '@/features/admin/AdminChatbotsPage'
+import { InstanceSettingsPage } from '@/features/admin/InstanceSettingsPage'
 import { ChatbotsPage } from '@/features/chatbots/ChatbotsPage'
 import { ChatbotSettingsPage } from '@/features/chatbots/ChatbotSettingsPage'
 import { ChatbotDataPage } from '@/features/chatbots/ChatbotDataPage'
@@ -42,48 +48,61 @@ const queryClient = new QueryClient({
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/c/:publicSlug" element={<PublicChatPage />} />
-            <Route path="/embed/:publicSlug" element={<PublicChatPage embed />} />
-            <Route element={<PublicShell />}>
-              <Route path="/docs" element={<DocsPage />} />
-              <Route path="/faq" element={<FaqPage />} />
-              <Route path="/help" element={<HelpPage />} />
-            </Route>
-            <Route element={<RequireAuth />}>
-              <Route element={<AppShell />}>
-                <Route path="/" element={<HomeRedirect />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/instances" element={<InstancesPage />} />
+      <ThemeProvider>
+        <AuthProvider>
+          <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/signup" element={<SignupPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/c/:publicSlug" element={<PublicChatPage />} />
+              <Route path="/embed/:publicSlug" element={<PublicChatPage embed />} />
+              <Route element={<PublicShell />}>
+                <Route path="/docs" element={<DocsPage />} />
+                <Route path="/faq" element={<FaqPage />} />
+                <Route path="/help" element={<HelpPage />} />
               </Route>
-              <Route path="/instances/:instanceId" element={<InstanceProvider />}>
+              <Route element={<RequireAuth />}>
                 <Route element={<AppShell />}>
-                  <Route index element={<ChatbotsPage />} />
-                  <Route path="connections" element={<ConnectionsPage />} />
-                  <Route path="members" element={<MembersPage />} />
-                  <Route path="audit" element={<AuditLogPage />} />
-                  <Route path="webhooks" element={<WebhooksPage />} />
-                  <Route path="usage" element={<UsagePage />} />
-                  <Route path="conversations" element={<ConversationsPage />} />
-                  <Route path="conversations/:sessionId" element={<ConversationDetailPage />} />
-                  <Route path="analytics" element={<AnalyticsPage />} />
-                  <Route path="chatbots/:chatbotId" element={<ChatbotSettingsPage />} />
-                  <Route path="chatbots/:chatbotId/design" element={<DesignerPage />} />
-                  <Route path="chatbots/:chatbotId/templates" element={<TemplatesPage />} />
-                  <Route path="chatbots/:chatbotId/data" element={<ChatbotDataPage />} />
+                  <Route path="/" element={<HomeRedirect />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/instances" element={<InstancesPage />} />
+                </Route>
+                <Route path="/instances/:instanceId" element={<InstanceProvider />}>
+                  <Route element={<AppShell />}>
+                    <Route index element={<ChatbotsPage />} />
+                    <Route path="recycle-bin" element={<LegacyAdminRedirect page="recycle-bin" />} />
+                    <Route path="connections" element={<ConnectionsPage />} />
+                    <Route path="members" element={<MembersRoute />} />
+                    <Route path="audit" element={<LegacyAdminRedirect page="audit" />} />
+                    <Route path="webhooks" element={<LegacyAdminRedirect page="webhooks" />} />
+                    <Route path="usage" element={<LegacyAdminRedirect page="usage" />} />
+                    <Route path="admin" element={<AdminLayout />}>
+                      <Route index element={<AdminOverviewPage />} />
+                      <Route path="chatbots" element={<AdminChatbotsPage />} />
+                      <Route path="users" element={<MembersPage />} />
+                      <Route path="recycle-bin" element={<RecycleBinPage />} />
+                      <Route path="settings" element={<InstanceSettingsPage />} />
+                      <Route path="usage" element={<UsagePage />} />
+                      <Route path="webhooks" element={<WebhooksPage />} />
+                      <Route path="audit" element={<AuditLogPage />} />
+                    </Route>
+                    <Route path="conversations" element={<ConversationsPage />} />
+                    <Route path="conversations/:sessionId" element={<ConversationDetailPage />} />
+                    <Route path="analytics" element={<AnalyticsPage />} />
+                    <Route path="chatbots/:chatbotId" element={<ChatbotSettingsPage />} />
+                    <Route path="chatbots/:chatbotId/design" element={<DesignerPage />} />
+                    <Route path="chatbots/:chatbotId/templates" element={<TemplatesPage />} />
+                    <Route path="chatbots/:chatbotId/data" element={<ChatbotDataPage />} />
+                  </Route>
                 </Route>
               </Route>
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   )
 }

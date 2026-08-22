@@ -31,7 +31,7 @@ export function RankingAnswerField({
   }
 
   if (!items.length) {
-    return <p className="text-sm text-slate-500">No items are configured to rank.</p>
+    return <p className="text-sm text-[var(--color-ink-muted)]">No items are configured to rank.</p>
   }
 
   return (
@@ -40,18 +40,18 @@ export function RankingAnswerField({
         {order.map((item, index) => (
           <li
             key={`${item}-${index}`}
-            className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1.5"
+            className="flex items-center gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1.5"
           >
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-xs font-semibold text-teal-800 ring-1 ring-slate-200">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--color-surface)] text-xs font-semibold text-[var(--color-accent)] ring-1 ring-[var(--color-border)]">
               {index + 1}
             </span>
-            <span className="min-w-0 flex-1 text-sm font-medium text-slate-800">{item}</span>
+            <span className="min-w-0 flex-1 text-sm font-medium text-[var(--color-ink)]">{item}</span>
             <div className="flex flex-col">
               <button
                 type="button"
                 disabled={disabled || index === 0}
                 aria-label={`Move ${item} up`}
-                className="rounded-md p-0.5 text-slate-400 hover:bg-white hover:text-slate-700 disabled:opacity-30"
+                className="rounded-md p-0.5 text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)] disabled:opacity-30"
                 onClick={() => move(index, -1)}
               >
                 <ChevronUp className="h-4 w-4" />
@@ -60,7 +60,7 @@ export function RankingAnswerField({
                 type="button"
                 disabled={disabled || index === order.length - 1}
                 aria-label={`Move ${item} down`}
-                className="rounded-md p-0.5 text-slate-400 hover:bg-white hover:text-slate-700 disabled:opacity-30"
+                className="rounded-md p-0.5 text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)] disabled:opacity-30"
                 onClick={() => move(index, 1)}
               >
                 <ChevronDown className="h-4 w-4" />

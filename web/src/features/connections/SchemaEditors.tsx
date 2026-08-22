@@ -57,7 +57,7 @@ export function InputParamsEditor({
       ) : (
         <div className="space-y-3">
           {value.map((param, index) => (
-            <div key={index} className="rounded-xl border border-[var(--color-border)] bg-white/70 p-3">
+            <div key={index} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/70 p-3">
               <div className={`grid gap-2 ${showLocation ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
                 <div>
                   <Label>Key</Label>
@@ -174,7 +174,7 @@ function SchemaFieldsEditor({
   return (
     <div className="space-y-2" style={{ marginLeft: depth ? depth * 12 : 0 }}>
       {value.map((field, index) => (
-        <div key={index} className="rounded-lg border border-[var(--color-border)] bg-slate-50/60 p-2.5">
+        <div key={index} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-2.5">
           <div className="grid gap-2 sm:grid-cols-[1fr_120px_auto_auto]">
             <Input
               value={field.key}
@@ -294,7 +294,7 @@ export function ExpectedResponseEditor({
             </Button>
           </div>
           {!value.schema.length ? (
-            <p className="rounded-xl border border-dashed border-amber-300/70 bg-amber-50/50 px-3 py-2 text-xs text-amber-800">
+            <p className="rounded-xl border border-dashed border-[var(--color-warning)]/40/70 bg-[var(--color-warning-soft)]/50 px-3 py-2 text-xs text-[var(--color-warning)]">
               Object responses need a schema so designers know available paths (e.g. data.user.id).
             </p>
           ) : (

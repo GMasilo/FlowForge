@@ -44,7 +44,7 @@ export function TemplateInputsEditor({
       {inputs.map((input, index) => (
         <div
           key={`${input.key}-${index}`}
-          className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-white/70 p-3 sm:grid-cols-[1fr_1fr_8rem_auto_auto]"
+          className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/70 p-3 sm:grid-cols-[1fr_1fr_8rem_auto_auto]"
         >
           <div>
             <Label>Label</Label>
@@ -92,7 +92,7 @@ export function TemplateInputsEditor({
               ))}
             </Select>
           </div>
-          <label className="flex items-end gap-2 pb-2 text-sm text-slate-700">
+          <label className="flex items-end gap-2 pb-2 text-sm text-[var(--color-ink)]">
             <input
               type="checkbox"
               disabled={readOnly}

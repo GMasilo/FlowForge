@@ -84,7 +84,7 @@ export function ConversationsPage() {
         ) : rows.length ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-500">
+              <thead className="border-b border-[var(--color-border)] bg-[var(--color-surface-2)]/80 text-[11px] uppercase tracking-wide text-[var(--color-ink-muted)]">
                 <tr>
                   <th className="px-4 py-2.5 font-semibold">Started</th>
                   <th className="px-4 py-2.5 font-semibold">Chatbot</th>
@@ -93,20 +93,20 @@ export function ConversationsPage() {
                   <th className="px-4 py-2.5 font-semibold">Error</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-[var(--color-border)]/60">
                 {rows.map((s) => {
                   const shown = displaySessionStatus(s)
                   return (
-                    <tr key={s.id} className="hover:bg-teal-50/40">
+                    <tr key={s.id} className="hover:bg-[var(--color-accent-soft)]/40">
                       <td className="whitespace-nowrap px-4 py-2.5">
                         <Link
                           to={`/instances/${instance.id}/conversations/${s.id}`}
-                          className="font-medium text-teal-800 hover:underline"
+                          className="font-medium text-[var(--color-accent)] hover:underline"
                         >
                           {format(new Date(s.created_at), 'yyyy-MM-dd HH:mm')}
                         </Link>
                       </td>
-                      <td className="px-4 py-2.5 font-medium text-slate-800">{s.chatbots?.name ?? '—'}</td>
+                      <td className="px-4 py-2.5 font-medium text-[var(--color-ink)]">{s.chatbots?.name ?? '—'}</td>
                       <td className="px-4 py-2.5">
                         <span
                           className={cn(
@@ -117,10 +117,10 @@ export function ConversationsPage() {
                           {shown}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-600">
+                      <td className="px-4 py-2.5 text-[var(--color-ink-muted)]">
                         {s.publish_version != null ? `v${s.publish_version}` : '—'}
                       </td>
-                      <td className="max-w-xs truncate px-4 py-2.5 text-rose-600">{s.error_summary || '—'}</td>
+                      <td className="max-w-xs truncate px-4 py-2.5 text-[var(--color-danger)]">{s.error_summary || '—'}</td>
                     </tr>
                   )
                 })}

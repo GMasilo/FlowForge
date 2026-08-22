@@ -231,7 +231,7 @@ export function ExtendedAnswerPanel({
             onSubmit={(value) => onSubmit(value as unknown as Record<string, unknown>)}
           />
         ) : (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-[var(--color-ink-muted)]">
             {String(config.shopTemplateKey ?? '').trim()
               ? `Store catalog “${String(config.shopTemplateKey).trim()}” is not loaded. Restart preview, or publish if this is public chat.`
               : 'Link a Store catalog template on this Shop question.'}
@@ -243,7 +243,7 @@ export function ExtendedAnswerPanel({
           Skip
         </Button>
       ) : null}
-      {validationError ? <p className="text-[11px] text-rose-600">{validationError}</p> : null}
+      {validationError ? <p className="text-[11px] text-[var(--color-danger)]">{validationError}</p> : null}
     </div>
   )
 }

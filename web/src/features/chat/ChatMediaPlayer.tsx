@@ -139,12 +139,12 @@ function SeekBar({
     >
       <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-white/20">
         <div
-          className="h-full rounded-full bg-teal-400"
+          className="h-full rounded-full bg-[var(--color-accent)]"
           style={{ width: `${clamped * 100}%` }}
         />
       </div>
       <div
-        className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow ring-2 ring-teal-400/80"
+        className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--color-surface)] shadow ring-2 ring-[var(--color-accent)]/50"
         style={{ left: `${clamped * 100}%` }}
       />
     </div>
@@ -310,7 +310,7 @@ function MediaPlayerOverlay({
             <audio ref={bindMedia} src={file.url} preload="auto" />
             <div
               className={cn(
-                'grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-teal-400 to-cyan-600 text-white shadow-lg',
+                'grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] text-[var(--color-accent-fg)] shadow-lg',
                 playing ? 'animate-[ff-pulse-soft_1.8s_ease-in-out_infinite]' : null,
               )}
             >
@@ -321,7 +321,7 @@ function MediaPlayerOverlay({
                 <span
                   key={i}
                   className={cn(
-                    'w-1 rounded-full bg-teal-300/90',
+                    'w-1 rounded-full bg-[var(--color-accent)]/80',
                     playing ? 'animate-pulse' : 'opacity-40',
                   )}
                   style={{
@@ -358,7 +358,7 @@ function MediaPlayerOverlay({
             <button
               type="button"
               onClick={togglePlay}
-              className="grid h-9 w-9 place-items-center rounded-full bg-white text-slate-900 shadow-sm transition hover:bg-teal-50"
+              className="grid h-9 w-9 place-items-center rounded-full bg-[var(--color-surface)] text-[var(--color-ink)] shadow-sm transition hover:bg-[var(--color-accent-soft)]"
               aria-label={playing ? 'Pause' : 'Play'}
             >
               {playing ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
@@ -395,7 +395,7 @@ export function MediaPlayCard({
       type="button"
       onClick={() => open(file)}
       className={cn(
-        'group relative block w-full overflow-hidden rounded-xl text-left ring-1 ring-slate-200/80 transition hover:ring-teal-300',
+        'group relative block w-full overflow-hidden rounded-xl text-left ring-1 ring-[var(--color-border)]/80 transition hover:ring-[var(--color-accent)]/40',
         kind === 'video' ? 'bg-slate-900' : 'bg-gradient-to-r from-slate-800 to-slate-900',
       )}
     >
@@ -408,7 +408,7 @@ export function MediaPlayCard({
         <span className="block h-16" />
       )}
       <span className="absolute inset-0 flex items-center gap-3 px-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-slate-900 shadow-md transition group-hover:scale-105">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--color-surface)] text-[var(--color-ink)] shadow-md transition group-hover:scale-105">
           <Play className="ml-0.5 h-4 w-4" />
         </span>
         <span className="min-w-0">

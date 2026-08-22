@@ -6,7 +6,7 @@ import { TemporalAnswerField } from '@/features/chat/TemporalAnswerField'
 import { readFormFields, type FormFieldDef, type FormFieldType } from '@/features/designer/model/flowSchema'
 
 const INPUT_CLASS =
-  'h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none transition focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15 disabled:cursor-not-allowed disabled:opacity-50'
+  'h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 text-sm outline-none transition focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15 disabled:cursor-not-allowed disabled:opacity-50'
 
 function inputTypeFor(type: FormFieldType): string {
   if (type === 'email') return 'email'
@@ -93,7 +93,7 @@ export function FormAnswerField({
   const [values, setValues] = useState<Record<string, string>>({})
 
   if (!fields.length) {
-    return <p className="text-sm text-slate-500">No form fields are configured.</p>
+    return <p className="text-sm text-[var(--color-ink-muted)]">No form fields are configured.</p>
   }
 
   function setField(key: string, value: string) {
@@ -118,9 +118,9 @@ export function FormAnswerField({
     >
       {fields.map((field) => (
         <div key={field.key} className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-slate-600">
+          <span className="text-xs font-medium text-[var(--color-ink-muted)]">
             {field.label}
-            {field.required !== false ? <span className="text-rose-500"> *</span> : null}
+            {field.required !== false ? <span className="text-[var(--color-danger)]"> *</span> : null}
           </span>
           <FormFieldControl
             field={field}

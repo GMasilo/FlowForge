@@ -509,10 +509,10 @@ export function MembersPage() {
         <p
           className={
             info.tone === 'ok'
-              ? 'rounded-xl border border-teal-200/80 bg-teal-50/80 px-3 py-2 text-sm text-teal-900'
+              ? 'rounded-xl border border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)]/80 px-3 py-2 text-sm text-[var(--color-accent)]'
               : info.tone === 'error'
-                ? 'rounded-xl border border-rose-200/80 bg-rose-50/80 px-3 py-2 text-sm text-rose-900'
-                : 'rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-sm text-slate-800'
+                ? 'rounded-xl border border-[var(--color-danger)]/30 bg-[var(--color-danger-soft)]/80 px-3 py-2 text-sm text-[var(--color-danger)]'
+                : 'rounded-xl border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/80 px-3 py-2 text-sm text-[var(--color-ink)]'
           }
           role="status"
         >
@@ -521,7 +521,7 @@ export function MembersPage() {
       ) : null}
 
       {open && isAdmin ? (
-        <Card className="ff-page-enter border-teal-200/60">
+        <Card className="ff-page-enter border-[var(--color-accent)]/20">
           <form className="space-y-4" onSubmit={onSubmit}>
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-base font-semibold">
@@ -677,7 +677,7 @@ export function MembersPage() {
 
       <Card className="overflow-x-auto p-0">
         {members.isError ? (
-          <p className="px-5 py-4 text-sm text-rose-700">
+          <p className="px-5 py-4 text-sm text-[var(--color-danger)]">
             Could not load users:{' '}
             {members.error instanceof Error ? members.error.message : 'Unknown error'}
           </p>
@@ -905,8 +905,8 @@ export function MembersPage() {
                             emailStatus.tone === 'ok'
                               ? undefined
                               : emailStatus.tone === 'error'
-                                ? 'from-rose-500/15 to-rose-500/10 text-rose-800 ring-rose-600/15'
-                                : 'from-amber-500/15 to-amber-500/10 text-amber-900 ring-amber-600/15'
+                                ? 'from-[var(--color-danger)]/15 to-rose-500/10 text-[var(--color-danger)] ring-rose-600/15'
+                                : 'from-amber-500/15 to-amber-500/10 text-[var(--color-warning)] ring-amber-600/15'
                           }
                           title={
                             inv.email_sent_at
@@ -917,7 +917,7 @@ export function MembersPage() {
                           {emailStatus.label}
                         </Badge>
                         {inv.email_last_error && !inv.email_sent_at ? (
-                          <p className="mt-1 max-w-[14rem] text-[11px] text-rose-700/90 line-clamp-2">
+                          <p className="mt-1 max-w-[14rem] text-[11px] text-[var(--color-danger)]/90 line-clamp-2">
                             {inv.email_last_error}
                           </p>
                         ) : null}

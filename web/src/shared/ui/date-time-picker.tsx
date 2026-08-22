@@ -155,12 +155,12 @@ function TimeColumn({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <p className="mb-1.5 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+      <p className="mb-1.5 text-center text-[10px] font-semibold uppercase tracking-wider text-[var(--color-ink-muted)]">
         {label}
       </p>
       <div
         ref={listRef}
-        className="h-40 overflow-y-auto rounded-xl bg-slate-50/80 py-1 [scrollbar-width:thin]"
+        className="h-40 overflow-y-auto rounded-xl bg-[var(--color-surface-2)]/80 py-1 [scrollbar-width:thin]"
       >
         {values.map((n) => (
           <button
@@ -172,9 +172,9 @@ function TimeColumn({
             className={cn(
               'flex w-full items-center justify-center py-1.5 font-mono text-sm transition',
               selected === n
-                ? 'bg-teal-600 font-semibold text-white shadow-sm'
-                : 'text-slate-600 hover:bg-teal-50 hover:text-teal-800',
-              isDisabled?.(n) && 'cursor-not-allowed text-slate-300 hover:bg-transparent hover:text-slate-300',
+                ? 'bg-[var(--color-accent)]$1text-[var(--color-accent-fg)] shadow-sm'
+                : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent)]',
+              isDisabled?.(n) && 'cursor-not-allowed text-[var(--color-ink-muted)]/50 hover:bg-transparent hover:text-[var(--color-ink-muted)]/50',
             )}
           >
             {pad2(n)}
@@ -211,7 +211,7 @@ function CalendarGrid({
       {WEEKDAYS.map((d) => (
         <div
           key={d}
-          className="pb-1 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+          className="pb-1 text-center text-[10px] font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]"
         >
           {d}
         </div>
@@ -231,10 +231,10 @@ function CalendarGrid({
             onClick={() => onSelect(day)}
             className={cn(
               'relative grid h-9 place-items-center rounded-xl text-sm transition',
-              disabled && 'cursor-not-allowed text-slate-300',
-              !disabled && !selectedDay && 'text-slate-700 hover:bg-teal-50',
-              selectedDay && 'bg-teal-600 font-semibold text-white shadow-sm',
-              today && !selectedDay && 'font-semibold text-teal-700 ring-1 ring-teal-200',
+              disabled && 'cursor-not-allowed text-[var(--color-ink-muted)]/50',
+              !disabled && !selectedDay && 'text-[var(--color-ink)] hover:bg-[var(--color-accent-soft)]',
+              selectedDay && 'bg-[var(--color-accent)]$1text-[var(--color-accent-fg)] shadow-sm',
+              today && !selectedDay && 'font-semibold text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25',
             )}
           >
             {format(day, 'd')}
@@ -410,27 +410,27 @@ export function DateTimePicker({
           id={panelId}
           role="dialog"
           aria-label={mode === 'time' ? 'Choose time' : 'Choose date'}
-          className="fixed z-[200] animate-[ff-rise_0.2s_var(--ease-spring)] overflow-hidden rounded-2xl border border-white/70 bg-white/95 p-3 shadow-[0_20px_50px_-18px_rgb(15_23_42_/_0.45)] backdrop-blur-xl"
+          className="fixed z-[200] animate-[ff-rise_0.2s_var(--ease-spring)] overflow-hidden rounded-2xl border border-[var(--color-border)]/70 bg-[var(--color-surface)]/95 p-3 shadow-[0_20px_50px_-18px_rgb(15_23_42_/_0.45)] backdrop-blur-xl"
           style={{ top: pos.top, left: pos.left, width: pos.width }}
         >
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-teal-50/90 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-[var(--color-accent-soft)]/90 to-transparent" />
           {mode !== 'time' ? (
             <div className="relative mb-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <button
                   type="button"
-                  className="rounded-xl p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-teal-700"
+                  className="rounded-xl p-1.5 text-[var(--color-ink-muted)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-accent)]"
                   onClick={() => setViewMonth((m) => subMonths(m, 1))}
                   aria-label="Previous month"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <p className="font-[family-name:var(--font-display)] text-sm font-semibold text-slate-800">
+                <p className="font-[family-name:var(--font-display)] text-sm font-semibold text-[var(--color-ink)]">
                   {format(viewMonth, 'MMMM yyyy')}
                 </p>
                 <button
                   type="button"
-                  className="rounded-xl p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-teal-700"
+                  className="rounded-xl p-1.5 text-[var(--color-ink-muted)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-accent)]"
                   onClick={() => setViewMonth((m) => addMonths(m, 1))}
                   aria-label="Next month"
                 >
@@ -448,9 +448,9 @@ export function DateTimePicker({
           ) : null}
 
           {mode !== 'date' ? (
-            <div className={cn('relative', mode === 'datetime' && 'border-t border-slate-100 pt-3')}>
-              <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-500">
-                <Clock className="h-3.5 w-3.5 text-teal-700" />
+            <div className={cn('relative', mode === 'datetime' && 'border-t border-[var(--color-border)]/60 pt-3')}>
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[var(--color-ink-muted)]">
+                <Clock className="h-3.5 w-3.5 text-[var(--color-accent)]" />
                 Time
               </div>
               <div className="flex gap-2">
@@ -482,7 +482,7 @@ export function DateTimePicker({
               <div className="mt-3 flex justify-end">
                 <button
                   type="button"
-                  className="rounded-xl bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-50"
+                  className="rounded-xl bg-[var(--color-accent)]$1text-[var(--color-accent-fg)] shadow-sm transition hover:bg-[var(--color-accent)] disabled:opacity-50"
                   onClick={confirmAndClose}
                   disabled={mode === 'datetime' && !selectedDate}
                 >
@@ -514,14 +514,14 @@ export function DateTimePicker({
           }}
           onKeyDown={onTriggerKey}
           className={cn(
-            'flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-white/90 text-left shadow-sm transition-all duration-200',
-            'hover:border-[var(--color-accent)]/35 focus-visible:border-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-500/15',
+            'flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-left shadow-sm transition-all duration-200',
+            'hover:border-[var(--color-accent)]/35 focus-visible:border-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--color-accent)]/15',
             size === 'sm' ? 'h-8 px-2.5 text-xs' : 'h-10 px-3 text-sm',
             disabled && 'cursor-not-allowed opacity-50',
-            open && 'border-teal-500 ring-4 ring-teal-500/15',
+            open && 'border-[var(--color-accent)] ring-4 ring-[var(--color-accent)]/15',
           )}
         >
-          <Icon className={cn('shrink-0 text-teal-700', size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
+          <Icon className={cn('shrink-0 text-[var(--color-accent)]', size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
           <span
             className={cn(
               'truncate',
@@ -534,7 +534,7 @@ export function DateTimePicker({
         {allowClear && value && !disabled ? (
           <button
             type="button"
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-1.5 text-[var(--color-ink-muted)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink-muted)]"
             aria-label="Clear"
             onClick={() => onChange('')}
           >
