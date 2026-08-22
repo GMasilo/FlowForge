@@ -31,6 +31,8 @@ function assert(cond: unknown, msg: string): asserts cond {
   assert(!isTemplateKindAllowedForAnswerType('cart', 'email'), 'cart + email blocked')
   assert(isTemplateKindAllowedForAnswerType('cart', 'shop'), 'cart + shop allowed')
   assert(!isTemplateKindAllowedForAnswerType('email', 'shop'), 'HTML email not in shop prompt')
+  assert(!isTemplateKindAllowedForAnswerType('document', 'text'), 'downloadable file is not a chat prompt')
+  assert(!isTemplateKindAllowedForAnswerType('document', 'payment'), 'downloadable file not on payment prompt')
 }
 
 {

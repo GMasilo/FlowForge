@@ -250,6 +250,8 @@ export const messageConfigSchema = z.object({
   text: z.string().default(''),
   /** Filenames in this chatbot's media library, shown with the message. */
   mediaFiles: z.array(z.string()).optional(),
+  /** templateKey → inputKey → expression or literal. */
+  templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
 })
 
 export const questionConfigSchema = z.object({
@@ -356,6 +358,10 @@ export const questionConfigSchema = z.object({
     .optional(),
   /** Store catalog template key for shop answers. */
   shopTemplateKey: z.string().optional(),
+  /** OTP HTML email template key. */
+  otpTemplateKey: z.string().optional(),
+  /** templateKey → inputKey → expression or literal. */
+  templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
   /** Filenames in this chatbot's media library, shown with the prompt. */
   mediaFiles: z.array(z.string()).optional(),
 })
@@ -1033,6 +1039,7 @@ export const emailConfigSchema = z.object({
   subject: z.string().default(''),
   body: z.string().default(''),
   paramValues: z.record(z.string(), z.string()).default({}),
+  templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
 })
 
 export const conditionConfigSchema = z.object({
@@ -1210,6 +1217,7 @@ export const operationConfigSchema = z.object({
 export const endConfigSchema = z.object({
   message: z.string().optional(),
   mediaFiles: z.array(z.string()).optional(),
+  templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
 })
 
 export const ENTITY_OPERATIONS = [

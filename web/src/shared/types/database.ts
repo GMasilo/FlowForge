@@ -25,6 +25,7 @@ export type TemplateKind =
   | 'hours'
   | 'legal'
   | 'receipt'
+  | 'document'
 
 export type QuestionAnswerType =
   | 'text'

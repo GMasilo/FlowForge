@@ -1,3 +1,5 @@
+import { parseDocumentBlocks } from '@/features/templates/documentLayout'
+
 export const TEMPLATE_KINDS = [
   'email',
   'faq',
@@ -7,6 +9,7 @@ export const TEMPLATE_KINDS = [
   'hours',
   'legal',
   'receipt',
+  'document',
 ] as const
 
 export type TemplateKind = (typeof TEMPLATE_KINDS)[number]
@@ -29,8 +32,47 @@ export type StoreProduct = {
 export type MenuItem = { label: string; description: string; value: string }
 export type HoursDay = { day: string; open: string; close: string; closed: boolean }
 
-export type EmailContent = { subject: string; html: string }
-export type FaqContent = { intro: string; items: FaqItem[] }
+export const TEMPLATE_INPUT_TYPES = ['string', 'number', 'boolean', 'date', 'file'] as const
+export type TemplateInputType = (typeof TEMPLATE_INPUT_TYPES)[number]
+
+export type TemplateInput = {
+  key: string
+  label: string
+  type: TemplateInputType
+  required: boolean
+}
+
+export const COPY_TEMPLATE_KINDS = [
+  'email',
+  'faq',
+  'menu',
+  'message',
+  'hours',
+  'legal',
+  'receipt',
+  'document',
+] as const satisfies readonly TemplateKind[]
+
+export function isTemplateInputType(value: string): value is TemplateInputType {
+  return (TEMPLATE_INPUT_TYPES as readonly string[]).includes(value)
+}
+
+export function isCopyTemplateKind(kind: TemplateKind): boolean {
+  return (COPY_TEMPLATE_KINDS as readonly TemplateKind[]).includes(kind)
+}
+
+export function emptyTemplateInput(): TemplateInput {
+  return { key: '', label: '', type: 'string', required: true }
+}
+
+export function slugTemplateInputKey(raw: string, fallback: string): string {
+  const cleaned = raw.trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+  const withLetter = /^[A-Za-z]/.test(cleaned) ? cleaned : fallback
+  return withLetter.slice(0, 48) || fallback
+}
+
+export type EmailContent = { subject: string; html: string; inputs: TemplateInput[] }
+export type FaqContent = { intro: string; items: FaqItem[]; inputs: TemplateInput[] }
 export type StoreFeeKind = 'fixed' | 'percent'
 
 export type StoreFee = {
@@ -50,11 +92,66 @@ export type CartContent = {
   products: StoreProduct[]
   fees: StoreFee[]
 }
-export type MenuContent = { title: string; items: MenuItem[] }
-export type MessageContent = { text: string }
-export type HoursContent = { timezone: string; note: string; days: HoursDay[] }
-export type LegalContent = { title: string; body: string }
-export type ReceiptContent = { title: string; intro: string; footer: string }
+export type MenuContent = { title: string; items: MenuItem[]; inputs: TemplateInput[] }
+export type MessageContent = { text: string; inputs: TemplateInput[] }
+export type HoursContent = { timezone: string; note: string; days: HoursDay[]; inputs: TemplateInput[] }
+export type LegalContent = { title: string; body: string; inputs: TemplateInput[] }
+export type ReceiptContent = { title: string; intro: string; footer: string; inputs: TemplateInput[] }
+
+export const DOCUMENT_FORMATS = ['pdf', 'docx', 'xlsx'] as const
+export type DocumentFormat = (typeof DOCUMENT_FORMATS)[number]
+export type DocumentFieldAs = 'text' | 'image'
+
+export type DocumentField = {
+  label: string
+  value: string
+  as: DocumentFieldAs
+}
+
+export const DOCUMENT_LAYOUTS = ['flow', 'page'] as const
+export type DocumentLayout = (typeof DOCUMENT_LAYOUTS)[number]
+export const DOCUMENT_BLOCK_TYPES = ['heading', 'text', 'field', 'image', 'divider', 'cart'] as const
+export type DocumentBlockType = (typeof DOCUMENT_BLOCK_TYPES)[number]
+export type DocumentAlign = 'left' | 'center' | 'right'
+export const DOCUMENT_FONTS = ['helvetica', 'times', 'courier'] as const
+export type DocumentFont = (typeof DOCUMENT_FONTS)[number]
+
+export function isDocumentFont(value: string): value is DocumentFont {
+  return value === 'helvetica' || value === 'times' || value === 'courier'
+}
+
+export type DocumentBlock = {
+  id: string
+  type: DocumentBlockType
+  x: number
+  y: number
+  w: number
+  h: number
+  page: number
+  text: string
+  label: string
+  value: string
+  align: DocumentAlign
+  fontSize: number
+  fontFamily: DocumentFont
+  bold: boolean
+  color: string
+  fill: string
+}
+
+export type DocumentContent = {
+  format: DocumentFormat
+  filename: string
+  title: string
+  intro: string
+  body: string
+  footer: string
+  fields: DocumentField[]
+  includeCart: boolean
+  layout: DocumentLayout
+  blocks: DocumentBlock[]
+  inputs: TemplateInput[]
+}
 
 export type TemplateContent =
   | EmailContent
@@ -65,6 +162,7 @@ export type TemplateContent =
   | HoursContent
   | LegalContent
   | ReceiptContent
+  | DocumentContent
 
 export const TEMPLATE_KIND_META: Record<
   TemplateKind,
@@ -110,6 +208,11 @@ export const TEMPLATE_KIND_META: Record<
     hint: 'Order confirmation filled from the cart and payment at send time',
     insertField: 'text',
   },
+  document: {
+    label: 'Downloadable file',
+    hint: 'PDF, Word, or Excel filled from answers — list layout or a visual A4 page',
+    insertField: 'file',
+  },
 }
 
 function asRecord(raw: unknown): Record<string, unknown> {
@@ -119,6 +222,62 @@ function asRecord(raw: unknown): Record<string, unknown> {
 
 function str(v: unknown, fallback = ''): string {
   return typeof v === 'string' ? v : fallback
+}
+
+export function parseTemplateInputs(raw: unknown): TemplateInput[] {
+  if (!Array.isArray(raw)) return []
+  const out: TemplateInput[] = []
+  const seen = new Set<string>()
+  raw.forEach((item, index) => {
+    const row = asRecord(item)
+    const key = slugTemplateInputKey(str(row.key) || str(row.label), `input_${index + 1}`)
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    const typeRaw = str(row.type)
+    out.push({
+      key,
+      label: str(row.label) || key,
+      type: isTemplateInputType(typeRaw) ? typeRaw : 'string',
+      required: row.required !== false,
+    })
+  })
+  return out
+}
+
+export function templateInputsOf(content: TemplateContent): TemplateInput[] {
+  if (!content || typeof content !== 'object' || !('inputs' in content)) return []
+  const inputs = (content as { inputs?: unknown }).inputs
+  return Array.isArray(inputs) ? (inputs as TemplateInput[]) : []
+}
+
+export type TemplateBindingMap = Record<string, Record<string, string>>
+
+export function parseTemplateBindingMap(raw: unknown): TemplateBindingMap {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: TemplateBindingMap = {}
+  for (const [templateKey, inner] of Object.entries(raw as Record<string, unknown>)) {
+    if (!templateKey.trim()) continue
+    if (!inner || typeof inner !== 'object' || Array.isArray(inner)) {
+      out[templateKey] = {}
+      continue
+    }
+    const row: Record<string, string> = {}
+    for (const [inputKey, value] of Object.entries(inner as Record<string, unknown>)) {
+      row[inputKey] = typeof value === 'string' ? value : String(value ?? '')
+    }
+    out[templateKey] = row
+  }
+  return out
+}
+
+export function inputSuggestionsFromTemplate(inputs: TemplateInput[]): Array<{ insert: string; label: string; hint: string }> {
+  return inputs
+    .filter((input) => input.key.trim())
+    .map((input) => ({
+      insert: `{{inputs.${input.key}}}`,
+      label: input.label || input.key,
+      hint: `${input.type}${input.required ? ' · required' : ''}`,
+    }))
 }
 
 function num(v: unknown, fallback = 0): number {
@@ -175,6 +334,35 @@ export function emptyStoreFee(name = ''): StoreFee {
   }
 }
 
+export function emptyDocumentField(): DocumentField {
+  return { label: '', value: '', as: 'text' }
+}
+
+export function isDocumentFormat(value: string): value is DocumentFormat {
+  return (DOCUMENT_FORMATS as readonly string[]).includes(value)
+}
+
+export function documentExtension(format: DocumentFormat): string {
+  return format
+}
+
+export function documentMime(format: DocumentFormat): string {
+  if (format === 'pdf') return 'application/pdf'
+  if (format === 'docx') {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  }
+  return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+}
+
+export function sanitizeDocumentFilename(raw: string, format: DocumentFormat): string {
+  const trimmed = raw.trim() || `document.${format}`
+  const base = trimmed.replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ')
+  const ext = `.${format}`
+  if (base.toLowerCase().endsWith(ext)) return base
+  const withoutExt = base.replace(/\.[A-Za-z0-9]+$/, '')
+  return `${withoutExt || 'document'}${ext}`
+}
+
 function parseOptionalStock(raw: unknown): number | null {
   if (raw == null || raw === '') return null
   const n = Math.floor(Number(raw))
@@ -204,6 +392,37 @@ function parseStoreFees(raw: unknown): StoreFee[] {
   return out
 }
 
+function parseDocumentFields(raw: unknown): DocumentField[] {
+  if (!Array.isArray(raw)) return [emptyDocumentField()]
+  const fields = raw.map((item) => {
+    const row = asRecord(item)
+    return {
+      label: str(row.label),
+      value: str(row.value),
+      as: str(row.as) === 'image' ? 'image' : 'text',
+    } satisfies DocumentField
+  })
+  return fields.length ? fields : [emptyDocumentField()]
+}
+
+export function parseDocumentContent(raw: Record<string, unknown> | DocumentContent): DocumentContent {
+  const c = asRecord(raw)
+  const format = isDocumentFormat(str(c.format)) ? (str(c.format) as DocumentFormat) : 'pdf'
+  return {
+    format,
+    filename: str(c.filename, `document.${format}`) || `document.${format}`,
+    title: str(c.title),
+    intro: str(c.intro),
+    body: str(c.body),
+    footer: str(c.footer),
+    fields: parseDocumentFields(c.fields),
+    includeCart: c.includeCart === true,
+    layout: str(c.layout) === 'page' ? 'page' : 'flow',
+    blocks: parseDocumentBlocks(c.blocks),
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
 function money(n: number): number {
   return Number(n.toFixed(2))
 }
@@ -219,9 +438,9 @@ function defaultStoreProducts(categoryId: string): StoreProduct[] {
 export function emptyTemplateContent(kind: TemplateKind): TemplateContent {
   switch (kind) {
     case 'email':
-      return { subject: '', html: '' }
+      return { subject: '', html: '', inputs: [] }
     case 'faq':
-      return { intro: '', items: [{ question: '', answer: '' }] }
+      return { intro: '', items: [{ question: '', answer: '' }], inputs: [] }
     case 'cart': {
       const categories = defaultStoreCategories()
       return {
@@ -236,15 +455,29 @@ export function emptyTemplateContent(kind: TemplateKind): TemplateContent {
       }
     }
     case 'menu':
-      return { title: '', items: [{ label: '', description: '', value: '' }] }
+      return { title: '', items: [{ label: '', description: '', value: '' }], inputs: [] }
     case 'message':
-      return { text: '' }
+      return { text: '', inputs: [] }
     case 'hours':
-      return { timezone: '', note: '', days: emptyHoursDays() }
+      return { timezone: '', note: '', days: emptyHoursDays(), inputs: [] }
     case 'legal':
-      return { title: '', body: '' }
+      return { title: '', body: '', inputs: [] }
     case 'receipt':
-      return { title: 'Your receipt', intro: '', footer: 'Thank you for your order.' }
+      return { title: 'Your receipt', intro: '', footer: 'Thank you for your order.', inputs: [] }
+    case 'document':
+      return {
+        format: 'pdf',
+        filename: 'document.pdf',
+        title: '',
+        intro: '',
+        body: '',
+        footer: '',
+        fields: [emptyDocumentField()],
+        includeCart: false,
+        layout: 'flow',
+        blocks: [],
+        inputs: [],
+      }
   }
 }
 
@@ -252,7 +485,12 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
   switch (kind) {
     case 'email':
       return {
-        subject: 'Hello {{vars.name}}',
+        inputs: [
+          { key: 'name', label: 'Name', type: 'string', required: true },
+          { key: 'brand', label: 'Brand', type: 'string', required: false },
+          { key: 'message', label: 'Message', type: 'string', required: true },
+        ],
+        subject: 'Hello {{inputs.name}}',
         html: `<!DOCTYPE html>
 <html>
 <body style="margin:0;background:#f8fafc;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
@@ -261,14 +499,14 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
         <tr>
           <td style="background:linear-gradient(135deg,#0d9488,#0891b2);padding:28px 32px;color:#ffffff;">
-            <p style="margin:0;font-size:11px;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">{{vars.brand}}</p>
-            <h1 style="margin:8px 0 0;font-size:22px;font-weight:600;">Hello {{vars.name}}</h1>
+            <p style="margin:0;font-size:11px;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">{{inputs.brand}}</p>
+            <h1 style="margin:8px 0 0;font-size:22px;font-weight:600;">Hello {{inputs.name}}</h1>
           </td>
         </tr>
         <tr>
           <td style="padding:28px 32px;color:#334155;font-size:15px;line-height:1.65;">
             <p style="margin:0 0 16px;">Thanks for getting in touch. Here’s a quick update:</p>
-            <p style="margin:0 0 20px;">{{vars.message}}</p>
+            <p style="margin:0 0 20px;">{{inputs.message}}</p>
             <p style="margin:0;color:#64748b;font-size:13px;">If you didn’t request this, you can ignore the email.</p>
           </td>
         </tr>
@@ -280,6 +518,7 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
       }
     case 'faq':
       return {
+        inputs: [],
         intro: 'Here are answers to common questions:',
         items: [
           { question: 'What are your hours?', answer: 'See {{templates.hours_main.text}} or ask a teammate.' },
@@ -340,6 +579,7 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
     }
     case 'menu':
       return {
+        inputs: [],
         title: 'How can I help?',
         items: [
           { label: 'Hours', description: 'Opening times', value: 'hours' },
@@ -349,10 +589,12 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
       }
     case 'message':
       return {
-        text: 'Hi {{vars.name}} — welcome! I can help with orders, hours, and common questions.',
+        inputs: [{ key: 'name', label: 'Name', type: 'string', required: true }],
+        text: 'Hi {{inputs.name}} — welcome! I can help with orders, hours, and common questions.',
       }
     case 'hours':
       return {
+        inputs: [],
         timezone: 'Africa/Johannesburg',
         note: 'Public holidays may differ.',
         days: WEEKDAYS.map((day) => ({
@@ -364,14 +606,41 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
       }
     case 'legal':
       return {
+        inputs: [],
         title: 'Terms of use',
         body: 'By continuing you agree we may store this conversation to help with your request. We do not sell your personal data.',
       }
     case 'receipt':
       return {
+        inputs: [
+          { key: 'name', label: 'Name', type: 'string', required: false },
+          { key: 'order_id', label: 'Order id', type: 'string', required: false },
+        ],
         title: 'Order confirmation',
-        intro: 'Thanks {{vars.name}} — we’ve received your order {{vars.order_id}}.',
+        intro: 'Thanks {{inputs.name}} — we’ve received your order {{inputs.order_id}}.',
         footer: 'Reply to this chat if anything looks wrong.',
+      }
+    case 'document':
+      return {
+        format: 'pdf',
+        filename: 'agreement-{{inputs.name}}.pdf',
+        title: 'Service agreement',
+        intro: 'Prepared for {{inputs.name}} on {{prettify(utcNow())}}.',
+        body: 'By signing below, {{inputs.name}} agrees to the terms discussed in this conversation.',
+        footer: 'Generated by FlowForge.',
+        fields: [
+          { label: 'Full name', value: '{{inputs.name}}', as: 'text' },
+          { label: 'Email', value: '{{inputs.email}}', as: 'text' },
+          { label: 'Signature', value: '{{inputs.signature}}', as: 'image' },
+        ],
+        includeCart: false,
+        layout: 'flow',
+        blocks: [],
+        inputs: [
+          { key: 'name', label: 'Full name', type: 'string', required: true },
+          { key: 'email', label: 'Email', type: 'string', required: true },
+          { key: 'signature', label: 'Signature', type: 'file', required: true },
+        ],
       }
   }
 }
@@ -380,7 +649,7 @@ export function parseTemplateContent(kind: TemplateKind, raw: unknown): Template
   const c = asRecord(raw)
   switch (kind) {
     case 'email':
-      return { subject: str(c.subject), html: str(c.html) }
+      return { subject: str(c.subject), html: str(c.html), inputs: parseTemplateInputs(c.inputs) }
     case 'faq': {
       const items = Array.isArray(c.items)
         ? c.items.map((item) => {
@@ -388,7 +657,11 @@ export function parseTemplateContent(kind: TemplateKind, raw: unknown): Template
             return { question: str(row.question), answer: str(row.answer) }
           })
         : [{ question: '', answer: '' }]
-      return { intro: str(c.intro), items: items.length ? items : [{ question: '', answer: '' }] }
+      return {
+        intro: str(c.intro),
+        items: items.length ? items : [{ question: '', answer: '' }],
+        inputs: parseTemplateInputs(c.inputs),
+      }
     }
     case 'cart': {
       const fallbackCats = defaultStoreCategories()
@@ -452,10 +725,11 @@ export function parseTemplateContent(kind: TemplateKind, raw: unknown): Template
       return {
         title: str(c.title),
         items: items.length ? items : [{ label: '', description: '', value: '' }],
+        inputs: parseTemplateInputs(c.inputs),
       }
     }
     case 'message':
-      return { text: str(c.text) }
+      return { text: str(c.text), inputs: parseTemplateInputs(c.inputs) }
     case 'hours': {
       const days = Array.isArray(c.days)
         ? c.days.map((item) => {
@@ -468,12 +742,24 @@ export function parseTemplateContent(kind: TemplateKind, raw: unknown): Template
             }
           })
         : emptyHoursDays()
-      return { timezone: str(c.timezone), note: str(c.note), days: days.length ? days : emptyHoursDays() }
+      return {
+        timezone: str(c.timezone),
+        note: str(c.note),
+        days: days.length ? days : emptyHoursDays(),
+        inputs: parseTemplateInputs(c.inputs),
+      }
     }
     case 'legal':
-      return { title: str(c.title), body: str(c.body) }
+      return { title: str(c.title), body: str(c.body), inputs: parseTemplateInputs(c.inputs) }
     case 'receipt':
-      return { title: str(c.title, 'Your receipt'), intro: str(c.intro), footer: str(c.footer) }
+      return {
+        title: str(c.title, 'Your receipt'),
+        intro: str(c.intro),
+        footer: str(c.footer),
+        inputs: parseTemplateInputs(c.inputs),
+      }
+    case 'document':
+      return parseDocumentContent(c)
   }
 }
 
@@ -561,6 +847,15 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       const c = content as ReceiptContent
       return renderReceiptFromCart(c, null, null)
     }
+    case 'document': {
+      const c = content as DocumentContent
+      const fields = c.fields
+        .filter((f) => f.label.trim() || f.value.trim())
+        .map((f) => `${f.label.trim() || 'Field'}: ${f.value.trim()}`)
+      return [c.title.trim(), c.intro.trim(), ...fields, c.body.trim(), c.footer.trim()]
+        .filter(Boolean)
+        .join('\n')
+    }
   }
 }
 
@@ -601,6 +896,12 @@ export function templateExprValue(args: {
   }
   if (args.kind === 'receipt') {
     base.html = renderReceiptHtml(text)
+  }
+  if (args.kind === 'document') {
+    const c = content as DocumentContent
+    base.format = c.format
+    base.filename = c.filename
+    base.file = { __ffDoc: true, key: args.key, ...c }
   }
   return base
 }

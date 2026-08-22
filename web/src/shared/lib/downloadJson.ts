@@ -1,15 +1,24 @@
-/** Trigger a browser download of a JSON value. */
-export function downloadJson(filename: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+function triggerDownload(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = filename.endsWith('.json') ? filename : `${filename}.json`
+  a.download = filename
   a.rel = 'noopener'
   document.body.appendChild(a)
   a.click()
   a.remove()
   URL.revokeObjectURL(url)
+}
+
+/** Trigger a browser download of a Blob. */
+export function downloadBlob(filename: string, blob: Blob) {
+  triggerDownload(filename, blob)
+}
+
+/** Trigger a browser download of a JSON value. */
+export function downloadJson(filename: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  triggerDownload(filename.endsWith('.json') ? filename : `${filename}.json`, blob)
 }
 
 /** Open a file picker and parse JSON. */

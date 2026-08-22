@@ -234,6 +234,14 @@ function edge(source: string, target: string, extra?: Partial<DesignerEdge>): De
 }
 
 {
+  const nodes = [node('q1', 'question', { prompt: 'Please sign', answerType: 'signature', outputVariable: 'signature' })]
+  const next = suggestNextSteps({ nodes, edges: [], afterNodeId: 'q1' })
+  const doc = next.find((s) => s.label === 'Send filled file')
+  assert(doc, `after signature → filled file, got ${next.map((s) => s.label).join(', ')}`)
+  assert(String(doc!.seed?.config?.text ?? '').includes('templates.agreement.file'), 'document insert snippet')
+}
+
+{
   const nodes = [node('h1', 'http', { method: 'GET', path: '/items', outputVariable: 'items' })]
   const next = suggestNextSteps({ nodes, edges: [], afterNodeId: 'h1' })
   assert(next.some((s) => s.type === 'condition'), 'after HTTP → condition')

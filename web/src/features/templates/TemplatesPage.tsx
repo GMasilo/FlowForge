@@ -6,6 +6,7 @@ import {
   Check,
   Clock3,
   Copy,
+  FileDown,
   LayoutList,
   Mail,
   MessageSquare,
@@ -35,11 +36,13 @@ import { TemplateContentEditor } from '@/features/templates/TemplateContentEdito
 import {
   emptyTemplateContent,
   insertSnippet,
+  inputSuggestionsFromTemplate,
   isTemplateKind,
   keyFromTemplateName,
   parseTemplateContent,
   renderTemplateText,
   starterTemplateContent,
+  templateInputsOf,
   TEMPLATE_KIND_META,
   TEMPLATE_KINDS,
   type TemplateContent,
@@ -62,6 +65,7 @@ const KIND_ICONS: Record<TemplateKind, typeof Mail> = {
   hours: Clock3,
   legal: Scale,
   receipt: Receipt,
+  document: FileDown,
 }
 
 type EditorState = {
@@ -142,16 +146,23 @@ export function TemplatesPage() {
     [mediaQuery.data],
   )
 
-  const suggestions = useMemo(
-    () =>
-      (templates.data ?? []).map((row) => ({
-        insert: insertSnippet(row.key, row.kind),
-        label: row.key,
-        group: 'Templates',
-        detail: row.name,
-      })),
-    [templates.data],
-  )
+  const suggestions = useMemo(() => {
+    const fromTemplates = (templates.data ?? []).map((row) => ({
+      insert: insertSnippet(row.key, row.kind),
+      label: row.key,
+      group: 'Templates',
+      detail: row.name,
+    }))
+    const fromInputs = editor
+      ? inputSuggestionsFromTemplate(templateInputsOf(editor.content)).map((row) => ({
+          insert: row.insert,
+          label: row.label,
+          group: 'Inputs',
+          detail: row.hint,
+        }))
+      : []
+    return [...fromInputs, ...fromTemplates]
+  }, [templates.data, editor])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()

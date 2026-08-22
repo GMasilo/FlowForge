@@ -27,11 +27,19 @@ import {
 } from 'date-fns'
 import { formatMediaForText, renderFileValue } from '../model/chatbotMedia'
 import {
+  documentContentFromExpr,
+  encodeDocumentEmbed,
+  fillDocumentSnapshot,
+  isDocumentExprValue,
+} from '@/features/templates/documentFill'
+import {
   findCartInVars,
   findPaymentInVars,
+  parseTemplateBindingMap,
   renderReceiptFromCart,
   renderReceiptHtml,
   type ReceiptContent,
+  type TemplateBindingMap,
 } from '@/features/templates/templateModel'
 
 export type ExprContext = {
@@ -39,6 +47,10 @@ export type ExprContext = {
   steps: Record<string, unknown>
   media?: Record<string, unknown>
   templates?: Record<string, unknown>
+  /** Resolved template inputs for the template currently being filled. */
+  inputs?: Record<string, unknown>
+  /** Step-level bindings: templateKey → inputKey → expression or literal. */
+  templateBindings?: TemplateBindingMap
   /** When true, media files in chat templates become inline previews. */
   embedMedia?: boolean
 }
@@ -941,6 +953,10 @@ class Parser {
 function resolvePath(parts: string[], ctx: ExprContext): unknown {
   if (parts.length < 2) return undefined
   const [kind, name, ...rest] = parts
+  if (kind === 'inputs') {
+    const value = ctx.inputs?.[name!]
+    return rest.length ? getByPath(value, rest) : value
+  }
   const root =
     kind === 'vars'
       ? ctx.vars[name!]
@@ -951,15 +967,45 @@ function resolvePath(parts: string[], ctx: ExprContext): unknown {
           : kind === 'templates'
             ? ctx.templates?.[name!]
             : undefined
-  if (kind === 'templates' && name && isReceiptTemplate(root)) {
+  if (kind === 'templates' && name && root && typeof root === 'object' && !Array.isArray(root)) {
+    const tpl = root as Record<string, unknown>
+    const fillCtx = ctxForTemplate(ctx, name)
     const field = rest[0]
-    if (field === 'text' || field === 'html') {
-      const filled = filledReceiptText(root, ctx, name)
+    if (isReceiptTemplate(tpl) && (field === 'text' || field === 'html')) {
+      const filled = filledReceiptText(tpl, fillCtx, name)
       const value = field === 'html' ? renderReceiptHtml(filled) : filled
       return rest.length > 1 ? getByPath(value, rest.slice(1)) : value
     }
+    if (tpl.kind !== 'cart' && field && COPY_STRING_FIELDS.has(field) && typeof tpl[field] === 'string') {
+      const filled = filledCopyString(String(tpl[field]), fillCtx, `${name}.${field}`)
+      return rest.length > 1 ? getByPath(filled, rest.slice(1)) : filled
+    }
   }
   return rest.length ? getByPath(root, rest) : root
+}
+
+const COPY_STRING_FIELDS = new Set([
+  'text',
+  'html',
+  'subject',
+  'body',
+  'title',
+  'intro',
+  'footer',
+  'filename',
+  'note',
+])
+
+function ctxForTemplate(ctx: ExprContext, templateKey: string): ExprContext {
+  const bindings = ctx.templateBindings?.[templateKey] ?? parseTemplateBindingMap(undefined)
+  const inputs: Record<string, unknown> = { ...(ctx.inputs ?? {}) }
+  const bindCtx: ExprContext = { ...ctx, inputs }
+  for (const [key, raw] of Object.entries(bindings)) {
+    const trimmed = raw.trim()
+    if (!trimmed) continue
+    inputs[key] = resolveExpressionValue(trimmed, bindCtx)
+  }
+  return { ...ctx, inputs }
 }
 
 function isReceiptTemplate(value: unknown): value is Record<string, unknown> {
@@ -967,6 +1013,17 @@ function isReceiptTemplate(value: unknown): value is Record<string, unknown> {
 }
 
 const receiptFillGuard = new Set<string>()
+const copyFillGuard = new Set<string>()
+
+function filledCopyString(raw: string, ctx: ExprContext, guardKey: string): string {
+  if (copyFillGuard.has(guardKey)) return raw
+  copyFillGuard.add(guardKey)
+  try {
+    return interpolateTemplate(raw, ctx)
+  } finally {
+    copyFillGuard.delete(guardKey)
+  }
+}
 
 function filledReceiptText(tpl: Record<string, unknown>, ctx: ExprContext, templateKey: string): string {
   if (receiptFillGuard.has(templateKey)) {
@@ -978,6 +1035,7 @@ function filledReceiptText(tpl: Record<string, unknown>, ctx: ExprContext, templ
       title: interpolateTemplate(String(tpl.title ?? ''), ctx),
       intro: interpolateTemplate(String(tpl.intro ?? ''), ctx),
       footer: interpolateTemplate(String(tpl.footer ?? ''), ctx),
+      inputs: Array.isArray(tpl.inputs) ? (tpl.inputs as ReceiptContent['inputs']) : [],
     }
     return renderReceiptFromCart(content, findCartInVars(ctx.vars), findPaymentInVars(ctx.vars, ctx.steps))
   } finally {
@@ -991,7 +1049,7 @@ export function looksLikeExpression(source: string): boolean {
   if (!t) return false
   if (/^\{\{[\s\S]*\}\}$/.test(t)) return true
   if (/^[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(t)) return true
-  if (/^(vars|steps|media|templates)\./.test(t)) return true
+  if (/^(vars|steps|media|templates|inputs)\./.test(t)) return true
   if (/^["'\d\-!(]/.test(t) && /[+\-*/%<>=!&|?]/.test(t)) return true
   return false
 }
@@ -1011,7 +1069,36 @@ export function tryEvaluateExpression(source: string, ctx: ExprContext): ExprRes
   }
 }
 
+const documentFillGuard = new Set<string>()
+
+function formatDocumentForText(value: unknown, ctx: ExprContext): string | null {
+  if (!isDocumentExprValue(value)) return null
+  const rec = value as Record<string, unknown>
+  const key = typeof rec.key === 'string' ? rec.key : ''
+  if (key && documentFillGuard.has(key)) {
+    return typeof rec.filename === 'string' && rec.filename ? rec.filename : 'document'
+  }
+  if (key) documentFillGuard.add(key)
+  try {
+    const content = documentContentFromExpr(value)
+    if (!content) return null
+    const fillCtx = key ? ctxForTemplate(ctx, key) : ctx
+    const filled = fillDocumentSnapshot(
+      content,
+      (source) => interpolateTemplate(source, fillCtx),
+      (source) => resolveExpressionValue(source, fillCtx),
+      ctx.vars,
+    )
+    if (ctx.embedMedia) return encodeDocumentEmbed(filled)
+    return filled.filename
+  } finally {
+    if (key) documentFillGuard.delete(key)
+  }
+}
+
 function formatForText(value: unknown, ctx: ExprContext): string {
+  const document = formatDocumentForText(value, ctx)
+  if (document !== null) return document
   const embedded = formatMediaForText(value, ctx.embedMedia === true)
   if (embedded !== null) return embedded
   if (value === undefined || value === null) return ''
@@ -1079,7 +1166,7 @@ export function collectPathRefs(source: string): string[] {
 
   // Bare expression fields without braces still reference vars./steps./media.
   const withoutBraces = source.replace(/\{\{[\s\S]*?\}\}/g, ' ')
-  if (looksLikeExpression(source.trim()) || /(?:^|[^.\w])(vars|steps|media)\./.test(withoutBraces)) {
+  if (looksLikeExpression(source.trim()) || /(?:^|[^.\w])(vars|steps|media|templates|inputs)\./.test(withoutBraces)) {
     scanPathLiterals(withoutBraces).forEach(push)
   }
 
@@ -1090,7 +1177,7 @@ function scanPathLiterals(source: string): string[] {
   const refs: string[] = []
   // Strip string literals so we don't pick paths inside quotes
   const scrubbed = source.replace(/(['"])(?:\\.|(?!\1).)*\1/g, '""')
-  const re = /\b(vars|steps|media)\.[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*/g
+  const re = /\b(vars|steps|media|templates|inputs)\.[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*/g
   let m: RegExpExecArray | null
   while ((m = re.exec(scrubbed)) !== null) {
     refs.push(m[0])

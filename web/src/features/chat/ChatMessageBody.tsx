@@ -1,4 +1,5 @@
 import { ChatMediaAttachments } from '@/features/chat/ChatMediaAttachments'
+import { DocumentDownloadChip } from '@/features/chat/DocumentDownloadChip'
 import { parseChatSegments, type ChatbotMediaFile } from '@/features/designer/model/chatbotMedia'
 import { cn } from '@/shared/lib/utils'
 
@@ -21,6 +22,8 @@ export function ChatMessageBody({
           <p key={`t-${i}`} className="whitespace-pre-wrap break-words">
             {seg.text}
           </p>
+        ) : seg.kind === 'document' ? (
+          <DocumentDownloadChip key={`d-${i}-${seg.document.filename}`} document={seg.document} />
         ) : (
           <ChatMediaAttachments key={`f-${i}-${seg.file.key}`} items={[seg.file]} className="mt-0" />
         ),

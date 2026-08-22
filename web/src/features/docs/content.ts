@@ -1002,15 +1002,7 @@ export const DOC_SECTIONS: DocSection[] = [
     body: [
       {
         paragraphs: [
-          'Each chatbot has a Media library on the Design page. Uploads are stored per instance and chatbot under api/files/{instance}/{chatbot}/media. Attach files on Message, Question, and End steps so they appear with that prompt in Preview and published chat. Images, video, and audio play inline; PDFs and other documents show as download links. In the Media panel you can Open a file in a new tab or Download it to your device.',
-        ],
-      },
-      {
-        heading: 'Open and download',
-        bullets: [
-          'Open — preview inline in the browser (uses /file/get). Good for PDFs and images already in the library.',
-          'Download — save a copy with the original filename (uses /document/download with authentication).',
-          'View metadata — the API can return size, MIME type, and a text preview for small text files (/document/view).',
+          'Each chatbot has a Media library on the Design page. Uploads are stored per instance and chatbot. Attach files on Message, Question, and End steps so they appear with that prompt in Preview and published chat. Images, video, and audio play inline; other files show as download links.',
         ],
       },
       {
@@ -1137,7 +1129,7 @@ export const DOC_SECTIONS: DocSection[] = [
       },
       {
         paragraphs: [
-          'Copy templates declare named inputs ({{inputs.name}} in the body). Bind those inputs on the Message, Question, End, Email, or OTP step that inserts the template — a variable, a step output, or a literal. Leftover {{vars.name}} placeholders still interpolate at send time. If a required input has no binding, or a leftover variable is not set before the step, Problems flags that step.',
+          'Copy templates declare named inputs ({{inputs.name}} in the body). Bind those inputs on the Message, Question, End, Email, or OTP step that inserts the template — a variable, a step output, or a literal. Leftover {{vars.name}} placeholders still interpolate. If a required input has no binding, or a leftover variable is not set before the step, Problems flags that step.',
         ],
       },
       {
@@ -1411,18 +1403,6 @@ export const FAQ_ITEMS: FaqItem[] = [
       'Use {{vars.userAnswer}} or {{steps.ask_name.response}} in chat and email steps, depending on where you stored the value. Copy templates use {{inputs.key}} in the body; bind those inputs on the inserting step. Template fields offer suggestions as you type. After a Shop question, use {{vars.cart.total}} (or {{vars.cart.subtotal}} / {{vars.cart.feesTotal}}) on later steps.',
   },
   {
-    id: 'document-download',
-    question: 'How do I let visitors download a filled PDF, Word, or Excel file?',
-    answer:
-      'On Templates, create a Downloadable file (PDF, Word, or Excel). Declare inputs on the template ({{inputs.name}}, {{inputs.signature}} for a drawn signature) and bind them on the Message or End step that inserts {{templates.your_key.file}}. Use List layout for a stacked form, or Page layout to place blocks on an A4 page. Visitors get a download chip; the file is filled when they click it.',
-  },
-  {
-    id: 'document-files-media',
-    question: 'How do I open or download a file from the Media library?',
-    answer:
-      'On Design, open the Media panel for your chatbot. Each uploaded file has Open (preview in a new tab) and Download (save to disk). Files live under api/files/{instance}/{chatbot}/media. Attach them on Message, Question, or End steps, or reference them with {{media.key}} and {{renderFile(media.key)}} in message text.',
-  },
-  {
     id: 'shop-cart',
     question: 'How do shop carts and checkout fees work?',
     answer:
@@ -1432,13 +1412,19 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'insert-template-kinds',
     question: 'Why can’t I insert a store catalog on a Payment question?',
     answer:
-      'On a question, Insert Template and {{ suggestions only list templates that match the Response type. Store catalogs belong on Shop. Payment can insert chat copy and receipts. HTML email is picked on Email steps and OTP fields, not in a chat prompt. Message and Email steps after Payment can insert a receipt as {{templates.key.text}} or {{templates.key.html}}. Problems warns if a non-Shop prompt already references a catalog — inserting one there can loop cart copy back into checkout.',
+      'On a question, Insert Template and {{ suggestions only list templates that match the Response type. Store catalogs belong on Shop. Payment can insert chat copy and receipts. HTML email is picked on Email steps and OTP fields, not in a chat prompt. Message and End steps can insert a downloadable file as {{templates.key.file}}. Message and Email steps after Payment can insert a receipt as {{templates.key.text}} or {{templates.key.html}}. Problems warns if a non-Shop prompt already references a catalog — inserting one there can loop cart copy back into checkout.',
   },
   {
     id: 'media-attach',
     question: 'How do I show an image or file in a chatbot message?',
     answer:
-      'Open Design, upload the file in the Media library, then attach it on a Message, Question, or End step — or insert {{renderFile(media.filename_ext)}} in the message text to show a preview (welcome.png becomes {{renderFile(media.welcome_png)}}). Use {{media.welcome_png.url}} when you need the link itself. From the Media panel you can also Open or Download library files directly.',
+      'Open Design, upload the file in the Media library, then attach it on a Message, Question, or End step — or insert {{renderFile(media.filename_ext)}} in the message text to show a preview (welcome.png becomes {{renderFile(media.welcome_png)}}). Use {{media.welcome_png.url}} when you need the link itself.',
+  },
+  {
+    id: 'document-download',
+    question: 'How do I let visitors download a filled PDF, Word, or Excel file?',
+    answer:
+      'On Templates, create a Downloadable file (PDF, Word, or Excel). Declare inputs on the template ({{inputs.name}}, {{inputs.signature}} for a drawn signature) and bind them on the Message or End step that inserts {{templates.your_key.file}}. Use List layout for a stacked form, or Page layout to place blocks on an A4 page: drag to move, type millimetres for Left/Top/Width/Height (any decimals; lines down to 0.1 mm), snap to the grid (hold Alt to move freely), then set font, bold, and colors. PDF matches the page; Word and Excel follow the same order. Visitors get a download chip; the file is filled when they click it.',
   },
   {
     id: 'http-fail',
@@ -1490,12 +1476,7 @@ export const HELP_TOPICS = [
   },
   {
     title: 'Reuse templates in steps',
-    description: 'Create FAQ, email, and catalog templates with typed inputs. Bind {{inputs.key}} when inserting on a step.',
-    to: '/docs#templates',
-  },
-  {
-    title: 'Offer a filled PDF or document download',
-    description: 'Create a Downloadable file template, bind inputs on a Message or End step, and insert {{templates.key.file}}.',
+    description: 'Create FAQ, email, and catalog templates. On a question, Insert Template only offers kinds that match the Response type.',
     to: '/docs#templates',
   },
   {
@@ -1505,7 +1486,7 @@ export const HELP_TOPICS = [
   },
   {
     title: 'Attach media to a step',
-    description: 'Upload files in the Design page Media library, then attach, open, or download them on Message, Question, or End steps.',
+    description: 'Upload files in the Design page Media library, then attach them on Message, Question, or End steps.',
     to: '/docs#media',
   },
   {
