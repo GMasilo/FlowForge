@@ -24,6 +24,7 @@ import { ChatbotSettingsPage } from '@/features/chatbots/ChatbotSettingsPage'
 import { ChatbotDataPage } from '@/features/chatbots/ChatbotDataPage'
 import { TemplatesPage } from '@/features/templates/TemplatesPage'
 import { ConnectionsPage } from '@/features/connections/ConnectionsPage'
+import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
 import { DesignerPage } from '@/features/designer/DesignerPage'
 import { PublicChatPage } from '@/features/chat/PublicChatPage'
 import { PublicShell } from '@/features/docs/PublicShell'
@@ -68,6 +69,7 @@ export function App() {
                   <Route element={<AppShell />}>
                     <Route index element={<ChatbotsPage />} />
                     <Route path="connections" element={<ConnectionsPage />} />
+                    <Route path="integrations" element={<IntegrationsPage />} />
                     <Route path="members" element={<MembersPage />} />
                     <Route path="audit" element={<AuditLogPage />} />
                     <Route path="webhooks" element={<WebhooksPage />} />
