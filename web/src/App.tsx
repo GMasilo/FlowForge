@@ -16,6 +16,7 @@ import { MembersPage } from '@/features/instances/MembersPage'
 import { AuditLogPage } from '@/features/instances/AuditLogPage'
 import { WebhooksPage } from '@/features/instances/WebhooksPage'
 import { UsagePage } from '@/features/instances/UsagePage'
+import { AlertsPage } from '@/features/instances/AlertsPage'
 import { ConversationsPage } from '@/features/instances/ConversationsPage'
 import { ConversationDetailPage } from '@/features/instances/ConversationDetailPage'
 import { AnalyticsPage } from '@/features/instances/AnalyticsPage'
@@ -74,6 +75,7 @@ export function App() {
                     <Route path="audit" element={<AuditLogPage />} />
                     <Route path="webhooks" element={<WebhooksPage />} />
                     <Route path="usage" element={<UsagePage />} />
+                    <Route path="alerts" element={<AlertsPage />} />
                     <Route path="conversations" element={<ConversationsPage />} />
                     <Route path="conversations/:sessionId" element={<ConversationDetailPage />} />
                     <Route path="analytics" element={<AnalyticsPage />} />
