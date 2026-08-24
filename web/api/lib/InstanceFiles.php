@@ -334,6 +334,47 @@ final class InstanceFiles
     }
 
     /**
+     * Remove files/{instanceId}/{chatbotId} and all nested media/conversation files.
+     * Returns true when a directory existed and was removed (or was already gone).
+     */
+    public static function purgeChatbot(array $config, string $instanceId, string $chatbotId): bool
+    {
+        $base = self::chatbotBase($config, $instanceId, $chatbotId);
+        if (!is_dir($base)) {
+            return true;
+        }
+        if (!self::removeTree($base)) {
+            Response::error('Could not purge chatbot files', 500);
+        }
+        return true;
+    }
+
+    private static function removeTree(string $path): bool
+    {
+        if (!is_dir($path)) {
+            return !file_exists($path);
+        }
+        $entries = @scandir($path);
+        if (!is_array($entries)) {
+            return false;
+        }
+        foreach ($entries as $name) {
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            $child = $path . DIRECTORY_SEPARATOR . $name;
+            if (is_dir($child)) {
+                if (!self::removeTree($child)) {
+                    return false;
+                }
+            } elseif (!@unlink($child)) {
+                return false;
+            }
+        }
+        return @rmdir($path);
+    }
+
+    /**
      * @return array{tmp: string, name: string, size: int, error: int}
      */
     public static function requireUploadedFile(array $config): array
