@@ -32,7 +32,7 @@ export function SearchField({
       {value ? (
         <button
           type="button"
-          className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-[var(--color-ink-muted)] hover:bg-slate-100 hover:text-slate-800"
+          className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink)]"
           aria-label="Clear search"
           onClick={() => onChange('')}
         >
@@ -58,7 +58,7 @@ export function BulkActionBar({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-2 rounded-xl border border-teal-200/80 bg-teal-50/70 px-3 py-2 text-sm text-teal-950',
+        'flex flex-wrap items-center gap-2 rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent-soft)]/70 px-3 py-2 text-sm text-[var(--color-ink)]',
         className,
       )}
       role="status"
@@ -67,7 +67,7 @@ export function BulkActionBar({
       <Button type="button" variant="ghost" size="sm" onClick={onClear}>
         Clear
       </Button>
-      <span className="hidden h-4 w-px bg-teal-300/70 sm:block" />
+      <span className="hidden h-4 w-px bg-[var(--color-accent)]/40 sm:block" />
       <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
   )
@@ -91,7 +91,7 @@ export function RowCheckbox({
       onChange={(e) => onChange(e.target.checked)}
       aria-label={label}
       className={cn(
-        'mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-teal-700 focus:ring-teal-500/30',
+        'mt-1 h-4 w-4 shrink-0 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]/30',
         className,
       )}
     />

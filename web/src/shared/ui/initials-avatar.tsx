@@ -76,7 +76,7 @@ export function InitialsAvatar({
   return (
     <span
       className={cn(
-        'inline-grid shrink-0 place-items-center rounded-full font-semibold tracking-wide text-white shadow-[inset_0_1px_0_rgb(255_255_255_/_0.22),0_6px_14px_-8px_rgb(15_23_42_/_0.45)] ring-2 ring-white/70',
+        'inline-grid shrink-0 place-items-center rounded-full font-semibold tracking-wide text-white shadow-[inset_0_1px_0_rgb(255_255_255_/_0.22),0_6px_14px_-8px_rgb(15_23_42_/_0.45)] ring-2 ring-[var(--color-surface)]',
         sizeClass[size],
         className,
       )}

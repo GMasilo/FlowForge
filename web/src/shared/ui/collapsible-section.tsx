@@ -46,8 +46,9 @@ export function CollapsibleSection({
     <div
       className={cn(
         asCard &&
-          'rounded-2xl border border-white/60 bg-white/80 p-5 shadow-[var(--shadow-soft)] backdrop-blur-xl transition-shadow duration-300',
-        nested && 'rounded-xl border border-slate-200/90 bg-white/60 p-3',
+          'rounded-2xl border border-[var(--color-border)]/60 bg-[var(--color-surface)]/85 p-5 shadow-[var(--shadow-soft)] backdrop-blur-xl transition-shadow duration-300',
+        nested &&
+          'rounded-xl border border-[var(--color-border)]/90 bg-[var(--color-surface-2)]/60 p-3',
         className,
       )}
     >
@@ -59,20 +60,20 @@ export function CollapsibleSection({
           onClick={() => setOpen(!open)}
           className={cn(
             'group flex min-w-0 flex-1 items-start gap-2 rounded-lg text-left outline-none',
-            'focus-visible:ring-2 focus-visible:ring-teal-500/40',
+            'focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/40',
           )}
         >
           <ChevronRight
             className={cn(
-              'mt-1 h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200',
-              open && 'rotate-90 text-teal-700',
+              'mt-1 h-4 w-4 shrink-0 text-[var(--color-ink-muted)] transition-transform duration-200',
+              open && 'rotate-90 text-[var(--color-accent)]',
             )}
             aria-hidden
           />
           <span className="min-w-0">
             <span
               className={cn(
-                'flex flex-wrap items-center gap-2 font-medium text-slate-900',
+                'flex flex-wrap items-center gap-2 font-medium text-[var(--color-ink)]',
                 nested ? 'text-sm font-semibold' : 'text-lg',
               )}
             >
