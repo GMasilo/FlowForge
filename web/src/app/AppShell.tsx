@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom'
 import { ChevronDown, CircleHelp, LogOut, Shield, Sparkles } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -35,7 +36,7 @@ export function AppShell() {
             <InstanceHeaderBits />
           </div>
 
-          <div className="hidden min-w-0 flex-1 justify-center overflow-x-auto md:flex">
+          <div className="hidden min-w-0 flex-1 justify-center md:flex">
             <InstanceNav />
           </div>
 
@@ -133,10 +134,12 @@ function InstanceNav() {
   ]
 
   return (
-    <nav className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-[var(--color-border)]/70 bg-[var(--color-surface)]/50 p-1">
-      {primaryLinks.map((link) => (
-        <NavPill key={link.to} link={link} pathname={location.pathname} />
-      ))}
+    <nav className="inline-flex max-w-full items-center gap-1 rounded-xl border border-[var(--color-border)]/70 bg-[var(--color-surface)]/50 p-1">
+      <div className="inline-flex min-w-0 items-center gap-1 overflow-x-auto">
+        {primaryLinks.map((link) => (
+          <NavPill key={link.to} link={link} pathname={location.pathname} />
+        ))}
+      </div>
 
       {isAdmin ? (
         <AdminNavMenu links={adminLinks} pathname={location.pathname} />
@@ -166,21 +169,54 @@ function NavPill({ link, pathname }: { link: NavLinkItem; pathname: string }) {
 
 function AdminNavMenu({ links, pathname }: { links: NavLinkItem[]; pathname: string }) {
   const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const menuId = useId()
   const adminActive = links.some((l) => pathname.startsWith(l.to))
 
+  const updatePosition = () => {
+    const btn = buttonRef.current
+    if (!btn) return
+    const rect = btn.getBoundingClientRect()
+    const menuWidth = 176
+    const padding = 8
+    let left = rect.left
+    if (left + menuWidth > window.innerWidth - padding) {
+      left = Math.max(padding, rect.right - menuWidth)
+    }
+    setCoords({ top: rect.bottom + 6, left })
+  }
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setCoords(null)
+      return
+    }
+    updatePosition()
+  }, [open])
+
   useEffect(() => {
     if (!open) return
+    function onScrollOrResize() {
+      updatePosition()
+    }
     function onDoc(e: MouseEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (buttonRef.current?.contains(target)) return
+      if (menuRef.current?.contains(target)) return
+      setOpen(false)
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false)
     }
+    window.addEventListener('resize', onScrollOrResize)
+    window.addEventListener('scroll', onScrollOrResize, true)
     document.addEventListener('mousedown', onDoc)
     document.addEventListener('keydown', onKey)
     return () => {
+      window.removeEventListener('resize', onScrollOrResize)
+      window.removeEventListener('scroll', onScrollOrResize, true)
       document.removeEventListener('mousedown', onDoc)
       document.removeEventListener('keydown', onKey)
     }
@@ -190,9 +226,44 @@ function AdminNavMenu({ links, pathname }: { links: NavLinkItem[]; pathname: str
     setOpen(false)
   }, [pathname])
 
+  const menu =
+    open && coords
+      ? createPortal(
+          <div
+            ref={menuRef}
+            id={menuId}
+            role="menu"
+            aria-label="Admin"
+            style={{ position: 'fixed', top: coords.top, left: coords.left, zIndex: 100 }}
+            className="min-w-[11rem] overflow-hidden rounded-xl border border-[var(--color-border)]/70 bg-[var(--color-surface)] p-1 shadow-[var(--shadow-soft)]"
+          >
+            {links.map((link) => {
+              const active = pathname.startsWith(link.to)
+              return (
+                <Link
+                  key={link.to}
+                  role="menuitem"
+                  to={link.to}
+                  className={cn(
+                    'block rounded-lg px-3 py-2 text-sm font-medium transition',
+                    active
+                      ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
+                      : 'text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]',
+                  )}
+                >
+                  {link.label}
+                </Link>
+              )
+            })}
+          </div>,
+          document.body,
+        )
+      : null
+
   return (
-    <div ref={rootRef} className="relative shrink-0">
+    <div className="relative shrink-0">
       <button
+        ref={buttonRef}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -212,34 +283,7 @@ function AdminNavMenu({ links, pathname }: { links: NavLinkItem[]; pathname: str
           aria-hidden
         />
       </button>
-
-      {open ? (
-        <div
-          id={menuId}
-          role="menu"
-          aria-label="Admin"
-          className="absolute left-0 top-full z-30 mt-1.5 min-w-[11rem] overflow-hidden rounded-xl border border-[var(--color-border)]/70 bg-[var(--color-surface)]/95 p-1 shadow-[var(--shadow-soft)] backdrop-blur-xl"
-        >
-          {links.map((link) => {
-            const active = pathname.startsWith(link.to)
-            return (
-              <Link
-                key={link.to}
-                role="menuitem"
-                to={link.to}
-                className={cn(
-                  'block rounded-lg px-3 py-2 text-sm font-medium transition',
-                  active
-                    ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
-                    : 'text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]',
-                )}
-              >
-                {link.label}
-              </Link>
-            )
-          })}
-        </div>
-      ) : null}
+      {menu}
     </div>
   )
 }
