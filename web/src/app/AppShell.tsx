@@ -1,5 +1,6 @@
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom'
-import { CircleHelp, LogOut, Sparkles } from 'lucide-react'
+import { ChevronDown, CircleHelp, LogOut, Shield, Sparkles } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { Button } from '@/shared/ui/button'
 import { Badge } from '@/shared/ui/badge'
@@ -105,6 +106,8 @@ function InstanceHeaderBits() {
   )
 }
 
+type NavLinkItem = { to: string; label: string; end?: boolean }
+
 function InstanceNav() {
   const { instanceId } = useParams()
   const ctx = useInstanceContext()
@@ -112,43 +115,131 @@ function InstanceNav() {
   if (!instanceId || !ctx?.instance) return null
 
   const isAdmin = canAdmin(ctx.role)
-  const links = [
-    { to: `/instances/${instanceId}`, label: 'Chatbots', end: true },
-    { to: `/instances/${instanceId}/connections`, label: 'Connections', end: false },
-    { to: `/instances/${instanceId}/conversations`, label: 'Conversations', end: false },
-    { to: `/instances/${instanceId}/analytics`, label: 'Analytics', end: false },
-    { to: `/instances/${instanceId}/members`, label: 'Users', end: false },
-    ...(isAdmin
-      ? [
-          { to: `/instances/${instanceId}/integrations`, label: 'Integrations', end: false },
-          { to: `/instances/${instanceId}/audit`, label: 'Audit', end: false },
-          { to: `/instances/${instanceId}/webhooks`, label: 'Webhooks', end: false },
-          { to: `/instances/${instanceId}/usage`, label: 'Usage', end: false },
-        ]
-      : []),
+  const base = `/instances/${instanceId}`
+
+  const primaryLinks: NavLinkItem[] = [
+    { to: base, label: 'Chatbots', end: true },
+    { to: `${base}/connections`, label: 'Connections' },
+    { to: `${base}/conversations`, label: 'Conversations' },
+    { to: `${base}/analytics`, label: 'Analytics' },
+  ]
+
+  const adminLinks: NavLinkItem[] = [
+    { to: `${base}/members`, label: 'Users' },
+    { to: `${base}/integrations`, label: 'Integrations' },
+    { to: `${base}/audit`, label: 'Audit' },
+    { to: `${base}/webhooks`, label: 'Webhooks' },
+    { to: `${base}/usage`, label: 'Usage' },
   ]
 
   return (
     <nav className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-[var(--color-border)]/70 bg-[var(--color-surface)]/50 p-1">
-      {links.map((link) => {
-        const active = link.end
-          ? location.pathname === link.to
-          : location.pathname.startsWith(link.to)
-        return (
-          <Link
-            key={link.to}
-            to={link.to}
-            className={cn(
-              'shrink-0 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-all duration-200',
-              active
-                ? 'bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] text-[var(--color-accent-fg)] shadow-sm'
-                : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)] hover:shadow-sm',
-            )}
-          >
-            {link.label}
-          </Link>
-        )
-      })}
+      {primaryLinks.map((link) => (
+        <NavPill key={link.to} link={link} pathname={location.pathname} />
+      ))}
+
+      {isAdmin ? (
+        <AdminNavMenu links={adminLinks} pathname={location.pathname} />
+      ) : (
+        <NavPill link={{ to: `${base}/members`, label: 'Users' }} pathname={location.pathname} />
+      )}
     </nav>
+  )
+}
+
+function NavPill({ link, pathname }: { link: NavLinkItem; pathname: string }) {
+  const active = link.end ? pathname === link.to : pathname.startsWith(link.to)
+  return (
+    <Link
+      to={link.to}
+      className={cn(
+        'shrink-0 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-all duration-200',
+        active
+          ? 'bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] text-[var(--color-accent-fg)] shadow-sm'
+          : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)] hover:shadow-sm',
+      )}
+    >
+      {link.label}
+    </Link>
+  )
+}
+
+function AdminNavMenu({ links, pathname }: { links: NavLinkItem[]; pathname: string }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const menuId = useId()
+  const adminActive = links.some((l) => pathname.startsWith(l.to))
+
+  useEffect(() => {
+    if (!open) return
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  useEffect(() => {
+    setOpen(false)
+  }, [pathname])
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={menuId}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          'inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-all duration-200',
+          adminActive || open
+            ? 'bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] text-[var(--color-accent-fg)] shadow-sm'
+            : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)] hover:shadow-sm',
+        )}
+      >
+        <Shield className="h-3.5 w-3.5" aria-hidden />
+        Admin
+        <ChevronDown
+          className={cn('h-3.5 w-3.5 transition-transform duration-200', open && 'rotate-180')}
+          aria-hidden
+        />
+      </button>
+
+      {open ? (
+        <div
+          id={menuId}
+          role="menu"
+          aria-label="Admin"
+          className="absolute left-0 top-full z-30 mt-1.5 min-w-[11rem] overflow-hidden rounded-xl border border-[var(--color-border)]/70 bg-[var(--color-surface)]/95 p-1 shadow-[var(--shadow-soft)] backdrop-blur-xl"
+        >
+          {links.map((link) => {
+            const active = pathname.startsWith(link.to)
+            return (
+              <Link
+                key={link.to}
+                role="menuitem"
+                to={link.to}
+                className={cn(
+                  'block rounded-lg px-3 py-2 text-sm font-medium transition',
+                  active
+                    ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
+                    : 'text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]',
+                )}
+              >
+                {link.label}
+              </Link>
+            )
+          })}
+        </div>
+      ) : null}
+    </div>
   )
 }
