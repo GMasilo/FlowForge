@@ -40,15 +40,15 @@ export function LoginPage() {
             Need an account? Ask your organisation admin for an invite link.
           </p>
           <p className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
-            <Link className="hover:text-teal-800" to="/help">
+            <Link className="hover:text-[var(--color-accent)]" to="/help">
               Help
             </Link>
             <span className="text-[var(--color-border)]">·</span>
-            <Link className="hover:text-teal-800" to="/docs">
+            <Link className="hover:text-[var(--color-accent)]" to="/docs">
               Docs
             </Link>
             <span className="text-[var(--color-border)]">·</span>
-            <Link className="hover:text-teal-800" to="/faq">
+            <Link className="hover:text-[var(--color-accent)]" to="/faq">
               FAQ
             </Link>
           </p>
@@ -66,7 +66,7 @@ export function LoginPage() {
               Password
             </Label>
             <Link
-              className="text-xs font-medium text-teal-700 hover:text-teal-800"
+              className="text-xs font-medium text-[var(--color-accent)] hover:opacity-90"
               to="/forgot-password"
             >
               Forgot password?
