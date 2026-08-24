@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { format } from 'date-fns'
 import { Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
-import { canAdmin, type InstanceWebhook } from '@/shared/types/database'
+import { canAdmin, type InstanceWebhook, type WebhookDelivery } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
@@ -42,6 +43,27 @@ export function WebhooksPage() {
         .order('created_at', { ascending: false })
       if (qError) throw qError
       return data as InstanceWebhook[]
+    },
+  })
+
+  const deliveries = useQuery({
+    queryKey: ['webhook-deliveries', instance.id],
+    enabled: isAdmin && !!hooks.data?.length,
+    queryFn: async () => {
+      const ids = (hooks.data ?? []).map((h) => h.id)
+      if (!ids.length) return [] as Array<WebhookDelivery & { webhook_name?: string }>
+      const { data, error: qError } = await supabase
+        .from('webhook_deliveries')
+        .select('*')
+        .in('webhook_id', ids)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (qError) throw qError
+      const nameById = new Map((hooks.data ?? []).map((h) => [h.id, h.name]))
+      return ((data ?? []) as WebhookDelivery[]).map((d) => ({
+        ...d,
+        webhook_name: nameById.get(d.webhook_id) ?? d.webhook_id.slice(0, 8),
+      }))
     },
   })
 
@@ -149,7 +171,7 @@ export function WebhooksPage() {
                       className={
                         on
                           ? 'rounded-lg bg-teal-600 px-2.5 py-1 text-xs font-medium text-white'
-                          : 'rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600'
+                          : 'rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-xs font-medium text-[var(--color-ink-muted)]'
                       }
                     >
                       {ev}
@@ -174,15 +196,15 @@ export function WebhooksPage() {
             <Card key={hook.id} className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-semibold text-slate-800">{hook.name}</h2>
+                  <h2 className="font-semibold text-[var(--color-ink)]">{hook.name}</h2>
                   <Badge>{hook.enabled ? 'Enabled' : 'Disabled'}</Badge>
                 </div>
-                <p className="mt-1 truncate font-mono text-xs text-slate-500">{hook.url}</p>
+                <p className="mt-1 truncate font-mono text-xs text-[var(--color-ink-muted)]">{hook.url}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {hook.events.map((ev) => (
                     <span
                       key={ev}
-                      className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
+                      className="rounded-md bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-ink-muted)]"
                     >
                       {ev}
                     </span>
@@ -210,6 +232,52 @@ export function WebhooksPage() {
           <p className="text-sm text-[var(--color-ink-muted)]">No webhooks configured.</p>
         </Card>
       )}
+
+      <Card className="overflow-hidden p-0">
+        <div className="border-b border-[var(--color-border)]/60 px-4 py-3">
+          <h2 className="text-sm font-semibold text-[var(--color-ink)]">Recent deliveries</h2>
+          <p className="text-[11px] text-[var(--color-ink-muted)]">
+            Last 50 attempts across this organisation’s webhooks
+          </p>
+        </div>
+        {deliveries.isLoading ? (
+          <p className="p-4 text-sm text-[var(--color-ink-muted)]">Loading deliveries…</p>
+        ) : deliveries.data?.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="border-b border-[var(--color-border)] bg-[var(--color-surface-2)] text-[11px] uppercase tracking-wide text-[var(--color-ink-muted)]">
+                <tr>
+                  <th className="px-4 py-2 font-semibold">When</th>
+                  <th className="px-4 py-2 font-semibold">Webhook</th>
+                  <th className="px-4 py-2 font-semibold">Event</th>
+                  <th className="px-4 py-2 font-semibold">Status</th>
+                  <th className="px-4 py-2 font-semibold">Error</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]/50">
+                {deliveries.data.map((d) => (
+                  <tr key={d.id}>
+                    <td className="whitespace-nowrap px-4 py-2 text-[var(--color-ink-muted)]">
+                      {format(new Date(d.created_at), 'yyyy-MM-dd HH:mm')}
+                    </td>
+                    <td className="px-4 py-2 font-medium text-[var(--color-ink)]">{d.webhook_name}</td>
+                    <td className="px-4 py-2 font-mono text-xs text-[var(--color-ink-muted)]">{d.event}</td>
+                    <td className="px-4 py-2">
+                      <Badge className={d.ok ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200'}>
+                        {d.ok ? 'OK' : 'Fail'}
+                        {d.status_code != null ? ` · ${d.status_code}` : ''}
+                      </Badge>
+                    </td>
+                    <td className="max-w-xs truncate px-4 py-2 text-rose-600">{d.error || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="p-4 text-sm text-[var(--color-ink-muted)]">No deliveries logged yet.</p>
+        )}
+      </Card>
     </div>
   )
 }
