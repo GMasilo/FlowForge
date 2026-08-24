@@ -16,6 +16,7 @@ $path = '/' . trim((string) $path, '/');
 $map = [
     '/health' => __DIR__ . '/health.php',
     '/http/execute' => __DIR__ . '/http/execute.php',
+    '/integration/execute' => __DIR__ . '/integration/execute.php',
     '/email/send' => __DIR__ . '/email/send.php',
     '/email/test' => __DIR__ . '/email/test.php',
     '/email/invite' => __DIR__ . '/email/invite.php',
