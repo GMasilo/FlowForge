@@ -1,0 +1,62 @@
+/* Dark-mode safety net: remap leftover light Tailwind utilities.
+   Covers className strings that still use bg-white / slate-* hardcodes. */
+
+html.dark [class*='bg-white'] {
+  background-color: var(--color-surface) !important;
+}
+html.dark [class*='bg-slate-50'],
+html.dark [class*='bg-slate-100'] {
+  background-color: var(--color-surface-2) !important;
+}
+html.dark [class*='border-white'] {
+  border-color: var(--color-border) !important;
+}
+html.dark [class*='border-slate-1'],
+html.dark [class*='border-slate-2'],
+html.dark [class*='border-slate-3'] {
+  border-color: var(--color-border) !important;
+}
+html.dark [class*='text-slate-9'],
+html.dark [class*='text-slate-8'],
+html.dark [class*='text-slate-7'] {
+  color: var(--color-ink) !important;
+}
+html.dark [class*='text-slate-6'],
+html.dark [class*='text-slate-5'],
+html.dark [class*='text-slate-4'] {
+  color: var(--color-ink-muted) !important;
+}
+html.dark [class*='bg-teal-50'] {
+  background-color: var(--color-accent-soft) !important;
+}
+html.dark [class*='hover:bg-white']:hover,
+html.dark [class*='hover:bg-slate-50']:hover,
+html.dark [class*='hover:bg-slate-100']:hover {
+  background-color: var(--color-surface-2) !important;
+}
+html.dark [class*='focus:bg-white']:focus {
+  background-color: var(--color-surface) !important;
+}
+
+/* React Flow / designer canvas */
+html.dark .react-flow__background {
+  background-color: var(--color-canvas) !important;
+}
+html.dark .react-flow__controls-button {
+  background: var(--color-surface) !important;
+  border-bottom-color: var(--color-border) !important;
+  fill: var(--color-ink) !important;
+}
+html.dark .react-flow__controls-button:hover {
+  background: var(--color-surface-2) !important;
+}
+html.dark .react-flow__minimap {
+  background-color: var(--color-surface) !important;
+}
+html.dark .react-flow__edge-path {
+  stroke: var(--color-border) !important;
+}
+html.dark .react-flow__attribution {
+  background: transparent !important;
+  color: var(--color-ink-muted) !important;
+}
