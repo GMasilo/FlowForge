@@ -700,6 +700,29 @@ export function validateFlow(
         }
       }
     }
+
+    if (node.type === 'integration') {
+      const integrationId = node.config.integrationId
+      if (typeof integrationId !== 'string' || !integrationId.trim()) {
+        issues.push({
+          severity: 'error',
+          nodeId: node.id,
+          field: 'integrationId',
+          code: 'missing_integration',
+          message: 'Integration step requires an integration',
+        })
+      }
+      const action = node.config.action
+      if (typeof action !== 'string' || !action.trim()) {
+        issues.push({
+          severity: 'error',
+          nodeId: node.id,
+          field: 'action',
+          code: 'missing_integration_action',
+          message: 'Integration step requires an action',
+        })
+      }
+    }
   }
 
   const endNodes = nodes.filter((n) => n.type === 'end')

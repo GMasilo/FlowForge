@@ -21,6 +21,8 @@ export function sessionStatusTone(status: ConversationSession['status']) {
       return 'bg-rose-50 text-rose-800'
     case 'abandoned':
       return 'bg-amber-50 text-amber-800'
+    case 'escalated':
+      return 'bg-violet-50 text-violet-800'
     default:
       return 'bg-sky-50 text-sky-800'
   }

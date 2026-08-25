@@ -21,6 +21,8 @@ export type FlowNodeType =
   | 'question'
   | 'http'
   | 'email'
+  | 'integration'
+  | 'handoff'
   | 'condition'
   | 'loop'
   | 'set_variable'
@@ -130,6 +132,10 @@ type Tables = {
       website: string | null
       billing_address: string | null
       notes: string | null
+      brand_display_name: string | null
+      brand_accent_color: string | null
+      brand_logo_url: string | null
+      brand_apply_to_public_chat: boolean
       http_host_allowlist: string[]
       quota_max_conversations_month: number
       quota_max_emails_month: number
@@ -148,6 +154,10 @@ type Tables = {
       website?: string | null
       billing_address?: string | null
       notes?: string | null
+      brand_display_name?: string | null
+      brand_accent_color?: string | null
+      brand_logo_url?: string | null
+      brand_apply_to_public_chat?: boolean
       http_host_allowlist?: string[]
       quota_max_conversations_month?: number
       quota_max_emails_month?: number
@@ -166,6 +176,10 @@ type Tables = {
       website?: string | null
       billing_address?: string | null
       notes?: string | null
+      brand_display_name?: string | null
+      brand_accent_color?: string | null
+      brand_logo_url?: string | null
+      brand_apply_to_public_chat?: boolean
       http_host_allowlist?: string[]
       quota_max_conversations_month?: number
       quota_max_emails_month?: number
@@ -505,6 +519,123 @@ type Tables = {
       integration_id?: string
       secrets?: Json
       updated_at?: string
+    }
+    Relationships: []
+  }
+  instance_alert_rules: {
+    Row: {
+      id: string
+      instance_id: string
+      name: string
+      metric: 'abandon_rate' | 'failed_sessions' | 'completion_rate_below' | 'quota_conversations_pct'
+      threshold: number
+      window_hours: number
+      enabled: boolean
+      notify_email: boolean
+      notify_slack: boolean
+      slack_integration_id: string | null
+      last_triggered_at: string | null
+      last_notified_at: string | null
+      created_by: string | null
+      created_at: string
+      updated_at: string
+    }
+    Insert: {
+      id?: string
+      instance_id: string
+      name: string
+      metric: 'abandon_rate' | 'failed_sessions' | 'completion_rate_below' | 'quota_conversations_pct'
+      threshold?: number
+      window_hours?: number
+      enabled?: boolean
+      notify_email?: boolean
+      notify_slack?: boolean
+      slack_integration_id?: string | null
+      last_triggered_at?: string | null
+      last_notified_at?: string | null
+      created_by?: string | null
+      created_at?: string
+      updated_at?: string
+    }
+    Update: {
+      id?: string
+      instance_id?: string
+      name?: string
+      metric?: 'abandon_rate' | 'failed_sessions' | 'completion_rate_below' | 'quota_conversations_pct'
+      threshold?: number
+      window_hours?: number
+      enabled?: boolean
+      notify_email?: boolean
+      notify_slack?: boolean
+      slack_integration_id?: string | null
+      last_triggered_at?: string | null
+      last_notified_at?: string | null
+      created_by?: string | null
+      created_at?: string
+      updated_at?: string
+    }
+    Relationships: []
+  }
+  instance_alert_settings: {
+    Row: {
+      instance_id: string
+      digest_enabled: boolean
+      digest_weekday: number
+      digest_slack_integration_id: string | null
+      last_digest_at: string | null
+      updated_at: string
+    }
+    Insert: {
+      instance_id: string
+      digest_enabled?: boolean
+      digest_weekday?: number
+      digest_slack_integration_id?: string | null
+      last_digest_at?: string | null
+      updated_at?: string
+    }
+    Update: {
+      instance_id?: string
+      digest_enabled?: boolean
+      digest_weekday?: number
+      digest_slack_integration_id?: string | null
+      last_digest_at?: string | null
+      updated_at?: string
+    }
+    Relationships: []
+  }
+  alert_deliveries: {
+    Row: {
+      id: string
+      instance_id: string
+      rule_id: string | null
+      kind: 'threshold' | 'digest'
+      channel: 'email' | 'slack'
+      payload: Json
+      ok: boolean
+      error: string | null
+      created_at: string
+    }
+    Insert: {
+      id?: string
+      instance_id: string
+      rule_id?: string | null
+      kind: 'threshold' | 'digest'
+      channel: 'email' | 'slack'
+      payload?: Json
+      ok?: boolean
+      error?: string | null
+      created_at?: string
+    }
+    Update: {
+      id?: string
+      instance_id?: string
+      rule_id?: string | null
+      kind?: 'threshold' | 'digest'
+      channel?: 'email' | 'slack'
+      payload?: Json
+      ok?: boolean
+      error?: string | null
+      created_at?: string
     }
     Relationships: []
   }
@@ -917,7 +1048,7 @@ type Tables = {
       id: string
       chatbot_id: string
       instance_id: string
-      status: 'active' | 'completed' | 'failed' | 'abandoned'
+      status: 'active' | 'escalated' | 'completed' | 'failed' | 'abandoned'
       visitor_key: string | null
       publish_version: number | null
       variables: Json
@@ -925,12 +1056,14 @@ type Tables = {
       created_at: string
       updated_at: string
       completed_at: string | null
+      escalated_at: string | null
+      escalated_node_key: string | null
     }
     Insert: {
       id?: string
       chatbot_id: string
       instance_id: string
-      status?: 'active' | 'completed' | 'failed' | 'abandoned'
+      status?: 'active' | 'escalated' | 'completed' | 'failed' | 'abandoned'
       visitor_key?: string | null
       publish_version?: number | null
       variables?: Json
@@ -938,12 +1071,14 @@ type Tables = {
       created_at?: string
       updated_at?: string
       completed_at?: string | null
+      escalated_at?: string | null
+      escalated_node_key?: string | null
     }
     Update: {
       id?: string
       chatbot_id?: string
       instance_id?: string
-      status?: 'active' | 'completed' | 'failed' | 'abandoned'
+      status?: 'active' | 'escalated' | 'completed' | 'failed' | 'abandoned'
       visitor_key?: string | null
       publish_version?: number | null
       variables?: Json
@@ -951,6 +1086,8 @@ type Tables = {
       created_at?: string
       updated_at?: string
       completed_at?: string | null
+      escalated_at?: string | null
+      escalated_node_key?: string | null
     }
     Relationships: [
       {
@@ -1111,6 +1248,10 @@ export interface Database {
           p_website?: string | null
           p_billing_address?: string | null
           p_notes?: string | null
+          p_brand_display_name?: string | null
+          p_brand_accent_color?: string | null
+          p_brand_logo_url?: string | null
+          p_brand_apply_to_public_chat?: boolean | null
         }
         Returns: Tables['instances']['Row']
       }
@@ -1229,6 +1370,22 @@ export interface Database {
         }
         Returns: Tables['conversation_sessions']['Row']
       }
+      escalate_conversation_session: {
+        Args: { p_session_id: string; p_node_key?: string | null }
+        Returns: Tables['conversation_sessions']['Row']
+      }
+      agent_reply_to_conversation: {
+        Args: { p_session_id: string; p_text: string }
+        Returns: Tables['conversation_events']['Row']
+      }
+      resolve_conversation_handoff: {
+        Args: { p_session_id: string }
+        Returns: Tables['conversation_sessions']['Row']
+      }
+      list_conversation_events_after: {
+        Args: { p_session_id: string; p_after_seq?: number }
+        Returns: Tables['conversation_events']['Row'][]
+      }
       publish_flow_version: {
         Args: {
           p_flow_id: string
@@ -1319,6 +1476,9 @@ export type ChatbotConnection = Tables['chatbot_connections']['Row']
 export type ConnectionWithConfig = Connection & { config?: Json | null; canManage?: boolean }
 export type Integration = Tables['integrations']['Row']
 export type IntegrationSecret = Tables['integration_secrets']['Row']
+export type InstanceAlertRule = Tables['instance_alert_rules']['Row']
+export type InstanceAlertSettings = Tables['instance_alert_settings']['Row']
+export type AlertDelivery = Tables['alert_deliveries']['Row']
 export type ChatbotFlow = Tables['chatbot_flows']['Row']
 export type FlowNode = Tables['flow_nodes']['Row']
 export type FlowEdge = Tables['flow_edges']['Row']

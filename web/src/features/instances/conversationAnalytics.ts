@@ -161,6 +161,7 @@ export function buildConversationAnalytics(args: {
   let activeCount = 0
   let abandonedCount = 0
   let failedCount = 0
+  let escalatedCount = 0
   const productQty = new Map<string, { name: string; qty: number }>()
   const visitors = new Set<string>()
   const durations: number[] = []
@@ -175,6 +176,7 @@ export function buildConversationAnalytics(args: {
     else if (status === 'active') activeCount += 1
     else if (status === 'abandoned') abandonedCount += 1
     else if (status === 'failed') failedCount += 1
+    else if (status === 'escalated') escalatedCount += 1
 
     if (session.visitor_key) visitors.add(session.visitor_key)
 
@@ -238,6 +240,7 @@ export function buildConversationAnalytics(args: {
   const statusBreakdown = [
     { status: 'completed', count: completedCount },
     { status: 'active', count: activeCount },
+    { status: 'escalated', count: escalatedCount },
     { status: 'abandoned', count: abandonedCount },
     { status: 'failed', count: failedCount },
   ]
@@ -313,4 +316,113 @@ export function buildConversationAnalytics(args: {
       .map(([status, count]) => ({ status, count }))
       .sort((a, b) => b.count - a.count),
   }
+}
+
+export type DropOffRow = { nodeKey: string; reached: number; pct: number }
+
+export function publishVersionLabel(publishVersion: number | null | undefined): string {
+  return publishVersion != null && publishVersion !== undefined ? `v${publishVersion}` : 'unpublished'
+}
+
+function filterSessionsForAnalytics(args: {
+  sessions: Array<
+    Pick<ConversationSession, 'id' | 'publish_version' | 'created_at' | 'chatbot_id'> & {
+      chatbots?: { name: string } | null
+    }
+  >
+  chatbotId?: string | null
+  rangeDays?: number | null
+  now?: Date
+}) {
+  const now = args.now ?? new Date()
+  const rangeMs =
+    args.rangeDays != null && args.rangeDays > 0 ? args.rangeDays * 24 * 60 * 60 * 1000 : null
+  const cutoff = rangeMs != null ? now.getTime() - rangeMs : null
+  let sessions = args.chatbotId
+    ? args.sessions.filter((s) => s.chatbot_id === args.chatbotId)
+    : args.sessions
+  if (cutoff != null) {
+    sessions = sessions.filter((s) => {
+      const t = Date.parse(s.created_at)
+      return Number.isFinite(t) && t >= cutoff
+    })
+  }
+  return sessions
+}
+
+function computeDropOff(
+  sessionIds: Set<string>,
+  events: Array<Pick<ConversationEvent, 'session_id' | 'kind' | 'node_key'>>,
+  sessionCount: number,
+): DropOffRow[] {
+  const dropOrder: string[] = []
+  const dropCounts = new Map<string, Set<string>>()
+  for (const event of events) {
+    if (event.kind !== 'step.run' || !event.node_key) continue
+    if (!sessionIds.has(event.session_id)) continue
+    if (!dropCounts.has(event.node_key)) {
+      dropCounts.set(event.node_key, new Set())
+      dropOrder.push(event.node_key)
+    }
+    dropCounts.get(event.node_key)!.add(event.session_id)
+  }
+  const pct = (n: number) => (sessionCount ? Math.round((n / sessionCount) * 1000) / 10 : 0)
+  return dropOrder.map((nodeKey) => {
+    const reached = dropCounts.get(nodeKey)?.size ?? 0
+    return { nodeKey, reached, pct: pct(reached) }
+  })
+}
+
+/** Drop-off for sessions matching one publish version label (after chatbot/range filters). */
+export function buildDropOffForVersion(args: {
+  sessions: Array<
+    Pick<ConversationSession, 'id' | 'publish_version' | 'created_at' | 'chatbot_id'> & {
+      chatbots?: { name: string } | null
+    }
+  >
+  events: Array<Pick<ConversationEvent, 'session_id' | 'kind' | 'node_key'>>
+  version: string
+  chatbotId?: string | null
+  rangeDays?: number | null
+  now?: Date
+}): { sessionCount: number; dropOff: DropOffRow[] } {
+  const filtered = filterSessionsForAnalytics(args).filter(
+    (s) => publishVersionLabel(s.publish_version) === args.version,
+  )
+  const sessionIds = new Set(filtered.map((s) => s.id))
+  return {
+    sessionCount: filtered.length,
+    dropOff: computeDropOff(sessionIds, args.events, filtered.length),
+  }
+}
+
+/** Align two funnels by nodeKey (union, left-then-right first-seen order). */
+export function compareDropOff(
+  left: DropOffRow[],
+  right: DropOffRow[],
+): Array<{
+  nodeKey: string
+  left: { reached: number; pct: number } | null
+  right: { reached: number; pct: number } | null
+  deltaPct: number | null
+}> {
+  const leftMap = new Map(left.map((r) => [r.nodeKey, r]))
+  const rightMap = new Map(right.map((r) => [r.nodeKey, r]))
+  const order: string[] = []
+  for (const r of left) {
+    if (!order.includes(r.nodeKey)) order.push(r.nodeKey)
+  }
+  for (const r of right) {
+    if (!order.includes(r.nodeKey)) order.push(r.nodeKey)
+  }
+  return order.map((nodeKey) => {
+    const l = leftMap.get(nodeKey) ?? null
+    const r = rightMap.get(nodeKey) ?? null
+    return {
+      nodeKey,
+      left: l ? { reached: l.reached, pct: l.pct } : null,
+      right: r ? { reached: r.reached, pct: r.pct } : null,
+      deltaPct: l && r ? Math.round((r.pct - l.pct) * 10) / 10 : null,
+    }
+  })
 }

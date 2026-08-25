@@ -28,6 +28,8 @@ import {
   ImageIcon,
   LayoutGrid,
   Mail,
+  Plug,
+  Headphones,
   Maximize2,
   MessageSquare,
   Minimize2,
@@ -54,6 +56,8 @@ const icons: Record<FlowNodeType, typeof MessageSquare> = {
   question: HelpCircle,
   http: Globe,
   email: Mail,
+  integration: Plug,
+  handoff: Headphones,
   condition: GitBranch,
   loop: Repeat,
   set_variable: Variable,
@@ -67,6 +71,8 @@ const typeColor: Record<FlowNodeType, string> = {
   question: 'var(--color-node-question)',
   http: 'var(--color-node-http)',
   email: 'var(--color-node-email)',
+  integration: 'var(--color-node-http)',
+  handoff: 'var(--color-node-question)',
   condition: 'var(--color-node-condition)',
   loop: 'var(--color-node-loop)',
   set_variable: 'var(--color-node-set)',
@@ -92,6 +98,10 @@ function stepPreview(node: DesignerNode): string {
       return truncate(`${String(c.method ?? 'GET')} ${String(c.url ?? c.path ?? '')}`)
     case 'email':
       return truncate(String(c.to ?? c.subject ?? ''))
+    case 'integration':
+      return truncate(String(c.action ?? 'Integration'))
+    case 'handoff':
+      return truncate(String(c.message ?? 'Escalate to agent'))
     case 'condition':
       return truncate(String(c.expression ?? c.left ?? 'If…'))
     case 'loop':

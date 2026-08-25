@@ -9,6 +9,7 @@ import { SuperuserBadge } from '@/shared/ui/superuser-badge'
 import { InitialsAvatar } from '@/shared/ui/initials-avatar'
 import { ThemeToggle } from '@/shared/ui/theme-toggle'
 import { useInstanceContext } from '@/features/instances/InstanceContext'
+import { brandLogoUrl, brandWorkspaceTitle } from '@/shared/lib/instanceBranding'
 import { canAdmin } from '@/shared/types/database'
 import { cn } from '@/shared/lib/utils'
 
@@ -19,6 +20,8 @@ export function AppShell() {
   const homeTo = isSuperuser ? '/instances' : ctx?.instance ? `/instances/${ctx.instance.id}` : '/'
   const profileActive = location.pathname === '/profile'
   const label = profile?.display_name ?? profile?.email ?? 'Profile'
+  const workspaceTitle = ctx?.instance ? brandWorkspaceTitle(ctx.instance) : 'FlowForge'
+  const logoUrl = ctx?.instance ? brandLogoUrl(ctx.instance) : null
 
   return (
     <div className="flex min-h-full flex-col">
@@ -26,11 +29,19 @@ export function AppShell() {
         <div className="flex w-full items-center gap-3 px-4 py-2.5 sm:gap-4 sm:px-6">
           <div className="flex min-w-0 shrink items-center gap-2 sm:gap-2.5">
             <Link to={homeTo} className="group flex shrink-0 items-center gap-2.5">
-              <span className="ff-brand-mark grid h-9 w-9 place-items-center rounded-xl text-white transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
-                <Sparkles className="h-4 w-4" />
-              </span>
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt=""
+                  className="h-9 w-9 rounded-xl object-contain ring-1 ring-[var(--color-border)]/60 transition-transform duration-300 group-hover:scale-105"
+                />
+              ) : (
+                <span className="ff-brand-mark grid h-9 w-9 place-items-center rounded-xl text-white transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
+                  <Sparkles className="h-4 w-4" />
+                </span>
+              )}
               <span className="hidden font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight sm:inline">
-                <span className="ff-gradient-text">FlowForge</span>
+                <span className="ff-gradient-text">{workspaceTitle}</span>
               </span>
             </Link>
             <InstanceHeaderBits />
@@ -122,15 +133,20 @@ function InstanceNav() {
     { to: base, label: 'Chatbots', end: true },
     { to: `${base}/connections`, label: 'Connections' },
     { to: `${base}/conversations`, label: 'Conversations' },
+    { to: `${base}/inbox`, label: 'Inbox' },
     { to: `${base}/analytics`, label: 'Analytics' },
   ]
 
   const adminLinks: NavLinkItem[] = [
-    { to: `${base}/members`, label: 'Users' },
+    { to: `${base}/admin`, label: 'Overview', end: true },
+    { to: `${base}/admin/chatbots`, label: 'Chatbots' },
+    { to: `${base}/admin/users`, label: 'Users' },
+    { to: `${base}/admin/recycle-bin`, label: 'Recycle bin' },
+    { to: `${base}/admin/settings`, label: 'Organisation' },
     { to: `${base}/integrations`, label: 'Integrations' },
-    { to: `${base}/audit`, label: 'Audit' },
-    { to: `${base}/webhooks`, label: 'Webhooks' },
-    { to: `${base}/usage`, label: 'Usage' },
+    { to: `${base}/admin/usage`, label: 'Usage' },
+    { to: `${base}/admin/webhooks`, label: 'Webhooks' },
+    { to: `${base}/admin/audit`, label: 'Audit' },
     { to: `${base}/alerts`, label: 'Alerts' },
   ]
 
@@ -239,7 +255,7 @@ function AdminNavMenu({ links, pathname }: { links: NavLinkItem[]; pathname: str
             className="min-w-[11rem] overflow-hidden rounded-xl border border-[var(--color-border)]/70 bg-[var(--color-surface)] p-1 shadow-[var(--shadow-soft)]"
           >
             {links.map((link) => {
-              const active = pathname.startsWith(link.to)
+              const active = link.end ? pathname === link.to : pathname.startsWith(link.to)
               return (
                 <Link
                   key={link.to}

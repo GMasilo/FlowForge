@@ -6,6 +6,7 @@ import {
   createInitialPreviewState,
   runConnectionStep,
   runEntityStep,
+  runIntegrationStep,
   sendOtpEmailChallenge,
   skipPreviewQuestion,
   submitPreviewAnswer,
@@ -59,12 +60,18 @@ import {
   normalizeMaxFiles,
 } from '@/features/designer/model/conversationFiles'
 import { supabase } from '@/shared/lib/supabase'
+import {
+  applyInstanceBranding,
+  clearInstanceBranding,
+  normalizeBrandAccent,
+} from '@/shared/lib/instanceBranding'
 import { getPaymentStatus, instanceFileUrl, isFlowForgeApiConfigured, startPaymentIntent } from '@/shared/lib/flowforgeApi'
 import {
   catalogFromFilenames,
   collectMediaFilenamesFromNodes,
 } from '@/features/designer/model/chatbotMedia'
 import { Button } from '@/shared/ui/button'
+import { Input } from '@/shared/ui/input'
 import { cn } from '@/shared/lib/utils'
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
 import type { Json } from '@/shared/types/database'
@@ -92,6 +99,24 @@ function visitorKey(): string {
     return next
   } catch {
     return crypto.randomUUID()
+  }
+}
+
+type PublicChatBranding = {
+  display_name: string | null
+  accent_color: string | null
+  logo_url: string | null
+}
+
+function parsePublicBranding(raw: unknown): PublicChatBranding | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  return {
+    display_name: typeof row.display_name === 'string' ? row.display_name : null,
+    accent_color: normalizeBrandAccent(
+      typeof row.accent_color === 'string' ? row.accent_color : null,
+    ),
+    logo_url: typeof row.logo_url === 'string' && row.logo_url.trim() ? row.logo_url.trim() : null,
   }
 }
 
@@ -144,6 +169,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   const { publicSlug } = useParams()
   const [bootError, setBootError] = useState<string | null>(null)
   const [botName, setBotName] = useState('Chat')
+  const [branding, setBranding] = useState<PublicChatBranding | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [chatbotId, setChatbotId] = useState<string | null>(null)
   const [instanceId, setInstanceId] = useState<string | null>(null)
@@ -162,6 +188,10 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   const completedRef = useRef(false)
   const lastLoggedRunCount = useRef(0)
   const lastLoggedMsgCount = useRef(0)
+  const escalatedRef = useRef(false)
+  const lastEventSeqRef = useRef(0)
+  const [handoffDraft, setHandoffDraft] = useState('')
+  const [handoffSending, setHandoffSending] = useState(false)
 
   useEffect(() => {
     if (!embed) return
@@ -213,6 +243,13 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         for (const g of graph.globals) globalsMap[g.key] = g.default_value
         if (cancelled) return
         setBotName(typeof row.name === 'string' ? row.name : 'Chat')
+        const nextBranding = parsePublicBranding(row.branding)
+        setBranding(nextBranding)
+        if (nextBranding?.accent_color) {
+          applyInstanceBranding({ brand_accent_color: nextBranding.accent_color })
+        } else {
+          clearInstanceBranding()
+        }
         setSessionId(String(row.session_id))
         setChatbotId(String(row.chatbot_id))
         setInstanceId(String(row.instance_id))
@@ -261,6 +298,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     })()
     return () => {
       cancelled = true
+      clearInstanceBranding()
     }
   }, [publicSlug, embed])
 
@@ -271,7 +309,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     const delaySeconds = node ? readDelaySeconds(node.config) : 0
     const waitMs = delaySeconds > 0 ? Math.round(delaySeconds * 1000) : 480
 
-    if (node?.type === 'http' || node?.type === 'email' || node?.type === 'entity') {
+    if (node?.type === 'http' || node?.type === 'email' || node?.type === 'integration' || node?.type === 'entity') {
       if (connectionBusy.current) return
       const timer = window.setTimeout(() => {
         if (connectionBusy.current) return
@@ -279,7 +317,9 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         const run =
           node.type === 'entity'
             ? runEntityStep(state, nodes, edges)
-            : runConnectionStep(state, nodes, edges, connectionsById, connectionCtx)
+            : node.type === 'integration'
+              ? runIntegrationStep(state, nodes, edges, connectionCtx)
+              : runConnectionStep(state, nodes, edges, connectionsById, connectionCtx)
         void run
           .then((next) => setState(next))
           .finally(() => {
@@ -333,6 +373,114 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       })
   }, [state, nodes, connectionsById, connectionCtx])
 
+  // Escalate on handoff phase
+  useEffect(() => {
+    if (!sessionId || !state || state.phase.kind !== 'waiting_handoff') return
+    if (escalatedRef.current) return
+    escalatedRef.current = true
+    const nodeId = state.phase.nodeId
+    const node = nodes.find((n) => n.id === nodeId)
+    void supabase.rpc('escalate_conversation_session', {
+      p_session_id: sessionId,
+      p_node_key: node?.key ?? null,
+    })
+  }, [sessionId, state, nodes])
+
+  // Poll agent replies / resolution while waiting for handoff
+  useEffect(() => {
+    if (!sessionId || !state || state.phase.kind !== 'waiting_handoff') return
+    let cancelled = false
+    const tick = async () => {
+      const { data, error } = await supabase.rpc('list_conversation_events_after', {
+        p_session_id: sessionId,
+        p_after_seq: lastEventSeqRef.current,
+      })
+      if (cancelled || error || !data) return
+      const rows = data as Array<{
+        seq: number
+        kind: string
+        payload: Json
+        created_at: string
+        id: string
+      }>
+      if (!rows.length) {
+        const { data: sess } = await supabase
+          .from('conversation_sessions')
+          .select('status')
+          .eq('id', sessionId)
+          .maybeSingle()
+        if (!cancelled && sess && sess.status !== 'escalated' && sess.status !== 'active') {
+          setState((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  phase: { kind: 'finished' },
+                  currentId: null,
+                  messages: [
+                    ...prev.messages,
+                    {
+                      id: `resolved-${Date.now()}`,
+                      role: 'system',
+                      text: 'An agent closed this conversation.',
+                      createdAt: new Date().toISOString(),
+                    },
+                  ],
+                }
+              : prev,
+          )
+        }
+        return
+      }
+      setState((prev) => {
+        if (!prev || prev.phase.kind !== 'waiting_handoff') return prev
+        let next = { ...prev, messages: [...prev.messages] }
+        let finished = false
+        for (const row of rows) {
+          lastEventSeqRef.current = Math.max(lastEventSeqRef.current, row.seq)
+          const payload =
+            row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload)
+              ? (row.payload as Record<string, unknown>)
+              : {}
+          const text = String(payload.text ?? payload.message ?? '')
+          if (row.kind === 'message.agent' && text) {
+            next.messages.push({
+              id: row.id,
+              role: 'agent',
+              text,
+              createdAt: row.created_at,
+            })
+            lastLoggedMsgCount.current = next.messages.length
+          } else if (row.kind === 'session.completed') {
+            finished = true
+          }
+        }
+        if (finished) {
+          return {
+            ...next,
+            phase: { kind: 'finished' },
+            currentId: null,
+            messages: [
+              ...next.messages,
+              {
+                id: `resolved-${Date.now()}`,
+                role: 'system',
+                text: 'An agent closed this conversation.',
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          }
+        }
+        return next
+      })
+    }
+    void tick()
+    const timer = window.setInterval(() => void tick(), 4000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [sessionId, state?.phase.kind])
+
   // Log new messages / runs
   useEffect(() => {
     if (!sessionId || !state) return
@@ -340,6 +488,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       const fresh = state.messages.slice(lastLoggedMsgCount.current)
       lastLoggedMsgCount.current = state.messages.length
       for (const m of fresh) {
+        if (m.role === 'agent') continue
         void appendEvent(sessionId, `message.${m.role}`, null, { text: m.text, id: m.id })
       }
     }
@@ -610,23 +759,47 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         className={cn(
           'text-white shadow-sm',
           embed
-            ? 'border-b border-teal-700/20 bg-teal-700 px-3 py-2.5'
-            : 'border-b border-white/60 bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600 px-4 py-4',
+            ? 'border-b border-black/10 px-3 py-2.5'
+            : 'border-b border-white/60 px-4 py-4',
+          !branding?.accent_color && embed ? 'bg-teal-700' : null,
+          !branding?.accent_color && !embed
+            ? 'bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600'
+            : null,
         )}
+        style={
+          branding?.accent_color
+            ? {
+                background: embed
+                  ? branding.accent_color
+                  : `linear-gradient(135deg, ${branding.accent_color}, color-mix(in srgb, ${branding.accent_color} 70%, #0891b2))`,
+              }
+            : undefined
+        }
       >
         <div className={cn('flex items-center gap-3', embed ? '' : 'mx-auto max-w-2xl')}>
-          <span
-            className={cn(
-              'grid place-items-center rounded-2xl bg-white/20 ring-1 ring-white/30',
-              embed ? 'h-8 w-8' : 'h-10 w-10',
-            )}
-          >
-            <Sparkles className={embed ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-          </span>
+          {branding?.logo_url ? (
+            <img
+              src={branding.logo_url}
+              alt=""
+              className={cn(
+                'rounded-2xl bg-white/20 object-contain ring-1 ring-white/30',
+                embed ? 'h-8 w-8' : 'h-10 w-10',
+              )}
+            />
+          ) : (
+            <span
+              className={cn(
+                'grid place-items-center rounded-2xl bg-white/20 ring-1 ring-white/30',
+                embed ? 'h-8 w-8' : 'h-10 w-10',
+              )}
+            >
+              <Sparkles className={embed ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+            </span>
+          )}
           <div className="min-w-0">
             {!embed ? (
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75">
-                FlowForge
+                {branding?.display_name?.trim() || 'FlowForge'}
               </p>
             ) : null}
             <h1
@@ -662,9 +835,14 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
                 'max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm',
                 m.role === 'bot'
                   ? 'bg-white text-slate-800 ring-1 ring-slate-200/80'
-                  : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60',
+                  : m.role === 'agent'
+                    ? 'bg-violet-50 text-violet-950 ring-1 ring-violet-200/80'
+                    : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60',
               )}
             >
+              {m.role === 'agent' ? (
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-violet-700">Agent</p>
+              ) : null}
               <ChatMessageBody text={m.text} attachments={m.media} />
               <p className="mt-1 text-[10px] text-slate-400">{prettyTimestamp(m.createdAt)}</p>
             </div>
@@ -676,6 +854,9 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-500 [animation-delay:120ms]" />
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-500 [animation-delay:240ms]" />
           </div>
+        ) : null}
+        {state.phase.kind === 'waiting_handoff' ? (
+          <p className="text-center text-xs text-violet-600">Waiting for an agent…</p>
         ) : null}
         {state.phase.kind === 'finished' ? (
           <p className="text-center text-xs text-slate-400">Conversation complete</p>
@@ -1114,6 +1295,47 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
             No
           </Button>
         </div>
+      ) : null}
+
+      {state?.phase.kind === 'waiting_handoff' ? (
+        <form
+          className={cn(
+            'flex w-full gap-2 border-t border-slate-100 bg-white/90 px-4 py-3',
+            embed ? '' : 'mx-auto max-w-2xl',
+          )}
+          onSubmit={(e) => {
+            e.preventDefault()
+            const text = handoffDraft.trim()
+            if (!text || !sessionId || handoffSending) return
+            setHandoffSending(true)
+            const id = `user-handoff-${Date.now()}`
+            setState((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    messages: [
+                      ...prev.messages,
+                      { id, role: 'user', text, createdAt: new Date().toISOString() },
+                    ],
+                  }
+                : prev,
+            )
+            setHandoffDraft('')
+            void appendEvent(sessionId, 'message.user', null, { text, id }).finally(() =>
+              setHandoffSending(false),
+            )
+          }}
+        >
+          <Input
+            value={handoffDraft}
+            onChange={(e) => setHandoffDraft(e.target.value)}
+            placeholder="Message the agent…"
+            disabled={handoffSending}
+          />
+          <Button type="submit" disabled={handoffSending || !handoffDraft.trim()}>
+            Send
+          </Button>
+        </form>
       ) : null}
       </ChatMediaPlayerProvider>
     </div>

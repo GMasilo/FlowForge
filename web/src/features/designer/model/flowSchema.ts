@@ -238,6 +238,8 @@ export const flowNodeTypes = [
   'question',
   'http',
   'email',
+  'integration',
+  'handoff',
   'condition',
   'loop',
   'set_variable',
@@ -1042,6 +1044,13 @@ export const emailConfigSchema = z.object({
   templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
 })
 
+export const integrationConfigSchema = z.object({
+  integrationId: z.string().default(''),
+  action: z.string().default(''),
+  fieldValues: z.record(z.string(), z.string()).default({}),
+  outputVariable: z.string().default(''),
+})
+
 export const conditionConfigSchema = z.object({
   left: z.string().default(''),
   operator: z.enum(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'exists']).default('eq'),
@@ -1220,6 +1229,12 @@ export const endConfigSchema = z.object({
   templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
 })
 
+export const handoffConfigSchema = z.object({
+  message: z.string().default('Connecting you with an agent…'),
+  mediaFiles: z.array(z.string()).optional(),
+  templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
+})
+
 export const ENTITY_OPERATIONS = [
   { value: 'list', label: 'List records', hint: 'Return matching records as an array', needsRecordId: false, needsFields: false, writes: true },
   { value: 'get', label: 'Get record', hint: 'Fetch one record by id or filter', needsRecordId: false, needsFields: false, writes: true },
@@ -1248,18 +1263,22 @@ export type MessageConfig = z.infer<typeof messageConfigSchema>
 export type QuestionConfig = z.infer<typeof questionConfigSchema>
 export type HttpConfig = z.infer<typeof httpConfigSchema>
 export type EmailConfig = z.infer<typeof emailConfigSchema>
+export type IntegrationConfig = z.infer<typeof integrationConfigSchema>
 export type ConditionConfig = z.infer<typeof conditionConfigSchema>
 export type LoopConfig = z.infer<typeof loopConfigSchema>
 export type SetVariableConfig = z.infer<typeof setVariableConfigSchema>
 export type OperationConfig = z.infer<typeof operationConfigSchema>
 export type EntityConfig = z.infer<typeof entityConfigSchema>
 export type EndConfig = z.infer<typeof endConfigSchema>
+export type HandoffConfig = z.infer<typeof handoffConfigSchema>
 
 export type NodeConfigMap = {
   message: MessageConfig
   question: QuestionConfig
   http: HttpConfig
   email: EmailConfig
+  integration: IntegrationConfig
+  handoff: HandoffConfig
   condition: ConditionConfig
   loop: LoopConfig
   set_variable: SetVariableConfig
@@ -1296,6 +1315,10 @@ export function defaultConfig(type: FlowNodeType): Record<string, unknown> {
       return { ...httpConfigSchema.parse({}), ...shared }
     case 'email':
       return { ...emailConfigSchema.parse({}), ...shared }
+    case 'integration':
+      return { ...integrationConfigSchema.parse({}), ...shared }
+    case 'handoff':
+      return { ...handoffConfigSchema.parse({}), ...shared }
     case 'condition':
       return { ...conditionConfigSchema.parse({}), ...shared }
     case 'loop':
@@ -1321,6 +1344,10 @@ export function nodeTypeLabel(type: FlowNodeType): string {
       return 'HTTP request'
     case 'email':
       return 'Send email'
+    case 'integration':
+      return 'Integration'
+    case 'handoff':
+      return 'Escalate to agent'
     case 'condition':
       return 'Condition'
     case 'loop':
@@ -1362,7 +1389,13 @@ export function collectConfigStrings(config: Record<string, unknown>): string[] 
 /** Step-produced variable key from a node config, if any. */
 export function getStepOutputVariable(node: DesignerNode): string | null {
   const cfg = node.config
-  if (node.type === 'question' || node.type === 'http' || node.type === 'operation' || node.type === 'entity') {
+  if (
+    node.type === 'question' ||
+    node.type === 'http' ||
+    node.type === 'integration' ||
+    node.type === 'operation' ||
+    node.type === 'entity'
+  ) {
     const key = cfg.outputVariable
     return typeof key === 'string' && key.trim() ? key.trim() : null
   }

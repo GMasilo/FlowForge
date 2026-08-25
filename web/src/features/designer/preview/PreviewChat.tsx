@@ -9,6 +9,7 @@ import {
   createInitialPreviewState,
   runConnectionStep,
   runEntityStep,
+  runIntegrationStep,
   sendOtpEmailChallenge,
   skipPreviewQuestion,
   submitPreviewAnswer,
@@ -69,6 +70,8 @@ import {
   normalizeFileAccept,
   normalizeMaxFiles,
 } from '@/features/designer/model/conversationFiles'
+import { useRequiredInstance } from '@/features/instances/InstanceContext'
+import { brandLogoUrl, normalizeBrandAccent } from '@/shared/lib/instanceBranding'
 import { fetchUrlPreview, getPaymentStatus, isFlowForgeApiConfigured, startPaymentIntent } from '@/shared/lib/flowforgeApi'
 import { supabase } from '@/shared/lib/supabase'
 import { Button } from '@/shared/ui/button'
@@ -98,6 +101,13 @@ function prettyTimestamp(iso: string): string {
 
 export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult }: PreviewChatProps) {
   const { chatbotId, instanceId } = useParams()
+  const { instance } = useRequiredInstance()
+  const brandAccent = normalizeBrandAccent(instance.brand_accent_color)
+  const brandLogo = brandLogoUrl(instance)
+  const brandLabel = (instance.brand_display_name ?? '').trim() || instance.name
+  const headerGradient = brandAccent
+    ? `linear-gradient(135deg, ${brandAccent}, color-mix(in srgb, ${brandAccent} 70%, #0891b2))`
+    : undefined
   const connectionCtx = useMemo(
     () => ({
       chatbotId: chatbotId || undefined,
@@ -261,7 +271,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     // Cosmetics when delay is 0; otherwise honor configured delay before the step runs
     const waitMs = delaySeconds > 0 ? Math.round(delaySeconds * 1000) : 480
 
-    if (node?.type === 'http' || node?.type === 'email' || node?.type === 'entity') {
+    if (node?.type === 'http' || node?.type === 'email' || node?.type === 'integration' || node?.type === 'entity') {
       if (connectionBusy.current) return
       let started = false
       const timer = window.setTimeout(() => {
@@ -271,7 +281,9 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
         const run =
           node.type === 'entity'
             ? runEntityStep(state, nodes, edges)
-            : runConnectionStep(state, nodes, edges, connectionsById, connectionCtx)
+            : node.type === 'integration'
+              ? runIntegrationStep(state, nodes, edges, connectionCtx)
+              : runConnectionStep(state, nodes, edges, connectionsById, connectionCtx)
         void run
           .then((next) => setState(next))
           .finally(() => {
@@ -681,16 +693,32 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
         >
           <ChatMediaPlayerProvider>
           <div className="relative overflow-hidden rounded-t-[1.75rem] border-b border-white/40 px-4 py-3.5">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600" />
+            <div
+              className={cn(
+                'pointer-events-none absolute inset-0',
+                !headerGradient && 'bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600',
+              )}
+              style={headerGradient ? { background: headerGradient } : undefined}
+            />
             <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/15 blur-2xl" />
             <div className="pointer-events-none absolute -bottom-10 left-10 h-24 w-24 rounded-full bg-cyan-300/30 blur-2xl" />
             <div className="relative flex items-center justify-between gap-3 text-white">
               <div className="flex min-w-0 items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-2xl bg-white/20 shadow-inner ring-1 ring-white/30 backdrop-blur">
-                  <Sparkles className="h-4 w-4" />
-                </span>
+                {brandLogo ? (
+                  <img
+                    src={brandLogo}
+                    alt=""
+                    className="h-10 w-10 rounded-2xl bg-white/20 object-contain shadow-inner ring-1 ring-white/30 backdrop-blur"
+                  />
+                ) : (
+                  <span className="grid h-10 w-10 place-items-center rounded-2xl bg-white/20 shadow-inner ring-1 ring-white/30 backdrop-blur">
+                    <Sparkles className="h-4 w-4" />
+                  </span>
+                )}
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75">Preview</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75">
+                    {brandLabel} · Preview
+                  </p>
                   <h2 className="truncate font-[family-name:var(--font-display)] text-base font-semibold leading-tight">
                     {botName.data ?? 'Chatbot'}
                   </h2>
@@ -767,9 +795,18 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                     className={cn(
                       'max-w-[88%] px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
                       m.role === 'user'
-                        ? 'rounded-[1.25rem] rounded-br-md bg-gradient-to-br from-teal-600 to-cyan-600 text-white'
+                        ? brandAccent
+                          ? 'rounded-[1.25rem] rounded-br-md text-white'
+                          : 'rounded-[1.25rem] rounded-br-md bg-gradient-to-br from-teal-600 to-cyan-600 text-white'
                         : 'rounded-[1.25rem] rounded-bl-md border border-slate-200/80 bg-white text-slate-800',
                     )}
+                    style={
+                      m.role === 'user' && brandAccent
+                        ? {
+                            background: `linear-gradient(135deg, ${brandAccent}, color-mix(in srgb, ${brandAccent} 65%, #0891b2))`,
+                          }
+                        : undefined
+                    }
                   >
                     {m.role === 'user' ? (
                       <UserMessageBubble message={m} />
@@ -800,6 +837,12 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-500 [animation-delay:300ms]" />
                 </div>
               </div>
+            ) : null}
+
+            {state?.phase.kind === 'waiting_handoff' ? (
+              <p className="pt-1 text-center text-xs text-violet-600">
+                Waiting for an agent (preview — use Inbox in a published chat)
+              </p>
             ) : null}
 
             {state?.phase.kind === 'finished' ? (
@@ -1362,11 +1405,12 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
         aria-label={open ? 'Close chat preview' : 'Open chat preview'}
         className={cn(
           'pointer-events-auto group relative grid h-14 w-14 place-items-center rounded-[1.35rem] text-white transition-all duration-300',
-          'bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600',
+          !headerGradient && 'bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600',
           'shadow-[0_16px_40px_-12px_rgb(15_118_110_/_0.7)]',
           'hover:scale-105 hover:shadow-[0_20px_48px_-12px_rgb(8_145_178_/_0.75)] active:scale-95',
           open && 'rotate-0',
         )}
+        style={headerGradient ? { background: headerGradient } : undefined}
       >
         <span className="pointer-events-none absolute inset-0 rounded-[1.35rem] bg-white/10 opacity-0 transition group-hover:opacity-100" />
         <span className="pointer-events-none absolute -inset-1 animate-[ff-pulse-soft_2.4s_ease-in-out_infinite] rounded-[1.55rem] bg-teal-400/25 blur-md" />

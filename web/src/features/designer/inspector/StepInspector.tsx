@@ -1,4 +1,4 @@
-import type { ConnectionWithConfig, FlowNodeType } from '@/shared/types/database'
+import type { ConnectionWithConfig, FlowNodeType, Integration } from '@/shared/types/database'
 import type { DesignerNode } from '@/features/designer/model/flowSchema'
 import {
   CONDITION_OPERATOR_OPTIONS,
@@ -46,6 +46,7 @@ import {
   ENTITY_OPERATIONS,
   entityConfigSchema,
   endConfigSchema,
+  handoffConfigSchema,
   readDelaySeconds,
   readTimeoutSeconds,
   readRunAfter,
@@ -55,6 +56,12 @@ import {
   type RunAfterKey,
 } from '@/features/designer/model/flowSchema'
 import { connectionInfoFromRow } from '@/features/connections/connectionValidation'
+import {
+  actionsForProvider,
+  actionDef,
+  defaultActionForProvider,
+} from '@/features/integrations/integrationActions'
+import { providerLabel } from '@/features/integrations/integrationCatalog'
 import { useDesignerStore } from '@/features/designer/store/designerStore'
 import { confirmNodeDeletionMessage, planNodeDeletion } from '@/features/designer/utils/sequenceEdit'
 import { fetchChatbotEntities } from '@/features/entities/entityApi'
@@ -608,6 +615,7 @@ function StepRunSettings({
   const timeoutApplies =
     nodeType === 'http' ||
     nodeType === 'email' ||
+    nodeType === 'integration' ||
     (nodeType === 'question' && !answerRequired)
   const timeoutDisabled = readOnly || !timeoutApplies || (nodeType === 'question' && answerRequired)
   const nonDefault =
@@ -671,13 +679,13 @@ function StepRunSettings({
           }}
         />
         <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
-          {nodeType === 'http' || nodeType === 'email'
+          {nodeType === 'http' || nodeType === 'email' || nodeType === 'integration'
             ? 'Abort the request if it takes longer. On timeout, status is Timed out (default 0 = none).'
             : nodeType === 'question' && answerRequired
               ? 'Available when the answer is Optional — times out while waiting for a reply.'
               : nodeType === 'question'
                 ? 'While waiting for an optional answer. On timeout, status is Timed out (0 = none).'
-                : 'Only applies to HTTP, email, and optional questions.'}
+                : 'Only applies to HTTP, email, integration, and optional questions.'}
         </p>
       </div>
 
@@ -728,6 +736,9 @@ interface StepInspectorProps {
   connections: ConnectionWithConfig[]
   /** False while the chatbot connection list is still loading — do not clear selected IDs. */
   connectionsReady?: boolean
+  integrations?: Integration[]
+  /** False while instance integrations are still loading. */
+  integrationsReady?: boolean
   readOnly?: boolean
 }
 
@@ -1197,6 +1208,154 @@ function EmailStepFields({
   )
 }
 
+function fieldValuesOf(config: Record<string, unknown>): Record<string, string> {
+  const raw = config.fieldValues
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    out[k] = String(v ?? '')
+  }
+  return out
+}
+
+function IntegrationStepFields({
+  node,
+  integrations,
+  integrationsReady = true,
+  instanceId,
+  readOnly,
+  patchConfig,
+  suggestions,
+}: {
+  node: DesignerNode
+  integrations: Integration[]
+  integrationsReady?: boolean
+  instanceId: string
+  readOnly?: boolean
+  patchConfig: (partial: Record<string, unknown>) => void
+  suggestions: TemplateSuggestion[]
+}) {
+  const selectedId = String(node.config.integrationId ?? '')
+  const selected = integrations.find((i) => i.id === selectedId)
+  const connected = integrations.filter((i) => i.status === 'connected' && !i.deleted_at)
+  const actions = actionsForProvider(selected?.provider)
+  const currentAction = String(node.config.action ?? '')
+  const action = actionDef(currentAction) ?? actions[0]
+  const fieldValues = fieldValuesOf(node.config)
+
+  function selectIntegration(integrationId: string) {
+    const row = integrations.find((i) => i.id === integrationId)
+    if (!row) {
+      patchConfig({ integrationId })
+      return
+    }
+    const nextAction = defaultActionForProvider(row.provider)
+    const def = actionDef(nextAction)
+    const seeded: Record<string, string> = {}
+    for (const f of def?.fields ?? []) {
+      seeded[f.key] = fieldValues[f.key] ?? ''
+    }
+    patchConfig({
+      integrationId,
+      action: nextAction,
+      fieldValues: seeded,
+    })
+  }
+
+  function selectAction(actionId: string) {
+    const def = actionDef(actionId)
+    const seeded: Record<string, string> = { ...fieldValues }
+    for (const f of def?.fields ?? []) {
+      if (!(f.key in seeded)) seeded[f.key] = ''
+    }
+    patchConfig({ action: actionId, fieldValues: seeded })
+  }
+
+  return (
+    <>
+      <div>
+        <Label>Integration</Label>
+        <Select
+          disabled={readOnly}
+          value={selectedId}
+          onChange={(e) => selectIntegration(e.target.value)}
+        >
+          <option value="">Select…</option>
+          {selectedId && !connected.some((i) => i.id === selectedId) ? (
+            <option value={selectedId}>
+              {integrationsReady
+                ? selected
+                  ? `${selected.name} (${selected.status})`
+                  : 'Selected integration (not found)'
+                : 'Selected integration (loading…)'}
+            </option>
+          ) : null}
+          {connected.map((i) => (
+            <option key={i.id} value={i.id}>
+              {i.name} · {providerLabel(i.provider)}
+            </option>
+          ))}
+        </Select>
+        <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+          Only connected integrations are listed.{' '}
+          <Link to={`/instances/${instanceId}/integrations`} className="text-teal-800 underline">
+            Manage integrations
+          </Link>
+        </p>
+      </div>
+
+      <div>
+        <Label>Action</Label>
+        <Select
+          disabled={readOnly || !selected}
+          value={action?.id ?? ''}
+          onChange={(e) => selectAction(e.target.value)}
+        >
+          {!action ? <option value="">Select…</option> : null}
+          {actions.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.label}
+            </option>
+          ))}
+        </Select>
+        {action ? (
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">{action.description}</p>
+        ) : null}
+      </div>
+
+      {(action?.fields ?? []).map((field) => (
+        <div key={field.key}>
+          <Label>{field.label}</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline={!!field.multiline}
+            value={fieldValues[field.key] ?? ''}
+            onChange={(v) =>
+              patchConfig({
+                fieldValues: { ...fieldValues, [field.key]: v },
+              })
+            }
+            placeholder={field.placeholder}
+            suggestions={suggestions}
+          />
+          {field.hint ? (
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">{field.hint}</p>
+          ) : null}
+        </div>
+      ))}
+
+      <VariableAssignField
+        label="Output variable"
+        value={String(node.config.outputVariable ?? '')}
+        onChange={(v) => patchConfig({ outputVariable: v })}
+        nodeId={node.id}
+        readOnly={readOnly}
+        placeholder="integrationResult"
+      />
+    </>
+  )
+}
+
 function VariableAssignField({
   label,
   value,
@@ -1254,7 +1413,14 @@ function VariableAssignField({
   )
 }
 
-export function StepInspector({ node, connections, connectionsReady = true, readOnly }: StepInspectorProps) {
+export function StepInspector({
+  node,
+  connections,
+  connectionsReady = true,
+  integrations = [],
+  integrationsReady = true,
+  readOnly,
+}: StepInspectorProps) {
   const { chatbotId } = useParams()
   const { instance } = useRequiredInstance()
   const updateNode = useDesignerStore((s) => s.updateNode)
@@ -2546,6 +2712,18 @@ export function StepInspector({ node, connections, connectionsReady = true, read
         />
       ) : null}
 
+      {node.type === 'integration' ? (
+        <IntegrationStepFields
+          node={node}
+          integrations={integrations}
+          integrationsReady={integrationsReady}
+          instanceId={instance.id}
+          readOnly={readOnly}
+          patchConfig={patchConfig}
+          suggestions={suggestions}
+        />
+      ) : null}
+
       {node.type === 'condition' ? (
         <>
           <div>
@@ -2941,7 +3119,37 @@ export function StepInspector({ node, connections, connectionsReady = true, read
         </div>
       ) : null}
 
-      {node.type === 'message' || node.type === 'question' || node.type === 'end' || node.type === 'email' ? (
+      {node.type === 'handoff' ? (
+        <div>
+          <Label>Handoff message</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={String(node.config.message ?? '')}
+            onChange={(v) => patchConfig(handoffConfigSchema.parse({ ...node.config, message: v }))}
+            placeholder="Connecting you with an agent…"
+            suggestions={suggestions}
+          />
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Shown to the visitor while waiting for an agent in the Inbox.
+          </p>
+          <div className="mt-3">
+            <StepMediaPicker
+              instanceId={instance.id}
+              chatbotId={chatbotId!}
+              filenames={readMediaFiles(node.config)}
+              disabled={readOnly || !chatbotId}
+              onChange={(mediaFiles) => patchConfig({ mediaFiles })}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {node.type === 'message' ||
+      node.type === 'question' ||
+      node.type === 'end' ||
+      node.type === 'handoff' ||
+      node.type === 'email' ? (
         <TemplateInputBindings
           templates={templatesQuery.data ?? []}
           config={node.config}

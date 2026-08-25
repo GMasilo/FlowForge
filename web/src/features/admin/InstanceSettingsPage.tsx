@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
+import { normalizeBrandAccent } from '@/shared/lib/instanceBranding'
 import { supabase } from '@/shared/lib/supabase'
 import { slugify } from '@/shared/lib/utils'
 import type { Instance } from '@/shared/types/database'
@@ -22,6 +23,10 @@ type OrgFormState = {
   website: string
   billing_address: string
   notes: string
+  brand_display_name: string
+  brand_accent_color: string
+  brand_logo_url: string
+  brand_apply_to_public_chat: boolean
 }
 
 function fromInstance(row: Instance): OrgFormState {
@@ -34,6 +39,10 @@ function fromInstance(row: Instance): OrgFormState {
     website: row.website ?? '',
     billing_address: row.billing_address ?? '',
     notes: row.notes ?? '',
+    brand_display_name: row.brand_display_name ?? '',
+    brand_accent_color: row.brand_accent_color ?? '',
+    brand_logo_url: row.brand_logo_url ?? '',
+    brand_apply_to_public_chat: row.brand_apply_to_public_chat ?? true,
   }
 }
 
@@ -58,6 +67,10 @@ export function InstanceSettingsPage() {
 
   const save = useMutation({
     mutationFn: async (values: OrgFormState) => {
+      const accent = normalizeBrandAccent(values.brand_accent_color)
+      if (values.brand_accent_color.trim() && !accent) {
+        throw new Error('Accent color must be a hex value like #0f766e')
+      }
       const { data, error: rpcError } = await supabase.rpc('update_organisation', {
         p_id: instance.id,
         p_name: values.name.trim(),
@@ -68,6 +81,10 @@ export function InstanceSettingsPage() {
         p_website: values.website.trim() || null,
         p_billing_address: values.billing_address.trim() || null,
         p_notes: values.notes.trim() || null,
+        p_brand_display_name: values.brand_display_name.trim() || null,
+        p_brand_accent_color: accent,
+        p_brand_logo_url: values.brand_logo_url.trim() || null,
+        p_brand_apply_to_public_chat: values.brand_apply_to_public_chat,
       })
       if (rpcError) throw rpcError
       return data
@@ -105,7 +122,7 @@ export function InstanceSettingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Organisation"
-        description={`Profile and contact details for ${instance.name}.`}
+        description={`Profile, contact, and branding for ${instance.name}.`}
       />
 
       <Card>
@@ -195,6 +212,67 @@ export function InstanceSettingsPage() {
               placeholder="Internal notes about this organisation"
               rows={3}
             />
+          </div>
+
+          <div className="border-t border-[var(--color-border)]/60 pt-4">
+            <h2 className="mb-1 text-sm font-semibold text-[var(--color-ink)]">Workspace branding</h2>
+            <p className="mb-4 text-sm text-[var(--color-ink-muted)]">
+              Customize how this organisation appears in the app shell and public chat.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="org-brand-name">Product name override</Label>
+                <Input
+                  id="org-brand-name"
+                  value={form.brand_display_name}
+                  onChange={(e) => setField('brand_display_name', e.target.value)}
+                  placeholder="Leave blank for FlowForge"
+                />
+              </div>
+              <div>
+                <Label htmlFor="org-brand-accent">Accent color</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    aria-label="Pick accent color"
+                    className="h-10 w-12 cursor-pointer rounded-lg border border-[var(--color-border)] bg-transparent p-1"
+                    value={normalizeBrandAccent(form.brand_accent_color) ?? '#0f766e'}
+                    onChange={(e) => setField('brand_accent_color', e.target.value)}
+                  />
+                  <Input
+                    id="org-brand-accent"
+                    value={form.brand_accent_color}
+                    onChange={(e) => setField('brand_accent_color', e.target.value)}
+                    placeholder="#0f766e"
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+              <div className="sm:col-span-2">
+                <Label htmlFor="org-brand-logo">Logo URL</Label>
+                <Input
+                  id="org-brand-logo"
+                  type="url"
+                  value={form.brand_logo_url}
+                  onChange={(e) => setField('brand_logo_url', e.target.value)}
+                  placeholder="https://cdn.example.com/logo.png"
+                />
+              </div>
+              <label className="sm:col-span-2 inline-flex items-start gap-2 text-sm text-[var(--color-ink)]">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-[var(--color-border)]"
+                  checked={form.brand_apply_to_public_chat}
+                  onChange={(e) => setField('brand_apply_to_public_chat', e.target.checked)}
+                />
+                <span>
+                  Apply branding to public chat
+                  <span className="mt-0.5 block text-[var(--color-ink-muted)]">
+                    Accent, logo, and product name on published chatbot pages.
+                  </span>
+                </span>
+              </label>
+            </div>
           </div>
 
           {error ? <FieldError>{error}</FieldError> : null}

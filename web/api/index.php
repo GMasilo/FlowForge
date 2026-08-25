@@ -24,6 +24,7 @@ $map = [
     '/url/preview' => __DIR__ . '/url/preview.php',
     '/webhooks/dispatch' => __DIR__ . '/webhooks/dispatch.php',
     '/webhooks/emit_session' => __DIR__ . '/webhooks/emit_session.php',
+    '/alerts/run' => __DIR__ . '/alerts/run.php',
     '/file/upload' => __DIR__ . '/file/upload.php',
     '/file/get' => __DIR__ . '/file/get.php',
     '/file/list' => __DIR__ . '/file/list.php',

@@ -22,7 +22,7 @@ import { parseTemplateBindingMap, type TemplateBindingMap } from '@/features/tem
 import { findContinueRootIds } from '@/features/designer/utils/conditionGraph'
 import type { FlowNodeType } from '@/shared/types/database'
 
-export type ChatRole = 'bot' | 'user' | 'system'
+export type ChatRole = 'bot' | 'user' | 'system' | 'agent'
 
 export interface ChatMessage {
   id: string
@@ -77,6 +77,7 @@ export type PreviewPhase =
       /** Captcha prompt shown to the visitor (solution stays on captchaChallenge). */
       captchaPrompt?: string
     }
+  | { kind: 'waiting_handoff'; nodeId: string; message: string; startedAt: string }
   | { kind: 'typing' }
   | { kind: 'finished' }
 
@@ -981,8 +982,8 @@ export function tickPreview(
     return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
   }
 
-  if (node.type === 'http' || node.type === 'email' || node.type === 'entity') {
-    // Handled asynchronously by PreviewChat via runConnectionStep / runEntityStep
+  if (node.type === 'http' || node.type === 'email' || node.type === 'integration' || node.type === 'entity') {
+    // Handled asynchronously by PreviewChat via runConnectionStep / runIntegrationStep / runEntityStep
     return state
   }
 
@@ -1050,6 +1051,29 @@ export function tickPreview(
       loopStack: [...next.loopStack, frame],
       currentId: bodyTarget,
       phase: { kind: 'typing' },
+    }
+  }
+
+  if (node.type === 'handoff') {
+    const template = String(node.config.message ?? 'Connecting you with an agent…')
+    const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates, bindingsOf(node.config))
+    const media = attachmentsFor(node, next.mediaCatalog)
+    next = appendRun(next, node, {
+      inputs: { message: template },
+      processed: { interpolated: text },
+      outputs: { message: text, escalated: true },
+      savedAs: null,
+    })
+    return {
+      ...next,
+      messages: [...next.messages, msg('bot', text, { media })],
+      currentId: node.id,
+      phase: {
+        kind: 'waiting_handoff',
+        nodeId: node.id,
+        message: text,
+        startedAt: new Date().toISOString(),
+      },
     }
   }
 
@@ -1715,6 +1739,144 @@ export async function runConnectionStep(
     },
     outputs,
     savedAs,
+  })
+
+  return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
+}
+
+export async function runIntegrationStep(
+  state: PreviewEngineState,
+  nodes: DesignerNode[],
+  edges: DesignerEdge[],
+  options?: ConnectionStepContext,
+): Promise<PreviewEngineState> {
+  if (!state.currentId) return state
+  const node = nodes.find((n) => n.id === state.currentId)
+  if (!node || node.type !== 'integration') return state
+
+  if (!shouldRunAfterPredecessor(node.config, previousRunStatus(state))) {
+    return skipDueToRunAfter(state, node, edges, nodes)
+  }
+
+  const wallStart = performance.now()
+  const startedAt = new Date().toISOString()
+  const timeoutSeconds = readTimeoutSeconds(node.config)
+  const abortSignal =
+    timeoutSeconds > 0 && typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
+      ? AbortSignal.timeout(timeoutSeconds * 1000)
+      : undefined
+
+  const { executeIntegrationAction, isFlowForgeApiConfigured } = await import('@/shared/lib/flowforgeApi')
+
+  let next = { ...state }
+  let runStatus: PreviewRunStatus = 'Succeeded'
+  const integrationId = String(node.config.integrationId ?? '').trim()
+  const action = String(node.config.action ?? '').trim()
+  const rawFields =
+    node.config.fieldValues && typeof node.config.fieldValues === 'object'
+      ? (node.config.fieldValues as Record<string, string>)
+      : {}
+  const interpolatedFields: Record<string, string> = {}
+  for (const [k, v] of Object.entries(rawFields)) {
+    interpolatedFields[k] = interpolate(String(v ?? ''), next.vars, next.stepOutputs, next.media, false, next.templates)
+  }
+
+  const inputs: Record<string, unknown> = {
+    integrationId: integrationId || null,
+    action: action || null,
+    fieldValues: rawFields,
+  }
+  const processed: Record<string, unknown> = {
+    action,
+    fieldValues: interpolatedFields,
+  }
+
+  let result: Record<string, unknown> = {
+    ok: false,
+    action,
+    fields: interpolatedFields,
+  }
+
+  const canCallApi =
+    isFlowForgeApiConfigured() &&
+    !!integrationId &&
+    !!action &&
+    !!(options?.instanceId || options?.sessionId)
+
+  if (!canCallApi) {
+    result = { ...result, ok: true, mocked: true }
+    next = {
+      ...next,
+      messages: [
+        ...next.messages,
+        msg('system', `Integration ${action || '(no action)'} (mocked)`),
+      ],
+    }
+  } else {
+    try {
+      const apiResult = await executeIntegrationAction({
+        integrationId,
+        instanceId: options!.instanceId ?? '',
+        action,
+        fields: interpolatedFields,
+        chatbotId: options?.chatbotId,
+        sessionId: options?.sessionId,
+        signal: abortSignal,
+      })
+      result = {
+        ok: apiResult.ok,
+        status: apiResult.status,
+        data: apiResult.data,
+        error: apiResult.error,
+        action,
+        fields: interpolatedFields,
+      }
+      if (!apiResult.ok) runStatus = 'Failed'
+      next = {
+        ...next,
+        messages: [
+          ...next.messages,
+          msg(
+            'system',
+            apiResult.ok
+              ? `Integration ${action} succeeded`
+              : `Integration failed: ${apiResult.error ?? 'unknown'}`,
+          ),
+        ],
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Integration failed'
+      const timedOut = isAbortOrTimeoutError(err)
+      result = { ...result, ok: false, error: message, timedOut }
+      runStatus = timedOut ? 'TimedOut' : 'Failed'
+      next = {
+        ...next,
+        messages: [
+          ...next.messages,
+          msg(
+            'system',
+            timedOut ? `Integration timed out after ${timeoutSeconds}s` : `Integration error: ${message}`,
+          ),
+        ],
+      }
+    }
+  }
+
+  const key = String(node.config.outputVariable ?? '').trim()
+  if (key) next = applyAssignment(next, key, result, node.key, result)
+  else next = { ...next, stepOutputs: { ...next.stepOutputs, [node.key]: result } }
+
+  next = appendRun(next, node, {
+    status: runStatus,
+    startedAt,
+    durationMs: Math.round(performance.now() - wallStart),
+    inputs: { ...inputs, timeoutSeconds: timeoutSeconds || undefined },
+    processed: {
+      ...processed,
+      ...(runStatus === 'TimedOut' ? { timedOut: true } : {}),
+    },
+    outputs: result,
+    savedAs: savedAsVar(key) ?? savedAsStep(node.key),
   })
 
   return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))

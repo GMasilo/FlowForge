@@ -19,6 +19,7 @@ import { nodeTypeLabel, type DesignerEdge, type DesignerNode } from '@/features/
 import { suggestNextSteps } from '@/features/designer/model/flowSuggestions'
 import { buildConnectionsMap } from '@/features/connections/connectionValidation'
 import { listChatbotConnections } from '@/features/connections/connectionApi'
+import { listIntegrations } from '@/features/integrations/integrationApi'
 import { LinearFlowView } from '@/features/designer/views/LinearFlowView'
 import { CanvasFlowView } from '@/features/designer/views/CanvasFlowView'
 import { StepInspector } from '@/features/designer/inspector/StepInspector'
@@ -194,6 +195,12 @@ export function DesignerPage() {
     queryKey: ['chatbot-usable-connections', chatbotId],
     enabled: !!chatbotId,
     queryFn: () => listChatbotConnections(chatbotId!),
+  })
+
+  const integrations = useQuery({
+    queryKey: ['instance-integrations', instance.id],
+    enabled: !!instance.id,
+    queryFn: () => listIntegrations(instance.id),
   })
 
   const mediaQuery = useChatbotMedia(instance.id, chatbotId)
@@ -626,7 +633,7 @@ export function DesignerPage() {
           </div>
         ) : null}
         <div className="flex flex-wrap gap-1.5">
-          {(['message', 'question', 'http', 'email', 'condition', 'loop', 'set_variable', 'operation', 'entity'] as FlowNodeType[]).map(
+          {(['message', 'question', 'http', 'email', 'integration', 'handoff', 'condition', 'loop', 'set_variable', 'operation', 'entity'] as FlowNodeType[]).map(
             (t) => (
               <Button key={t} size="sm" variant="secondary" onClick={() => addNode(t, selectedNodeId)}>
                 + {nodeTypeLabel(t)}
@@ -643,7 +650,7 @@ export function DesignerPage() {
         'h-fit',
         canvasFullscreen
           ? 'flex h-full max-h-full flex-col overflow-y-auto'
-          : 'lg:sticky lg:top-[var(--ff-designer-aside-top,5rem)]',
+          : 'lg:sticky lg:top-[var(--ff-designer-aside-top,5rem)] lg:max-h-[calc(100vh-var(--ff-designer-aside-top,7.5rem)-1.5rem)] lg:overflow-y-auto',
       )}
     >
       {selected ? (
@@ -651,6 +658,8 @@ export function DesignerPage() {
           node={selected}
           connections={connections.data ?? []}
           connectionsReady={connections.isSuccess}
+          integrations={integrations.data ?? []}
+          integrationsReady={integrations.isSuccess}
           readOnly={!editable}
         />
       ) : (

@@ -108,6 +108,118 @@ final class SupabaseRest
     }
 
     /**
+     * @return array{ok: bool, status: int, data?: mixed, error?: string}
+     */
+    public static function restSelectAsService(array $config, string $table, string $query): array
+    {
+        $serviceKey = (string) ($config['supabase_service_role_key'] ?? '');
+        if ($serviceKey === '' || $serviceKey === 'REPLACE_WITH_SUPABASE_SERVICE_ROLE_KEY') {
+            return ['ok' => false, 'status' => 500, 'error' => 'supabase_service_role_key missing in config.php'];
+        }
+        return self::restRequestAsService($config, $serviceKey, 'GET', $table, $query, null);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array{ok: bool, status: int, data?: mixed, error?: string}
+     */
+    public static function restInsertAsService(array $config, string $table, array $row): array
+    {
+        $serviceKey = (string) ($config['supabase_service_role_key'] ?? '');
+        if ($serviceKey === '' || $serviceKey === 'REPLACE_WITH_SUPABASE_SERVICE_ROLE_KEY') {
+            return ['ok' => false, 'status' => 500, 'error' => 'supabase_service_role_key missing in config.php'];
+        }
+        return self::restRequestAsService($config, $serviceKey, 'POST', $table, '', $row, true);
+    }
+
+    /**
+     * @param array<string, mixed> $patch
+     * @return array{ok: bool, status: int, data?: mixed, error?: string}
+     */
+    public static function restPatchAsService(array $config, string $table, string $query, array $patch): array
+    {
+        $serviceKey = (string) ($config['supabase_service_role_key'] ?? '');
+        if ($serviceKey === '' || $serviceKey === 'REPLACE_WITH_SUPABASE_SERVICE_ROLE_KEY') {
+            return ['ok' => false, 'status' => 500, 'error' => 'supabase_service_role_key missing in config.php'];
+        }
+        return self::restRequestAsService($config, $serviceKey, 'PATCH', $table, $query, $patch);
+    }
+
+    /**
+     * @param array<string, mixed>|null $body
+     * @return array{ok: bool, status: int, data?: mixed, error?: string}
+     */
+    private static function restRequestAsService(
+        array $config,
+        string $serviceKey,
+        string $method,
+        string $table,
+        string $query,
+        ?array $body,
+        bool $preferRepresentation = false,
+    ): array {
+        $base = rtrim((string) ($config['supabase_url'] ?? ''), '/');
+        $anon = (string) ($config['supabase_anon_key'] ?? '');
+        if ($base === '' || $anon === '' || $anon === 'REPLACE_WITH_SUPABASE_ANON_KEY') {
+            return [
+                'ok' => false,
+                'status' => 500,
+                'error' => 'supabase_url / supabase_anon_key missing in config.php',
+            ];
+        }
+        if (!preg_match('/^[a-z_][a-z0-9_]*$/i', $table)) {
+            return ['ok' => false, 'status' => 500, 'error' => 'Invalid table name'];
+        }
+
+        $url = $base . '/rest/v1/' . rawurlencode($table);
+        if ($query !== '') {
+            $url .= '?' . $query;
+        }
+
+        $headers = [
+            'Content-Type: application/json',
+            'apikey: ' . $anon,
+            'Authorization: Bearer ' . $serviceKey,
+        ];
+        if ($preferRepresentation || $method === 'PATCH' || $method === 'POST') {
+            $headers[] = 'Prefer: return=representation';
+        }
+
+        $ch = curl_init($url);
+        if ($ch === false) {
+            return ['ok' => false, 'status' => 500, 'error' => 'curl_init failed'];
+        }
+
+        $opts = [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => 30,
+        ];
+        if ($body !== null) {
+            $opts[CURLOPT_POSTFIELDS] = json_encode($body, JSON_UNESCAPED_UNICODE);
+        }
+        curl_setopt_array($ch, $opts);
+
+        $raw = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $cerr = curl_error($ch);
+        curl_close($ch);
+
+        if (!is_string($raw)) {
+            return ['ok' => false, 'status' => 502, 'error' => $cerr !== '' ? $cerr : 'Empty Supabase response'];
+        }
+
+        $data = json_decode($raw, true);
+        if ($status >= 200 && $status < 300) {
+            return ['ok' => true, 'status' => $status, 'data' => $data];
+        }
+
+        $msg = is_array($data) ? (string) ($data['message'] ?? $data['error'] ?? $raw) : $raw;
+        return ['ok' => false, 'status' => $status, 'error' => $msg !== '' ? $msg : 'Supabase REST failed'];
+    }
+
+    /**
      * Resolve connection secrets for execute/send.
      *
      * Preferred: connection_id + chatbot_id (+ optional session_id for public chat).

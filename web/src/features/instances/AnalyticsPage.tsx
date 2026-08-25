@@ -16,7 +16,7 @@ import { Card } from '@/shared/ui/card'
 import { PageHeader } from '@/shared/ui/page-header'
 import { Select } from '@/shared/ui/select'
 import { cn } from '@/shared/lib/utils'
-import { buildConversationAnalytics } from '@/features/instances/conversationAnalytics'
+import { buildConversationAnalytics, buildDropOffForVersion, compareDropOff } from '@/features/instances/conversationAnalytics'
 
 type SessionRow = ConversationSession & { chatbots: { name: string } | null }
 
@@ -34,12 +34,15 @@ const STATUS_COLORS: Record<string, string> = {
   active: '#38bdf8',
   abandoned: '#f59e0b',
   failed: '#f43f5e',
+  escalated: '#8b5cf6',
 }
 
 export function AnalyticsPage() {
   const { instance } = useRequiredInstance()
   const [chatbotId, setChatbotId] = useState('')
   const [range, setRange] = useState<RangeKey>('30')
+  const [versionA, setVersionA] = useState('')
+  const [versionB, setVersionB] = useState('')
 
   const rangeDays = RANGE_OPTIONS.find((r) => r.value === range)?.days ?? 30
 
@@ -105,6 +108,36 @@ export function AnalyticsPage() {
       }),
     [sessions.data, events.data, payments.data, chatbotId, rangeDays],
   )
+
+  const versionOptions = stats.byVersion.map((v) => v.version)
+  const effectiveA = versionA && versionOptions.includes(versionA) ? versionA : versionOptions[0] ?? ''
+  const effectiveB =
+    versionB && versionOptions.includes(versionB) && versionB !== effectiveA
+      ? versionB
+      : versionOptions.find((v) => v !== effectiveA) ?? ''
+
+  const versionCompare = useMemo(() => {
+    if (!effectiveA || !effectiveB) return null
+    const a = buildDropOffForVersion({
+      sessions: sessions.data ?? [],
+      events: events.data ?? [],
+      version: effectiveA,
+      chatbotId: chatbotId || null,
+      rangeDays,
+    })
+    const b = buildDropOffForVersion({
+      sessions: sessions.data ?? [],
+      events: events.data ?? [],
+      version: effectiveB,
+      chatbotId: chatbotId || null,
+      rangeDays,
+    })
+    return {
+      a,
+      b,
+      rows: compareDropOff(a.dropOff, b.dropOff).slice(0, 14),
+    }
+  }, [sessions.data, events.data, effectiveA, effectiveB, chatbotId, rangeDays])
 
   const loading = sessions.isLoading || events.isLoading
 
@@ -241,12 +274,139 @@ export function AnalyticsPage() {
         </Card>
 
         <Card className="p-4">
-          <SectionTitle title="Activity by hour" subtitle="When conversations start (local time)" />
-          <HourBars items={stats.hourOfDay} />
+          <SectionTitle title="By publish version" subtitle="Completion rate per published flow version" />
+          {stats.byVersion.length ? (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[280px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--color-border)]/60 text-[11px] uppercase tracking-wide text-[var(--color-ink-muted)]">
+                    <th className="pb-2 pr-3 font-semibold">Version</th>
+                    <th className="pb-2 pr-3 font-semibold tabular-nums">Sessions</th>
+                    <th className="pb-2 pr-3 font-semibold tabular-nums">Completed</th>
+                    <th className="pb-2 font-semibold tabular-nums">Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.byVersion.map((row) => (
+                    <tr key={row.version} className="border-b border-[var(--color-border)]/40 last:border-0">
+                      <td className="py-2 pr-3 font-mono text-xs font-medium text-[var(--color-ink)]">
+                        {row.version}
+                      </td>
+                      <td className="py-2 pr-3 tabular-nums text-[var(--color-ink-muted)]">{row.sessions}</td>
+                      <td className="py-2 pr-3 tabular-nums text-[var(--color-ink-muted)]">{row.completed}</td>
+                      <td className="py-2 tabular-nums text-[var(--color-ink)]">{row.completionRate}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyHint>No version data in this range.</EmptyHint>
+          )}
         </Card>
       </div>
 
+      {versionOptions.length >= 2 ? (
+        <Card className="p-4">
+          <SectionTitle
+            title="Version compare — drop-off"
+            subtitle="Side-by-side funnel reach by publish version"
+          />
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]">
+                Version A
+              </p>
+              <Select
+                className="min-w-[120px]"
+                value={effectiveA}
+                onChange={(e) => setVersionA(e.target.value)}
+              >
+                {versionOptions.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]">
+                Version B
+              </p>
+              <Select
+                className="min-w-[120px]"
+                value={effectiveB}
+                onChange={(e) => setVersionB(e.target.value)}
+              >
+                {versionOptions
+                  .filter((v) => v !== effectiveA)
+                  .map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+            {versionCompare ? (
+              <p className="text-xs text-[var(--color-ink-muted)]">
+                A n={versionCompare.a.sessionCount} · B n={versionCompare.b.sessionCount}
+              </p>
+            ) : null}
+          </div>
+          {versionCompare?.rows.length ? (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[420px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--color-border)]/60 text-[11px] uppercase tracking-wide text-[var(--color-ink-muted)]">
+                    <th className="pb-2 pr-3 font-semibold">Step</th>
+                    <th className="pb-2 pr-3 font-semibold tabular-nums">{effectiveA}</th>
+                    <th className="pb-2 pr-3 font-semibold tabular-nums">{effectiveB}</th>
+                    <th className="pb-2 font-semibold tabular-nums">Δ %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {versionCompare.rows.map((row) => (
+                    <tr key={row.nodeKey} className="border-b border-[var(--color-border)]/40 last:border-0">
+                      <td className="py-2 pr-3 font-mono text-xs text-[var(--color-ink)]">{row.nodeKey}</td>
+                      <td className="py-2 pr-3 tabular-nums text-[var(--color-ink-muted)]">
+                        {row.left ? `${row.left.reached} · ${row.left.pct}%` : '—'}
+                      </td>
+                      <td className="py-2 pr-3 tabular-nums text-[var(--color-ink-muted)]">
+                        {row.right ? `${row.right.reached} · ${row.right.pct}%` : '—'}
+                      </td>
+                      <td
+                        className={cn(
+                          'py-2 tabular-nums',
+                          row.deltaPct == null
+                            ? 'text-[var(--color-ink-muted)]'
+                            : row.deltaPct > 0
+                              ? 'text-emerald-700'
+                              : row.deltaPct < 0
+                                ? 'text-rose-700'
+                                : 'text-[var(--color-ink-muted)]',
+                        )}
+                      >
+                        {row.deltaPct == null
+                          ? '—'
+                          : `${row.deltaPct > 0 ? '+' : ''}${row.deltaPct}`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyHint>No overlapping step events for these versions.</EmptyHint>
+          )}
+        </Card>
+      ) : null}
+
       <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-4">
+          <SectionTitle title="Activity by hour" subtitle="When conversations start (local time)" />
+          <HourBars items={stats.hourOfDay} />
+        </Card>
+
         <Card className="p-4">
           <SectionTitle
             icon={<Users className="h-4 w-4" />}
@@ -280,8 +440,10 @@ export function AnalyticsPage() {
             <EmptyHint>No chatbot traffic in this range.</EmptyHint>
           )}
         </Card>
+      </div>
 
-        <Card className="p-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-4 lg:col-span-2">
           <SectionTitle title="Top products" subtitle="Quantities from completed session carts" />
           {stats.topProducts.length ? (
             <HorizontalBars

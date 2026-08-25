@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ChevronDown, ChevronRight, Download } from 'lucide-react'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
@@ -12,11 +12,13 @@ import { ChatMessageBody } from '@/features/chat/ChatMessageBody'
 import { UserMessageBubble } from '@/features/chat/UserMessageBubble'
 import { downloadJson } from '@/shared/lib/downloadJson'
 import { safeDownloadBasename } from '@/features/designer/utils/flowTransfer'
-import type { ConversationEvent, ConversationSession, Json } from '@/shared/types/database'
+import { canEdit, type ConversationEvent, type ConversationSession, type Json } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { PageHeader } from '@/shared/ui/page-header'
+import { FieldError } from '@/shared/ui/field-error'
+import { Input } from '@/shared/ui/input'
 import { cn } from '@/shared/lib/utils'
 import type { ChatMessage } from '@/features/designer/preview/previewRuntime'
 
@@ -31,13 +33,18 @@ function eventText(payload: Json): string {
 }
 
 export function ConversationDetailPage() {
-  const { instance } = useRequiredInstance()
+  const { instance, role } = useRequiredInstance()
   const { sessionId } = useParams()
+  const qc = useQueryClient()
+  const editable = canEdit(role)
   const [openRuns, setOpenRuns] = useState<Record<string, boolean>>({})
+  const [reply, setReply] = useState('')
+  const [replyError, setReplyError] = useState<string | null>(null)
 
   const sessionQuery = useQuery({
     queryKey: ['conversation-session', instance.id, sessionId],
     enabled: !!sessionId,
+    refetchInterval: (q) => (q.state.data?.status === 'escalated' ? 4000 : false),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('conversation_sessions')
@@ -53,6 +60,7 @@ export function ConversationDetailPage() {
   const eventsQuery = useQuery({
     queryKey: ['conversation-events', sessionId],
     enabled: !!sessionId,
+    refetchInterval: () => (sessionQuery.data?.status === 'escalated' ? 4000 : false),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('conversation_events')
@@ -68,6 +76,44 @@ export function ConversationDetailPage() {
   const events = eventsQuery.data ?? []
   const shownStatus = session ? displaySessionStatus(session) : 'active'
   const botName = session?.chatbots?.name ?? 'chatbot'
+  const isEscalated = session?.status === 'escalated'
+
+  const replyMutation = useMutation({
+    mutationFn: async (text: string) => {
+      const { error } = await supabase.rpc('agent_reply_to_conversation', {
+        p_session_id: sessionId!,
+        p_text: text,
+      })
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      setReply('')
+      setReplyError(null)
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['conversation-events', sessionId] }),
+        qc.invalidateQueries({ queryKey: ['conversation-session', instance.id, sessionId] }),
+        qc.invalidateQueries({ queryKey: ['conversation-inbox', instance.id] }),
+      ])
+    },
+    onError: (e: Error) => setReplyError(e.message),
+  })
+
+  const resolveMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('resolve_conversation_handoff', {
+        p_session_id: sessionId!,
+      })
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['conversation-events', sessionId] }),
+        qc.invalidateQueries({ queryKey: ['conversation-session', instance.id, sessionId] }),
+        qc.invalidateQueries({ queryKey: ['conversation-inbox', instance.id] }),
+      ])
+    },
+    onError: (e: Error) => setReplyError(e.message),
+  })
 
   const variablesPretty = useMemo(() => {
     if (!session) return '{}'
@@ -85,6 +131,13 @@ export function ConversationDetailPage() {
       session,
       events,
     })
+  }
+
+  function onReply(e: FormEvent) {
+    e.preventDefault()
+    const text = reply.trim()
+    if (!text) return
+    replyMutation.mutate(text)
   }
 
   if (sessionQuery.isLoading) {
@@ -111,6 +164,12 @@ export function ConversationDetailPage() {
         }`}
         actions={
           <>
+            <Link
+              to={`/instances/${instance.id}/inbox`}
+              className="text-sm font-medium text-teal-800 hover:underline"
+            >
+              Inbox
+            </Link>
             <Link
               to={`/instances/${instance.id}/conversations`}
               className="text-sm font-medium text-teal-800 hover:underline"
@@ -150,7 +209,11 @@ export function ConversationDetailPage() {
           ) : (
             <div className="space-y-3">
               {events.map((event) => {
-                if (event.kind === 'message.bot' || event.kind === 'message.user') {
+                if (
+                  event.kind === 'message.bot' ||
+                  event.kind === 'message.user' ||
+                  event.kind === 'message.agent'
+                ) {
                   const text = eventText(event.payload)
                   const createdAt = event.created_at
                   if (event.kind === 'message.user') {
@@ -171,7 +234,19 @@ export function ConversationDetailPage() {
                   }
                   return (
                     <div key={event.id} className="flex flex-col items-start gap-1">
-                      <div className="max-w-[88%] rounded-[1.25rem] rounded-bl-md border border-slate-200/80 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm">
+                      <div
+                        className={cn(
+                          'max-w-[88%] rounded-[1.25rem] rounded-bl-md border px-3.5 py-2.5 text-sm shadow-sm',
+                          event.kind === 'message.agent'
+                            ? 'border-violet-200 bg-violet-50 text-violet-950'
+                            : 'border-slate-200/80 bg-white text-slate-800',
+                        )}
+                      >
+                        {event.kind === 'message.agent' ? (
+                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                            Agent
+                          </p>
+                        ) : null}
                         <ChatMessageBody text={text} />
                       </div>
                       <p className="text-[10px] text-slate-400">{format(new Date(createdAt), 'HH:mm:ss')}</p>
@@ -210,6 +285,32 @@ export function ConversationDetailPage() {
               })}
             </div>
           )}
+
+          {isEscalated && editable ? (
+            <form className="space-y-2 border-t border-slate-200 pt-3" onSubmit={onReply}>
+              <p className="text-xs font-semibold text-violet-800">Reply as agent</p>
+              {replyError ? <FieldError>{replyError}</FieldError> : null}
+              <Input
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                placeholder="Type a reply for the visitor…"
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" size="sm" disabled={replyMutation.isPending || !reply.trim()}>
+                  {replyMutation.isPending ? 'Sending…' : 'Send reply'}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={resolveMutation.isPending}
+                  onClick={() => resolveMutation.mutate()}
+                >
+                  {resolveMutation.isPending ? 'Resolving…' : 'Resolve handoff'}
+                </Button>
+              </div>
+            </form>
+          ) : null}
         </Card>
 
         <div className="space-y-3">
