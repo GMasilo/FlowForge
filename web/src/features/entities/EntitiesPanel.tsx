@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Database, Plus, Trash2 } from 'lucide-react'
+import { Database, Download, FileSpreadsheet, Plus, Trash2 } from 'lucide-react'
 import {
   createDynamicRecord,
   createEntity,
@@ -9,6 +9,7 @@ import {
   deleteDynamicRecord,
   deleteEntity,
   deleteStaticRecord,
+  ensureEntityPrimaryKey,
   fetchChatbotEntities,
   keyFromName,
   listEntityRecords,
@@ -18,6 +19,17 @@ import {
   type EntityRecordView,
   type EntityWithMeta,
 } from '@/features/entities/entityApi'
+import {
+  downloadEntityRecordsExcel,
+  pickEntitySpreadsheetFile,
+  type EntityExcelColumn,
+  type EntityExcelParseResult,
+} from '@/features/entities/entityExcel'
+import { importEntityFromExcel } from '@/features/entities/entityExcelImport'
+import { ENTITY_PRIMARY_KEY, ensurePrimaryKeyColumn, isEntityPrimaryKey } from '@/features/entities/entityPrimaryKey'
+import { coalesceEntityFilters, queryEntityRecords } from '@/features/entities/entityQuery'
+import { EntityQueryBuilder } from '@/features/designer/inspector/EntityQueryBuilder'
+import type { EntityFiltersConfig } from '@/features/designer/model/flowSchema'
 import type { EntityAttribute, EntityKind, VariableType } from '@/shared/types/database'
 import { coerceEntityValue, isBlankEntityValue } from '@/features/entities/entityValueValidation'
 import { canEdit } from '@/shared/types/database'
@@ -41,6 +53,10 @@ export function EntitiesPanel({ chatbotId }: { chatbotId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [importDraft, setImportDraft] = useState<EntityExcelParseResult | null>(null)
+  const [importName, setImportName] = useState('')
+  const [importKind, setImportKind] = useState<EntityKind>('static')
+  const [importColumns, setImportColumns] = useState<EntityExcelColumn[]>([])
   const [sectionOpen, setSectionOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newKind, setNewKind] = useState<EntityKind>('dynamic')
@@ -76,6 +92,29 @@ export function EntitiesPanel({ chatbotId }: { chatbotId: string }) {
     onError: (e: Error) => setError(e.message),
   })
 
+  const importEntity = useMutation({
+    mutationFn: async () => {
+      if (!importDraft) throw new Error('No spreadsheet loaded')
+      return importEntityFromExcel({
+        chatbotId,
+        name: importName,
+        kind: importKind,
+        columns: importColumns,
+        rows: importDraft.rows,
+      })
+    },
+    onSuccess: async (result) => {
+      setImportDraft(null)
+      setImportColumns([])
+      setImportName('')
+      setError(null)
+      await qc.invalidateQueries({ queryKey: ['chatbot-entities', chatbotId] })
+      setSelectedId(result.entityId)
+      setSectionOpen(true)
+    },
+    onError: (e: Error) => setError(e.message),
+  })
+
   const remove = useMutation({
     mutationFn: async (id: string) => {
       if (!window.confirm('Delete this entity and all of its attributes and records?')) return
@@ -87,6 +126,22 @@ export function EntitiesPanel({ chatbotId }: { chatbotId: string }) {
     },
     onError: (e: Error) => setError(e.message),
   })
+
+  async function startImport() {
+    setError(null)
+    setCreating(false)
+    try {
+      const { parsed } = await pickEntitySpreadsheetFile()
+      setImportDraft(parsed)
+      setImportName(parsed.suggestedName)
+      setImportColumns(ensurePrimaryKeyColumn(parsed.columns.map((c) => ({ ...c }))))
+      setImportKind('static')
+      setSectionOpen(true)
+    } catch (e) {
+      if (e instanceof Error && e.message === 'No file selected') return
+      setError(e instanceof Error ? e.message : 'Could not read spreadsheet')
+    }
+  }
 
   return (
     <CollapsibleSection
@@ -108,16 +163,30 @@ export function EntitiesPanel({ chatbotId }: { chatbotId: string }) {
       }
       actions={
         editable ? (
-          <Button
-            size="sm"
-            onClick={() => {
-              setSectionOpen(true)
-              setCreating((v) => !v)
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            New entity
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setSectionOpen(true)
+                void startImport()
+              }}
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Import Excel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setSectionOpen(true)
+                setImportDraft(null)
+                setCreating((v) => !v)
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              New entity
+            </Button>
+          </div>
         ) : null
       }
     >
@@ -139,6 +208,95 @@ export function EntitiesPanel({ chatbotId }: { chatbotId: string }) {
           <div className="flex items-end">
             <Button disabled={create.isPending} onClick={() => create.mutate()}>
               {create.isPending ? 'Creating…' : 'Create'}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {importDraft ? (
+        <div className="space-y-3 rounded-xl border border-teal-200/70 bg-teal-50/40 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h4 className="text-sm font-semibold text-slate-900">Import entity from Excel</h4>
+              <p className="text-xs text-slate-600">
+                {importDraft.rows.length} row{importDraft.rows.length === 1 ? '' : 's'} · {importColumns.length}{' '}
+                column{importColumns.length === 1 ? '' : 's'}. First row is headers; an optional second row of types
+                (string, number, …) is used when present.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setImportDraft(null)
+                setImportColumns([])
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+            <div>
+              <Label>Name</Label>
+              <Input value={importName} onChange={(e) => setImportName(e.target.value)} placeholder="Products" />
+            </div>
+            <div>
+              <Label>Kind</Label>
+              <Select value={importKind} onChange={(e) => setImportKind(e.target.value as EntityKind)}>
+                <option value="static">Static (design-time catalog)</option>
+                <option value="dynamic">Dynamic (store user data)</option>
+              </Select>
+            </div>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="min-w-full border-collapse text-left text-sm">
+              <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-2 py-2 font-semibold">Column</th>
+                  <th className="px-2 py-2 font-semibold">Key</th>
+                  <th className="px-2 py-2 font-semibold">Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importColumns.map((col, index) => {
+                  const primaryKey = col.key === 'id'
+                  return (
+                  <tr key={`${col.key}-${index}`} className="border-t border-slate-100">
+                    <td className="px-2 py-1.5 text-slate-800">
+                      {col.label}
+                      {primaryKey ? ' (PK)' : ''}
+                    </td>
+                    <td className="px-2 py-1.5 font-mono text-xs text-slate-600">{col.key}</td>
+                    <td className="px-2 py-1.5">
+                      <Select
+                        className="h-8"
+                        disabled={primaryKey}
+                        value={col.value_type}
+                        onChange={(e) => {
+                          const value_type = e.target.value as VariableType
+                          setImportColumns((cols) =>
+                            cols.map((c, i) => (i === index ? { ...c, value_type } : c)),
+                          )
+                        }}
+                      >
+                        {ATTR_TYPES.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </Select>
+                    </td>
+                  </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-end">
+            <Button disabled={importEntity.isPending || !importColumns.length} onClick={() => importEntity.mutate()}>
+              {importEntity.isPending
+                ? 'Importing…'
+                : `Create entity (${importDraft.rows.length} record${importDraft.rows.length === 1 ? '' : 's'})`}
             </Button>
           </div>
         </div>
@@ -204,6 +362,16 @@ function EntityEditor({
     queryKey: ['entity-records', entity.id, entity.kind],
     queryFn: () => listEntityRecords(entity),
   })
+
+  useEffect(() => {
+    const pk = entity.attributes.find((a) => isEntityPrimaryKey(a.key))
+    if (pk?.required && pk.is_unique && pk.is_identifier && pk.value_type === 'string') return
+    void ensureEntityPrimaryKey(entity.id)
+      .then(() => qc.invalidateQueries({ queryKey: ['chatbot-entities', chatbotId] }))
+      .catch(() => {
+        /* migration / race — create paths also ensure */
+      })
+  }, [entity.id, entity.attributes, chatbotId, qc])
 
   async function refreshAll() {
     await Promise.all([
@@ -362,12 +530,14 @@ function AttributesTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {rows.map((row) => {
+              const primaryKey = isEntityPrimaryKey(row.key)
+              return (
               <tr key={row.id} className="border-t border-slate-100">
                 <td className="px-2 py-1.5">
                   <Input
                     className="h-8 font-mono text-xs"
-                    disabled={!editable || savingId === row.id}
+                    disabled={!editable || savingId === row.id || primaryKey}
                     value={row.key}
                     onChange={(e) =>
                       setRows((list) => list.map((r) => (r.id === row.id ? { ...r, key: e.target.value } : r)))
@@ -391,7 +561,7 @@ function AttributesTable({
                 <td className="px-2 py-1.5">
                   <Select
                     className="h-8 text-xs"
-                    disabled={!editable || savingId === row.id}
+                    disabled={!editable || savingId === row.id || primaryKey}
                     value={row.value_type}
                     onChange={(e) => {
                       const next = { ...row, value_type: e.target.value as VariableType }
@@ -409,7 +579,7 @@ function AttributesTable({
                 <td className="px-2 py-1.5 text-center">
                   <input
                     type="checkbox"
-                    disabled={!editable || savingId === row.id}
+                    disabled={!editable || savingId === row.id || primaryKey}
                     checked={row.required}
                     onChange={(e) => {
                       const next = { ...row, required: e.target.checked }
@@ -421,7 +591,7 @@ function AttributesTable({
                 <td className="px-2 py-1.5 text-center">
                   <input
                     type="checkbox"
-                    disabled={!editable || savingId === row.id}
+                    disabled={!editable || savingId === row.id || primaryKey}
                     checked={row.is_unique}
                     onChange={(e) => {
                       const next = { ...row, is_unique: e.target.checked }
@@ -433,28 +603,29 @@ function AttributesTable({
                 <td className="px-2 py-1.5 text-center">
                   <input
                     type="checkbox"
-                    disabled={!editable || savingId === row.id}
-                    checked={row.is_identifier}
-                    onChange={(e) => {
-                      const next = { ...row, is_identifier: e.target.checked }
-                      setRows((list) => list.map((r) => (r.id === row.id ? next : r)))
-                      void saveAttr(next)
-                    }}
+                    disabled
+                    checked={primaryKey || row.is_identifier}
+                    title={primaryKey ? 'Primary key' : 'Only id is the primary key'}
                   />
                 </td>
                 {editable ? (
                   <td className="px-2 py-1.5 text-right">
-                    <button
-                      type="button"
-                      className="text-xs text-rose-600 hover:underline"
-                      onClick={() => void removeAttr(row.id)}
-                    >
-                      Remove
-                    </button>
+                    {primaryKey ? (
+                      <span className="text-[11px] text-slate-400">Primary key</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-xs text-rose-600 hover:underline"
+                        onClick={() => void removeAttr(row.id)}
+                      >
+                        Remove
+                      </button>
+                    )}
                   </td>
                 ) : null}
               </tr>
-            ))}
+              )
+            })}
             {!rows.length ? (
               <tr>
                 <td colSpan={editable ? 7 : 6} className="px-3 py-4 text-sm text-slate-500">
@@ -488,6 +659,14 @@ function RecordsTable({
   const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({})
   const [newRow, setNewRow] = useState<Record<string, string>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [filters, setFilters] = useState<EntityFiltersConfig>({ logic: 'and', clauses: [] })
+
+  const activeFilters = useMemo(() => coalesceEntityFilters({ filters }), [filters])
+  const filteredRecords = useMemo(
+    () => queryEntityRecords(records, activeFilters, (raw) => raw),
+    [records, activeFilters],
+  )
+  const queryActive = activeFilters.clauses.some((c) => c.attribute.trim())
 
   useEffect(() => {
     const next: Record<string, Record<string, string>> = {}
@@ -500,13 +679,19 @@ function RecordsTable({
     setDrafts(next)
   }, [records, attrs])
 
+  useEffect(() => {
+    setFilters({ logic: 'and', clauses: [] })
+  }, [entity.id])
+
   async function saveCell(recordId: string, attrKey: string, raw: string, valueType: VariableType) {
+    if (isEntityPrimaryKey(attrKey)) return
     const record = records.find((r) => r.id === recordId)
     if (!record) return
     const values = { ...record.values, [attrKey]: coerceAttr(raw, valueType) }
     if (isBlankEntityValue(raw) && !attrs.find((a) => a.key === attrKey)?.required) {
       delete values[attrKey]
     }
+    values[ENTITY_PRIMARY_KEY] = record.values[ENTITY_PRIMARY_KEY] ?? recordId
     setSavingId(recordId)
     onError(null)
     try {
@@ -525,6 +710,7 @@ function RecordsTable({
     try {
       const values: Record<string, unknown> = {}
       for (const a of attrs) {
+        if (isEntityPrimaryKey(a.key)) continue
         const raw = newRow[a.key] ?? ''
         if (raw === '' && !a.required) continue
         if (raw === '' && a.required) throw new Error(`${a.label || a.key} is required`)
@@ -577,40 +763,70 @@ function RecordsTable({
       title={entity.kind === 'static' ? 'Records' : 'Stored records'}
       badge={
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-          {records.length}
+          {queryActive ? `${filteredRecords.length}/${records.length}` : records.length}
         </span>
+      }
+      actions={
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={!attrs.length}
+          onClick={() => {
+            onError(null)
+            try {
+              downloadEntityRecordsExcel({
+                entityKey: entity.key,
+                entityName: entity.name,
+                attributes: attrs,
+                records: queryActive ? filteredRecords : records,
+              })
+            } catch (e) {
+              onError(e instanceof Error ? e.message : 'Could not export Excel')
+            }
+          }}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export Excel
+        </Button>
       }
     >
       {loading ? (
         <p className="text-sm text-slate-500">Loading…</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <div className="space-y-3">
+          <EntityQueryBuilder
+            attributes={attrs}
+            filters={filters}
+            valueMode="plain"
+            onChange={setFilters}
+          />
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="min-w-full border-collapse text-left text-sm">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-2 py-2 font-semibold">Id</th>
                 {attrs.map((a) => (
                   <th key={a.id} className="px-2 py-2 font-semibold">
                     {a.label || a.key}
+                    {isEntityPrimaryKey(a.key) ? ' (PK)' : ''}
                     {a.required ? ' *' : ''}
-                    {a.is_unique ? ' ‡' : ''}
+                    {a.is_unique && !isEntityPrimaryKey(a.key) ? ' ‡' : ''}
                   </th>
                 ))}
                 {editable ? <th className="px-2 py-2 font-semibold" /> : null}
               </tr>
             </thead>
             <tbody>
-              {records.map((r) => (
+              {filteredRecords.map((r) => (
                 <tr key={r.id} className="border-t border-slate-100">
-                  <td className="max-w-[100px] truncate px-2 py-1.5 font-mono text-[10px] text-slate-400" title={r.id}>
-                    {r.id.slice(0, 8)}…
-                  </td>
-                  {attrs.map((a) => (
+                  {attrs.map((a) => {
+                    const primaryKey = isEntityPrimaryKey(a.key)
+                    const display = drafts[r.id]?.[a.key] ?? (primaryKey ? r.id : '')
+                    return (
                     <td key={a.id} className="px-2 py-1.5">
                       <RecordCell
-                        disabled={!editable || savingId === r.id}
+                        disabled={!editable || savingId === r.id || primaryKey}
                         valueType={a.value_type}
-                        value={drafts[r.id]?.[a.key] ?? ''}
+                        value={display}
                         onChange={(v) =>
                           setDrafts((d) => ({
                             ...d,
@@ -620,7 +836,8 @@ function RecordsTable({
                         onCommit={(v) => void saveCell(r.id, a.key, v, a.value_type)}
                       />
                     </td>
-                  ))}
+                    )
+                  })}
                   {editable ? (
                     <td className="px-2 py-1.5 text-right">
                       <button
@@ -637,18 +854,30 @@ function RecordsTable({
 
               {editable ? (
                 <tr className="border-t border-dashed border-teal-200 bg-teal-50/30">
-                  <td className="px-2 py-1.5 text-[10px] font-medium text-teal-700">New</td>
-                  {attrs.map((a) => (
+                  {attrs.map((a) => {
+                    const primaryKey = isEntityPrimaryKey(a.key)
+                    return (
                     <td key={a.id} className="px-2 py-1.5">
-                      <RecordCell
-                        disabled={false}
-                        valueType={a.value_type}
-                        value={newRow[a.key] ?? ''}
-                        onChange={(v) => setNewRow((d) => ({ ...d, [a.key]: v }))}
-                        onCommit={() => undefined}
-                      />
+                      {primaryKey ? (
+                        <Input
+                          className="h-8 font-mono text-xs text-slate-400"
+                          disabled
+                          value={newRow[ENTITY_PRIMARY_KEY] ?? ''}
+                          placeholder="(auto UUID)"
+                          onChange={() => undefined}
+                        />
+                      ) : (
+                        <RecordCell
+                          disabled={false}
+                          valueType={a.value_type}
+                          value={newRow[a.key] ?? ''}
+                          onChange={(v) => setNewRow((d) => ({ ...d, [a.key]: v }))}
+                          onCommit={() => undefined}
+                        />
+                      )}
                     </td>
-                  ))}
+                    )
+                  })}
                   <td className="px-2 py-1.5 text-right">
                     <Button size="sm" onClick={() => void addRecord()}>
                       Add
@@ -657,15 +886,24 @@ function RecordsTable({
                 </tr>
               ) : null}
 
-              {!records.length && !editable ? (
+              {!filteredRecords.length && !editable ? (
                 <tr>
                   <td colSpan={attrs.length + 1} className="px-3 py-4 text-sm text-slate-500">
-                    No records yet.
+                    {queryActive ? 'No records match these filters.' : 'No records yet.'}
+                  </td>
+                </tr>
+              ) : null}
+
+              {!filteredRecords.length && editable && queryActive ? (
+                <tr>
+                  <td colSpan={attrs.length + 1} className="px-3 py-3 text-sm text-slate-500">
+                    No records match these filters ({records.length} total).
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </CollapsibleSection>

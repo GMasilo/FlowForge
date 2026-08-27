@@ -6,6 +6,7 @@ import {
   type DocumentContent,
   type DocumentFont,
   type DocumentLayout,
+  type DocumentOrientation,
 } from '@/features/templates/templateModel'
 
 export const A4_WIDTH_PT = 595.28
@@ -13,13 +14,27 @@ export const A4_HEIGHT_PT = 841.89
 export const A4_WIDTH_MM = 210
 export const A4_HEIGHT_MM = 297
 
-export function pctToMm(pct: number, axis: 'x' | 'y'): number {
-  const page = axis === 'x' ? A4_WIDTH_MM : A4_HEIGHT_MM
+export function a4SizeMm(orientation: DocumentOrientation = 'portrait'): { width: number; height: number } {
+  return orientation === 'landscape'
+    ? { width: A4_HEIGHT_MM, height: A4_WIDTH_MM }
+    : { width: A4_WIDTH_MM, height: A4_HEIGHT_MM }
+}
+
+export function a4SizePt(orientation: DocumentOrientation = 'portrait'): { width: number; height: number } {
+  return orientation === 'landscape'
+    ? { width: A4_HEIGHT_PT, height: A4_WIDTH_PT }
+    : { width: A4_WIDTH_PT, height: A4_HEIGHT_PT }
+}
+
+export function pctToMm(pct: number, axis: 'x' | 'y', orientation: DocumentOrientation = 'portrait'): number {
+  const size = a4SizeMm(orientation)
+  const page = axis === 'x' ? size.width : size.height
   return Math.round((pct / 100) * page * 10000) / 10000
 }
 
-export function mmToPct(mm: number, axis: 'x' | 'y'): number {
-  const page = axis === 'x' ? A4_WIDTH_MM : A4_HEIGHT_MM
+export function mmToPct(mm: number, axis: 'x' | 'y', orientation: DocumentOrientation = 'portrait'): number {
+  const size = a4SizeMm(orientation)
+  const page = axis === 'x' ? size.width : size.height
   if (!Number.isFinite(mm) || page <= 0) return 0
   return (mm / page) * 100
 }
@@ -92,9 +107,9 @@ export function docxFontName(font: DocumentFont): string {
   return 'Helvetica'
 }
 
-export function clampBlock(block: DocumentBlock): DocumentBlock {
+export function clampBlock(block: DocumentBlock, orientation: DocumentOrientation = 'portrait'): DocumentBlock {
   const w = clamp(block.w, 2, 100)
-  const h = clamp(block.h, block.type === 'divider' ? mmToPct(DIVIDER_MIN_MM, 'y') : 1.5, 100)
+  const h = clamp(block.h, block.type === 'divider' ? mmToPct(DIVIDER_MIN_MM, 'y', orientation) : 1.5, 100)
   const x = clamp(block.x, 0, 100 - w)
   const y = clamp(block.y, 0, 100 - h)
   const fontSize = clamp(block.fontSize || (block.type === 'heading' ? 18 : 11), 8, 36)
@@ -124,34 +139,41 @@ export function clampBlock(block: DocumentBlock): DocumentBlock {
   }
 }
 
-export function emptyDocumentBlock(type: DocumentBlockType, y = 8): DocumentBlock {
+export function emptyDocumentBlock(
+  type: DocumentBlockType,
+  y = 8,
+  orientation: DocumentOrientation = 'portrait',
+): DocumentBlock {
   const defaults: Record<DocumentBlockType, Pick<DocumentBlock, 'w' | 'h' | 'fontSize' | 'text' | 'label'>> = {
     heading: { w: 84, h: 7, fontSize: 18, text: 'Heading', label: '' },
     text: { w: 84, h: 10, fontSize: 11, text: '', label: '' },
     field: { w: 84, h: 6, fontSize: 11, text: '', label: 'Field' },
     image: { w: 36, h: 12, fontSize: 11, text: '', label: 'Signature' },
-    divider: { w: 84, h: mmToPct(0.35, 'y'), fontSize: 11, text: '', label: '' },
+    divider: { w: 84, h: mmToPct(0.35, 'y', orientation), fontSize: 11, text: '', label: '' },
     cart: { w: 84, h: 18, fontSize: 10, text: '', label: 'Order' },
   }
   const d = defaults[type]
-  return clampBlock({
-    id: newBlockId(),
-    type,
-    x: 8,
-    y,
-    w: d.w,
-    h: d.h,
-    page: 1,
-    text: d.text,
-    label: d.label,
-    value: type === 'field' ? '{{inputs.name}}' : type === 'image' ? '{{inputs.signature}}' : '',
-    align: 'left',
-    fontSize: d.fontSize,
-    fontFamily: 'helvetica',
-    bold: type === 'heading',
-    color: type === 'divider' ? '#94a3b8' : '#0f172a',
-    fill: '',
-  })
+  return clampBlock(
+    {
+      id: newBlockId(),
+      type,
+      x: 8,
+      y,
+      w: d.w,
+      h: d.h,
+      page: 1,
+      text: d.text,
+      label: d.label,
+      value: type === 'field' ? '{{inputs.name}}' : type === 'image' ? '{{inputs.signature}}' : '',
+      align: 'left',
+      fontSize: d.fontSize,
+      fontFamily: 'helvetica',
+      bold: type === 'heading',
+      color: type === 'divider' ? '#94a3b8' : '#0f172a',
+      fill: '',
+    },
+    orientation,
+  )
 }
 
 export function parseDocumentBlocks(raw: unknown): DocumentBlock[] {
@@ -188,11 +210,14 @@ export function parseDocumentBlocks(raw: unknown): DocumentBlock[] {
     .filter((b): b is DocumentBlock => !!b)
 }
 
-export function flowToPageBlocks(content: Pick<DocumentContent, 'title' | 'intro' | 'body' | 'footer' | 'fields'>): DocumentBlock[] {
+export function flowToPageBlocks(
+  content: Pick<DocumentContent, 'title' | 'intro' | 'body' | 'footer' | 'fields' | 'orientation'>,
+): DocumentBlock[] {
+  const orientation = content.orientation === 'landscape' ? 'landscape' : 'portrait'
   const blocks: DocumentBlock[] = []
   let y = 8
   const add = (type: DocumentBlockType, patch: Partial<DocumentBlock>) => {
-    const block = clampBlock({ ...emptyDocumentBlock(type, y), ...patch, y, type })
+    const block = clampBlock({ ...emptyDocumentBlock(type, y, orientation), ...patch, y, type }, orientation)
     blocks.push(block)
     y = roundPct(block.y + block.h + 1.5)
   }
@@ -211,16 +236,20 @@ export function flowToPageBlocks(content: Pick<DocumentContent, 'title' | 'intro
   return blocks
 }
 
-export function blockBoxPts(block: Pick<DocumentBlock, 'x' | 'y' | 'w' | 'h'>): {
+export function blockBoxPts(
+  block: Pick<DocumentBlock, 'x' | 'y' | 'w' | 'h'>,
+  orientation: DocumentOrientation = 'portrait',
+): {
   x: number
   y: number
   w: number
   h: number
 } {
-  const w = (block.w / 100) * A4_WIDTH_PT
-  const h = (block.h / 100) * A4_HEIGHT_PT
-  const x = (block.x / 100) * A4_WIDTH_PT
-  const y = A4_HEIGHT_PT - (block.y / 100) * A4_HEIGHT_PT - h
+  const page = a4SizePt(orientation)
+  const w = (block.w / 100) * page.width
+  const h = (block.h / 100) * page.height
+  const x = (block.x / 100) * page.width
+  const y = page.height - (block.y / 100) * page.height - h
   return { x, y, w, h }
 }
 

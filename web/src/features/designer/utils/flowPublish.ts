@@ -135,3 +135,23 @@ export function getPublishStatus(flow: {
     publishedAt: flow.published_at,
   }
 }
+
+export type StagingPublishStatus =
+  | { kind: 'never'; label: string }
+  | { kind: 'live'; label: string; version: number; publishedAt: string }
+
+export function getStagingPublishStatus(flow: {
+  staging_version?: number | null
+  staging_published_at?: string | null
+  staging_published_graph?: unknown
+}): StagingPublishStatus {
+  if (!flow.staging_published_at || flow.staging_published_graph == null) {
+    return { kind: 'never', label: 'Staging not published' }
+  }
+  return {
+    kind: 'live',
+    label: `Staging v${flow.staging_version ?? 0}`,
+    version: flow.staging_version ?? 0,
+    publishedAt: flow.staging_published_at,
+  }
+}

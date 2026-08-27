@@ -497,6 +497,112 @@ final class SupabaseRest
     }
 
     /**
+     * Invite a user via Supabase Auth Admin API (sends project invite email).
+     *
+     * @param array<string, mixed> $userMetadata
+     * @return array{ok: bool, status: int, data?: mixed, error?: string}
+     */
+    public static function authInviteUserByEmail(
+        array $config,
+        string $email,
+        string $redirectTo = '',
+        array $userMetadata = [],
+    ): array {
+        $payload = ['email' => $email];
+        if ($redirectTo !== '') {
+            $payload['redirect_to'] = $redirectTo;
+        }
+        if ($userMetadata !== []) {
+            $payload['data'] = $userMetadata;
+        }
+        return self::authAdminRequest($config, 'POST', '/auth/v1/invite', $payload);
+    }
+
+    /**
+     * Generate an auth link (invite / recovery / magiclink / signup).
+     *
+     * @return array{ok: bool, status: int, data?: mixed, error?: string}
+     */
+    public static function authGenerateLink(
+        array $config,
+        string $type,
+        string $email,
+        string $redirectTo = '',
+    ): array {
+        $payload = [
+            'type' => $type,
+            'email' => $email,
+        ];
+        if ($redirectTo !== '') {
+            $payload['redirect_to'] = $redirectTo;
+        }
+        return self::authAdminRequest($config, 'POST', '/auth/v1/admin/generate_link', $payload);
+    }
+
+    /**
+     * @param array<string, mixed>|null $body
+     * @return array{ok: bool, status: int, data?: mixed, error?: string}
+     */
+    private static function authAdminRequest(
+        array $config,
+        string $method,
+        string $path,
+        ?array $body,
+    ): array {
+        $base = rtrim((string) ($config['supabase_url'] ?? ''), '/');
+        $serviceKey = (string) ($config['supabase_service_role_key'] ?? '');
+        if ($base === '' || $serviceKey === '' || $serviceKey === 'REPLACE_WITH_SUPABASE_SERVICE_ROLE_KEY') {
+            return [
+                'ok' => false,
+                'status' => 500,
+                'error' => 'supabase_url / supabase_service_role_key missing in config.php',
+            ];
+        }
+
+        $url = $base . $path;
+        $ch = curl_init($url);
+        if ($ch === false) {
+            return ['ok' => false, 'status' => 500, 'error' => 'curl_init failed'];
+        }
+
+        $headers = [
+            'Content-Type: application/json',
+            'apikey: ' . $serviceKey,
+            'Authorization: Bearer ' . $serviceKey,
+        ];
+
+        $opts = [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => 30,
+        ];
+        if ($body !== null) {
+            $opts[CURLOPT_POSTFIELDS] = json_encode($body, JSON_UNESCAPED_UNICODE);
+        }
+        curl_setopt_array($ch, $opts);
+
+        $raw = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $cerr = curl_error($ch);
+        curl_close($ch);
+
+        if (!is_string($raw)) {
+            return ['ok' => false, 'status' => 502, 'error' => $cerr !== '' ? $cerr : 'Empty Auth response'];
+        }
+
+        $data = json_decode($raw, true);
+        if ($status >= 200 && $status < 300) {
+            return ['ok' => true, 'status' => $status, 'data' => $data];
+        }
+
+        $msg = is_array($data)
+            ? (string) ($data['msg'] ?? $data['message'] ?? $data['error_description'] ?? $data['error'] ?? $raw)
+            : $raw;
+        return ['ok' => false, 'status' => $status, 'error' => $msg !== '' ? $msg : 'Auth admin request failed'];
+    }
+
+    /**
      * @param array<string, mixed> $args
      * @return array{ok: bool, status: int, data?: mixed, error?: string}
      */

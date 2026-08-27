@@ -199,9 +199,66 @@ export async function fetchUrlPreview(payload: {
 export async function sendOrganisationInviteEmail(payload: {
   inviteId: string
   signal?: AbortSignal
-}): Promise<EmailSendResult & { email?: string }> {
+}): Promise<EmailSendResult & { email?: string; email_via?: string }> {
   const { inviteId, signal } = payload
   return postJson('/email/invite', { invite_id: inviteId }, { signal })
+}
+
+export async function inviteOrganisationMember(payload: {
+  instanceId: string
+  email: string
+  role: string
+  displayName?: string | null
+  jobTitle?: string | null
+  phone?: string | null
+  department?: string | null
+  notes?: string | null
+  sendEmail?: boolean
+  signal?: AbortSignal
+}): Promise<{
+  ok: boolean
+  status: string
+  email?: string
+  invite_id?: string | null
+  user_id?: string | null
+  email_sent?: boolean
+  email_skipped?: boolean
+  email_error?: string | null
+  email_via?: string | null
+  error?: string
+}> {
+  const { signal, ...rest } = payload
+  return postJson('/email/invite-member', {
+    instance_id: rest.instanceId,
+    email: rest.email,
+    role: rest.role,
+    display_name: rest.displayName ?? null,
+    job_title: rest.jobTitle ?? null,
+    phone: rest.phone ?? null,
+    department: rest.department ?? null,
+    notes: rest.notes ?? null,
+    send_email: rest.sendEmail ?? true,
+  }, { signal })
+}
+
+export async function resendOrganisationInvite(payload: {
+  inviteId?: string
+  instanceId?: string
+  userId?: string
+  email?: string
+  signal?: AbortSignal
+}): Promise<EmailSendResult & { email?: string; email_via?: string }> {
+  const { signal, inviteId, instanceId, userId, email } = payload
+  return postJson(
+    '/email/invite-resend',
+    {
+      invite_id: inviteId,
+      instance_id: instanceId,
+      user_id: userId,
+      email,
+    },
+    { signal },
+  )
 }
 
 export async function testHttpConnection(payload: {

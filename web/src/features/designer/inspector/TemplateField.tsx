@@ -1,4 +1,12 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 
@@ -18,6 +26,8 @@ type CommonProps = {
   className?: string
   multiline?: boolean
   rows?: number
+  /** Hide the long expression help under the field (useful in dense panels). */
+  hideHint?: boolean
 }
 
 type TextSeg = { id: string; kind: 'text'; text: string }
@@ -93,6 +103,7 @@ export function TemplateField({
   className,
   multiline,
   rows = 4,
+  hideHint = false,
 }: CommonProps) {
   const listId = useId()
   const [segments, setSegments] = useState<Segment[]>(() => parseSegments(value))
@@ -288,11 +299,13 @@ export function TemplateField({
 
         <div
           className={cn(
-            'relative z-[1] flex w-full items-center gap-1',
-            multiline ? 'flex-wrap content-start' : 'flex-nowrap overflow-x-auto',
+            'relative z-[1] flex w-full gap-0.5',
+            multiline
+              ? 'flex-wrap items-start content-start'
+              : 'flex-nowrap items-center overflow-x-auto',
           )}
         >
-          {segments.map((seg) => {
+          {segments.map((seg, segIndex) => {
             if (seg.kind === 'chip') {
               return (
                 <span
@@ -320,7 +333,22 @@ export function TemplateField({
               )
             }
 
-            const widthCh = Math.max(1, Math.min(64, seg.text.length + (multiline ? 2 : 1)))
+            // Empty segments exist so the caret can sit before/after chips, but they must not
+            // flex-grow — that was leaving large gaps around reference pills.
+            const isEmpty = seg.text.length === 0
+            const isLastText =
+              segments.findLastIndex((s) => s.kind === 'text') === segIndex
+            const widthCh = isEmpty
+              ? isLastText
+                ? 1
+                : 0
+              : Math.max(1, Math.min(64, seg.text.length + (multiline ? 2 : 1)))
+            const textStyle: CSSProperties = {
+              width: isEmpty && !isLastText ? 0 : `${widthCh}ch`,
+              flexGrow: isLastText ? 1 : 0,
+              flexShrink: 0,
+              minWidth: isEmpty && !isLastText ? 0 : undefined,
+            }
 
             if (multiline) {
               return (
@@ -336,8 +364,11 @@ export function TemplateField({
                   spellCheck={false}
                   aria-autocomplete="list"
                   aria-controls={listId}
-                  className="min-h-[1.5rem] min-w-[1ch] grow resize-none bg-transparent py-0.5 text-sm text-[var(--color-ink)] caret-[var(--color-ink)] focus-visible:outline-none"
-                  style={{ width: `${widthCh}ch` }}
+                  className={cn(
+                    'min-h-[1.5rem] resize-none overflow-hidden bg-transparent py-0.5 text-sm text-[var(--color-ink)] caret-[var(--color-ink)] focus-visible:outline-none',
+                    isEmpty && !isLastText ? 'min-w-0 p-0' : 'min-w-[1ch]',
+                  )}
+                  style={textStyle}
                   onChange={(e) => {
                     const el = e.currentTarget
                     updateText(seg.id, el.value, el.selectionStart ?? el.value.length)
@@ -367,8 +398,11 @@ export function TemplateField({
                 spellCheck={false}
                 aria-autocomplete="list"
                 aria-controls={listId}
-                className="h-7 min-w-[1ch] bg-transparent text-sm text-[var(--color-ink)] caret-[var(--color-ink)] focus-visible:outline-none"
-                style={{ width: `${widthCh}ch`, flexGrow: seg.text.length > 16 ? 1 : 0 }}
+                className={cn(
+                  'h-7 bg-transparent text-sm text-[var(--color-ink)] caret-[var(--color-ink)] focus-visible:outline-none',
+                  isEmpty && !isLastText ? 'min-w-0 p-0' : 'min-w-[1ch]',
+                )}
+                style={textStyle}
                 onChange={(e) => {
                   const el = e.currentTarget
                   updateText(seg.id, el.value, el.selectionStart ?? el.value.length)
@@ -420,14 +454,16 @@ export function TemplateField({
           ))}
         </ul>
       ) : null}
-      <p className="mt-1 text-[11px] leading-snug text-[var(--color-ink-muted)]">
-        Type <code className="rounded bg-slate-100 px-1">{'{{'}</code> for vars, steps, and functions.
-        Expressions work inline — e.g.{' '}
-        <code className="rounded bg-slate-100 px-1">parseJson({`{{vars.jsonStr}}`})</code>,{' '}
-        <code className="rounded bg-slate-100 px-1">{`{{vars.count + 1}}`}</code>,{' '}
-        <code className="rounded bg-slate-100 px-1">{`{{if(empty(vars.x), 'n/a', vars.x)}}`}</code>.
-        Chips are read-only — use × to remove.
-      </p>
+      {!hideHint ? (
+        <p className="mt-1 text-[11px] leading-snug text-[var(--color-ink-muted)]">
+          Type <code className="rounded bg-slate-100 px-1">{'{{'}</code> for vars, steps, and functions.
+          Expressions work inline — e.g.{' '}
+          <code className="rounded bg-slate-100 px-1">parseJson({`{{vars.jsonStr}}`})</code>,{' '}
+          <code className="rounded bg-slate-100 px-1">{`{{vars.count + 1}}`}</code>,{' '}
+          <code className="rounded bg-slate-100 px-1">{`{{if(empty(vars.x), 'n/a', vars.x)}}`}</code>.
+          Chips are read-only — use × to remove.
+        </p>
+      ) : null}
     </div>
   )
 }

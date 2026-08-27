@@ -6,9 +6,15 @@ import { downloadJson } from '@/shared/lib/downloadJson'
 import {
   buildFlowExport,
   safeDownloadBasename,
+  type FlowEntityDefExport,
+  type FlowTemplateExport,
+  type FlowTestScenarioExport,
 } from '@/features/designer/utils/flowTransfer'
 import { useDesignerStore } from '@/features/designer/store/designerStore'
 import { loadChatbotEntities, loadFlowBundle } from '@/features/chatbots/chatbotFlowTransfer'
+import { fetchChatbotEntities } from '@/features/entities/entityApi'
+import { fetchChatbotTemplates } from '@/features/templates/templateApi'
+import { fetchChatbotTestScenarios } from '@/features/designer/preview/testScenarioApi'
 
 const tabs = [
   { end: true, suffix: '', label: 'Settings', icon: Settings2 },
@@ -36,13 +42,57 @@ export function ChatbotSubNav({
     setError(null)
     try {
       const store = useDesignerStore.getState()
-      const [bundle, entities] = await Promise.all([
+      const [bundle, entities, entityRows, templateRows, scenarioRows] = await Promise.all([
         loadFlowBundle(chatbotId),
         loadChatbotEntities(chatbotId),
+        fetchChatbotEntities(chatbotId),
+        fetchChatbotTemplates(chatbotId),
+        fetchChatbotTestScenarios(chatbotId),
       ])
 
       const nodes = store.flowId === bundle.flow.id ? store.nodes : bundle.nodes
       const edges = store.flowId === bundle.flow.id ? store.edges : bundle.edges
+
+      const entityDefs: FlowEntityDefExport[] = entityRows.map((row) => ({
+        id: row.id,
+        key: row.key,
+        name: row.name,
+        description: row.description,
+        kind: row.kind,
+        attributes: row.attributes.map((a) => ({
+          key: a.key,
+          label: a.label,
+          value_type: a.value_type,
+          required: a.required,
+          is_identifier: a.is_identifier,
+          is_unique: a.is_unique,
+          default_value: a.default_value,
+          sort_order: a.sort_order,
+        })),
+        records: (row.static_records ?? []).map((r) =>
+          r.values && typeof r.values === 'object' && !Array.isArray(r.values)
+            ? (r.values as Record<string, unknown>)
+            : {},
+        ),
+      }))
+      const templates: FlowTemplateExport[] = templateRows.map((row) => ({
+        key: row.key,
+        name: row.name,
+        description: row.description,
+        kind: row.kind,
+        content: row.content,
+      }))
+      const testScenarios: FlowTestScenarioExport[] = scenarioRows.map((row) => ({
+        name: row.name,
+        globals:
+          row.globals && typeof row.globals === 'object' && !Array.isArray(row.globals)
+            ? (row.globals as Record<string, unknown>)
+            : {},
+        expected:
+          row.expected && typeof row.expected === 'object' && !Array.isArray(row.expected)
+            ? (row.expected as { variables?: string[]; stepKeys?: string[] })
+            : {},
+      }))
 
       const payload = buildFlowExport({
         chatbot: bundle.chatbot,
@@ -51,6 +101,9 @@ export function ChatbotSubNav({
         nodes,
         edges,
         entities,
+        entityDefs,
+        templates,
+        testScenarios,
       })
       const stamp = new Date().toISOString().slice(0, 10)
       downloadJson(

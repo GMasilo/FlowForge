@@ -27,6 +27,7 @@ function extractInviteToken(raw: string): string {
 /**
  * Post-login landing:
  * - Superusers → organisations list
+ * - Agents → organisation inbox
  * - Clients → their organisation chatbots (first membership)
  */
 export function HomeRedirect() {
@@ -46,7 +47,7 @@ export function HomeRedirect() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('instance_members')
-        .select('instance_id, instances(id, name)')
+        .select('instance_id, role, instances(id, name)')
         .eq('user_id', user!.id)
         .order('created_at', { ascending: true })
       if (error) throw error
@@ -115,7 +116,11 @@ export function HomeRedirect() {
 
   const first = memberships.data?.[0]
   if (first?.instance_id) {
-    return <Navigate to={`/instances/${first.instance_id}`} replace />
+    const dest =
+      first.role === 'agent'
+        ? `/instances/${first.instance_id}/inbox`
+        : `/instances/${first.instance_id}`
+    return <Navigate to={dest} replace />
   }
 
   return (

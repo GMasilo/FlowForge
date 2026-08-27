@@ -30,11 +30,13 @@ import {
   Mail,
   Plug,
   Headphones,
+  ArrowRightLeft,
   Maximize2,
   MessageSquare,
   Minimize2,
   Repeat,
   Variable,
+  Lock,
 } from 'lucide-react'
 import type { FlowNodeType } from '@/shared/types/database'
 import { readMediaFiles } from '@/features/designer/model/chatbotMedia'
@@ -58,6 +60,7 @@ const icons: Record<FlowNodeType, typeof MessageSquare> = {
   email: Mail,
   integration: Plug,
   handoff: Headphones,
+  transfer: ArrowRightLeft,
   condition: GitBranch,
   loop: Repeat,
   set_variable: Variable,
@@ -73,6 +76,7 @@ const typeColor: Record<FlowNodeType, string> = {
   email: 'var(--color-node-email)',
   integration: 'var(--color-node-http)',
   handoff: 'var(--color-node-question)',
+  transfer: 'var(--color-node-http)',
   condition: 'var(--color-node-condition)',
   loop: 'var(--color-node-loop)',
   set_variable: 'var(--color-node-set)',
@@ -102,6 +106,8 @@ function stepPreview(node: DesignerNode): string {
       return truncate(String(c.action ?? 'Integration'))
     case 'handoff':
       return truncate(String(c.message ?? 'Escalate to agent'))
+    case 'transfer':
+      return truncate(String(c.startNodeKey ? `Start at ${c.startNodeKey}` : 'Transfer to chatbot'))
     case 'condition':
       return truncate(String(c.expression ?? c.left ?? 'If…'))
     case 'loop':
@@ -146,6 +152,7 @@ function FlowStepNode({ data, selected }: NodeProps) {
   const settingsTitle = typeof data.settingsSummary === 'string' ? data.settingsSummary : ''
   const issueCount = typeof data.issueCount === 'number' ? data.issueCount : 0
   const hasMedia = Boolean(data.hasMedia)
+  const lockedBy = typeof data.lockedBy === 'string' ? data.lockedBy : ''
 
   return (
     <div
@@ -154,13 +161,14 @@ function FlowStepNode({ data, selected }: NodeProps) {
         selected
           ? 'border-[var(--color-accent)] shadow-[0_0_0_3px_color-mix(in_oklab,var(--color-accent)_28%,transparent)]'
           : 'border-slate-200/90 hover:border-slate-300',
+        lockedBy && 'border-amber-300/90 bg-amber-50/40',
         (isCondition || isLoop) && 'mb-1',
       )}
       style={{ width: CANVAS_NODE_WIDTH }}
     >
       <div
         className="absolute inset-y-2 left-0 w-1 rounded-full"
-        style={{ background: color }}
+        style={{ background: lockedBy ? '#d97706' : color }}
         aria-hidden
       />
       <Handle
@@ -180,6 +188,14 @@ function FlowStepNode({ data, selected }: NodeProps) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <div className="truncate text-sm font-semibold text-slate-800">{String(data.label)}</div>
+            {lockedBy ? (
+              <span
+                title={`${lockedBy} is editing`}
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-200/80"
+              >
+                <Lock className="h-3 w-3" />
+              </span>
+            ) : null}
             {issueCount > 0 ? (
               <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 ring-1 ring-rose-200">
                 {issueCount}
@@ -206,6 +222,9 @@ function FlowStepNode({ data, selected }: NodeProps) {
           <div className="text-[11px] font-medium text-slate-500">{nodeTypeLabel(type)}</div>
           {preview ? (
             <div className="mt-0.5 truncate text-[11px] text-slate-400">{preview}</div>
+          ) : null}
+          {lockedBy ? (
+            <div className="mt-0.5 truncate text-[10px] font-medium text-amber-800">{lockedBy} editing</div>
           ) : null}
         </div>
       </div>
@@ -262,8 +281,8 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
   const applyNodePositions = useDesignerStore((s) => s.applyNodePositions)
   const connect = useDesignerStore((s) => s.connect)
   const setEdges = useDesignerStore((s) => s.setEdges)
+  const peerLocks = useDesignerStore((s) => s.peerLocks)
   const { fitView } = useReactFlow()
-
   const [autoLayout, setAutoLayout] = useState(true)
 
   const structureKey = useMemo(
@@ -319,23 +338,29 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
 
   const rfNodes: Node[] = useMemo(
     () =>
-      nodes.map((n) => ({
-        id: n.id,
-        type: 'flowStep',
-        position: autoLayout ? (computedLayout.get(n.id) ?? n.position) : n.position,
-        selected: n.id === selectedNodeId,
-        data: {
-          label: n.label,
-          key: n.key,
-          type: n.type,
-          preview: stepPreview(n),
-          customSettings: hasCustomStepSettingsForNode(n.config, rootIds.has(n.id)),
-          settingsSummary: stepSettingsSummary(n.config),
-          issueCount: issueCounts.get(n.id) ?? 0,
-          hasMedia: readMediaFiles(n.config).length > 0,
-        },
-      })),
-    [nodes, selectedNodeId, rootIds, issueCounts, autoLayout, computedLayout],
+      nodes.map((n) => {
+        const lock = peerLocks[n.key]
+        return {
+          id: n.id,
+          type: 'flowStep',
+          position: autoLayout ? (computedLayout.get(n.id) ?? n.position) : n.position,
+          selected: n.id === selectedNodeId,
+          draggable: !readOnly && !lock,
+          connectable: !readOnly && !lock,
+          data: {
+            label: n.label,
+            key: n.key,
+            type: n.type,
+            preview: stepPreview(n),
+            customSettings: hasCustomStepSettingsForNode(n.config, rootIds.has(n.id)),
+            settingsSummary: stepSettingsSummary(n.config),
+            issueCount: issueCounts.get(n.id) ?? 0,
+            hasMedia: readMediaFiles(n.config).length > 0,
+            lockedBy: lock?.name ?? '',
+          },
+        }
+      }),
+    [nodes, selectedNodeId, rootIds, issueCounts, autoLayout, computedLayout, peerLocks, readOnly],
   )
 
   const rfEdges: Edge[] = useMemo(

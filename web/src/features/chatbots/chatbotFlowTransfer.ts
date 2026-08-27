@@ -3,9 +3,19 @@ import type { Json } from '@/shared/types/database'
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
 import {
   remapEntityIds,
+  type FlowEntityDefExport,
   type FlowEntityExport,
   type FlowGlobalExport,
+  type FlowTemplateExport,
+  type FlowTestScenarioExport,
 } from '@/features/designer/utils/flowTransfer'
+import {
+  createEntity,
+  createStaticRecord,
+  ensureEntityPrimaryKey,
+  restoreEntity,
+  upsertAttribute,
+} from '@/features/entities/entityApi'
 
 export async function loadFlowBundle(chatbotId: string): Promise<{
   chatbot: { id: string; name: string; description: string | null }
@@ -81,6 +91,128 @@ export async function loadChatbotEntities(chatbotId: string): Promise<FlowEntity
     .is('deleted_at', null)
   if (error) throw error
   return (data ?? []).map((e) => ({ id: e.id, key: e.key }))
+}
+
+/** Create templates, entity schemas, and test scenarios from a flow export. */
+export async function applyImportedBundleData(args: {
+  chatbotId: string
+  templates?: FlowTemplateExport[]
+  entityDefs?: FlowEntityDefExport[]
+  testScenarios?: FlowTestScenarioExport[]
+  createdBy?: string | null
+}): Promise<void> {
+  const { chatbotId, createdBy } = args
+
+  for (const def of args.entityDefs ?? []) {
+    const { data: existingRows, error: lookupError } = await supabase
+      .from('chatbot_entities')
+      .select('id, deleted_at')
+      .eq('chatbot_id', chatbotId)
+      .eq('key', def.key)
+    if (lookupError) throw lookupError
+    const alive = (existingRows ?? []).find((row) => !row.deleted_at)
+    const any = alive ?? existingRows?.[0]
+    let entityId = any?.id
+    let created = false
+
+    if (entityId && any?.deleted_at) {
+      await restoreEntity(entityId)
+    } else if (!entityId) {
+      const createdEntity = await createEntity({
+        chatbotId,
+        key: def.key,
+        name: def.name,
+        description: def.description ?? undefined,
+        kind: def.kind,
+      })
+      entityId = createdEntity.id
+      created = true
+    }
+
+    if (!created || !entityId) continue
+
+    await ensureEntityPrimaryKey(entityId)
+
+    for (const [index, attr] of def.attributes.entries()) {
+      if (attr.key === 'id') continue
+      await upsertAttribute({
+        entityId,
+        key: attr.key,
+        label: attr.label ?? attr.key,
+        value_type: attr.value_type,
+        required: attr.required,
+        is_identifier: false,
+        is_unique: attr.is_unique,
+        default_value: (attr.default_value as Json | null | undefined) ?? null,
+        sort_order: attr.sort_order ?? index,
+      })
+    }
+    if (def.kind === 'static') {
+      for (const [index, values] of (def.records ?? []).entries()) {
+        await createStaticRecord(entityId, values, index)
+      }
+    }
+  }
+
+  for (const tmpl of args.templates ?? []) {
+    const { data: existingRows, error: lookupError } = await supabase
+      .from('chatbot_templates')
+      .select('id, deleted_at')
+      .eq('chatbot_id', chatbotId)
+      .eq('key', tmpl.key)
+    if (lookupError) throw lookupError
+    const alive = (existingRows ?? []).find((row) => !row.deleted_at)
+    const any = alive ?? existingRows?.[0]
+    const patch = {
+      name: tmpl.name,
+      description: tmpl.description ?? null,
+      content: tmpl.content as Json,
+      deleted_at: null,
+    }
+    if (any?.id) {
+      const { error } = await supabase.from('chatbot_templates').update(patch).eq('id', any.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabase.from('chatbot_templates').insert({
+        chatbot_id: chatbotId,
+        key: tmpl.key,
+        name: tmpl.name,
+        description: tmpl.description ?? null,
+        kind: tmpl.kind,
+        content: tmpl.content as Json,
+        created_by: createdBy ?? null,
+      })
+      if (error) throw error
+    }
+  }
+
+  for (const scenario of args.testScenarios ?? []) {
+    const { data: existing, error: lookupError } = await supabase
+      .from('chatbot_test_scenarios')
+      .select('id')
+      .eq('chatbot_id', chatbotId)
+      .eq('name', scenario.name)
+      .maybeSingle()
+    if (lookupError) throw lookupError
+    const globals = (scenario.globals ?? {}) as Json
+    const expected = (scenario.expected ?? {}) as Json
+    if (existing?.id) {
+      const { error } = await supabase
+        .from('chatbot_test_scenarios')
+        .update({ globals, expected })
+        .eq('id', existing.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabase.from('chatbot_test_scenarios').insert({
+        chatbot_id: chatbotId,
+        name: scenario.name,
+        globals,
+        expected,
+        created_by: createdBy ?? null,
+      })
+      if (error) throw error
+    }
+  }
 }
 
 export async function replaceFlowInDb(args: {

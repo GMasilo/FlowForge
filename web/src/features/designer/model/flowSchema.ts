@@ -111,6 +111,7 @@ export const questionAnswerTypes = [
   'datetime',
   'boolean',
   'choice',
+  'numbered_choice',
   'gender',
   'rating',
   'slider',
@@ -164,6 +165,11 @@ export const QUESTION_ANSWER_TYPE_OPTIONS: Array<{
   { value: 'boolean', label: 'Yes / No', hint: 'Boolean yes or no' },
   { value: 'confirm', label: 'Confirm', hint: 'Checkbox agreement before continuing' },
   { value: 'choice', label: 'Choice', hint: 'Pick from a list' },
+  {
+    value: 'numbered_choice',
+    label: 'Numbered choice',
+    hint: 'Reply with 1, 2, … to pick from a numbered list',
+  },
   { value: 'gender', label: 'Gender', hint: 'Gender selection' },
   { value: 'email', label: 'Email', hint: 'Email address; optional domain allowlist' },
   { value: 'phone', label: 'Phone number', hint: 'Country code + digits' },
@@ -238,8 +244,6 @@ export const flowNodeTypes = [
   'question',
   'http',
   'email',
-  'integration',
-  'handoff',
   'condition',
   'loop',
   'set_variable',
@@ -432,9 +436,12 @@ export function normalizeAllowedEmailDomains(raw: unknown): string[] {
   return out
 }
 
+export const DEFAULT_NUMBERED_CHOICES = ['Red', 'Blue', 'Green'] as const
+
 export function answerTypeUsesChoices(answerType: string): boolean {
   return (
     answerType === 'choice' ||
+    answerType === 'numbered_choice' ||
     answerType === 'gender' ||
     answerType === 'likert' ||
     answerType === 'ranking' ||
@@ -836,6 +843,7 @@ export function describeQuestionResponse(
     case 'datetime':
       return wrapQuestionResponse('string', '2026-08-14T14:30')
     case 'choice':
+    case 'numbered_choice':
     case 'gender':
     case 'autocomplete':
       return allowMultiple
@@ -1044,13 +1052,6 @@ export const emailConfigSchema = z.object({
   templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
 })
 
-export const integrationConfigSchema = z.object({
-  integrationId: z.string().default(''),
-  action: z.string().default(''),
-  fieldValues: z.record(z.string(), z.string()).default({}),
-  outputVariable: z.string().default(''),
-})
-
 export const conditionConfigSchema = z.object({
   left: z.string().default(''),
   operator: z.enum(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'exists']).default('eq'),
@@ -1229,56 +1230,79 @@ export const endConfigSchema = z.object({
   templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
 })
 
-export const handoffConfigSchema = z.object({
-  message: z.string().default('Connecting you with an agent…'),
-  mediaFiles: z.array(z.string()).optional(),
-  templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
-})
-
 export const ENTITY_OPERATIONS = [
-  { value: 'list', label: 'List records', hint: 'Return matching records as an array', needsRecordId: false, needsFields: false, writes: true },
-  { value: 'get', label: 'Get record', hint: 'Fetch one record by id or filter', needsRecordId: false, needsFields: false, writes: true },
-  { value: 'create', label: 'Create record', hint: 'Insert a new dynamic record', needsRecordId: false, needsFields: true, writes: true },
+  {
+    value: 'list',
+    label: 'Query records',
+    hint: 'List records with optional no-code filters (AND/OR, equals, contains, …)',
+    needsRecordId: false,
+    needsFields: false,
+    writes: true,
+  },
+  { value: 'get', label: 'Get record', hint: 'Fetch one record by id or query filters', needsRecordId: false, needsFields: false, writes: true },
+  { value: 'create', label: 'Create record', hint: 'Insert a new dynamic record (id auto-generated when blank)', needsRecordId: false, needsFields: true, writes: true },
   { value: 'update', label: 'Update record', hint: 'Update a dynamic record by id', needsRecordId: true, needsFields: true, writes: true },
   { value: 'delete', label: 'Delete record', hint: 'Delete a dynamic record by id', needsRecordId: true, needsFields: false, writes: true },
 ] as const
 
 export type EntityOperation = (typeof ENTITY_OPERATIONS)[number]['value']
 
+export const entityFilterOperatorSchema = z.enum([
+  'eq',
+  'neq',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'contains',
+  'exists',
+])
+
+export const entityFilterClauseSchema = z.object({
+  attribute: z.string().default(''),
+  operator: entityFilterOperatorSchema.default('eq'),
+  value: z.string().default(''),
+})
+
+export const entityFiltersSchema = z.object({
+  logic: z.enum(['and', 'or']).default('and'),
+  clauses: z.array(entityFilterClauseSchema).default([]),
+})
+
 export const entityConfigSchema = z.object({
   entityId: z.string().default(''),
   operation: z.enum(['list', 'get', 'create', 'update', 'delete']).default('list'),
   /** Template / expression resolving to a record UUID (get/update/delete). */
   recordId: z.string().default(''),
-  /** Optional attribute key to filter list/get. */
+  /** @deprecated Prefer `filters` — kept for older flows. */
   filterAttribute: z.string().default(''),
-  /** Template value the filter attribute must equal. */
+  /** @deprecated Prefer `filters` — kept for older flows. */
   filterEquals: z.string().default(''),
+  /** No-code query: AND/OR clauses over attributes. */
+  filters: entityFiltersSchema.default({ logic: 'and', clauses: [] }),
   /** Attr key → template value for create/update. */
   fieldMap: z.record(z.string(), z.string()).default({}),
   outputVariable: z.string().default(''),
 })
 
+export type EntityFiltersConfig = z.infer<typeof entityFiltersSchema>
+export type EntityFilterClauseConfig = z.infer<typeof entityFilterClauseSchema>
 export type MessageConfig = z.infer<typeof messageConfigSchema>
 export type QuestionConfig = z.infer<typeof questionConfigSchema>
 export type HttpConfig = z.infer<typeof httpConfigSchema>
 export type EmailConfig = z.infer<typeof emailConfigSchema>
-export type IntegrationConfig = z.infer<typeof integrationConfigSchema>
 export type ConditionConfig = z.infer<typeof conditionConfigSchema>
 export type LoopConfig = z.infer<typeof loopConfigSchema>
 export type SetVariableConfig = z.infer<typeof setVariableConfigSchema>
 export type OperationConfig = z.infer<typeof operationConfigSchema>
 export type EntityConfig = z.infer<typeof entityConfigSchema>
 export type EndConfig = z.infer<typeof endConfigSchema>
-export type HandoffConfig = z.infer<typeof handoffConfigSchema>
 
 export type NodeConfigMap = {
   message: MessageConfig
   question: QuestionConfig
   http: HttpConfig
   email: EmailConfig
-  integration: IntegrationConfig
-  handoff: HandoffConfig
   condition: ConditionConfig
   loop: LoopConfig
   set_variable: SetVariableConfig
@@ -1315,10 +1339,6 @@ export function defaultConfig(type: FlowNodeType): Record<string, unknown> {
       return { ...httpConfigSchema.parse({}), ...shared }
     case 'email':
       return { ...emailConfigSchema.parse({}), ...shared }
-    case 'integration':
-      return { ...integrationConfigSchema.parse({}), ...shared }
-    case 'handoff':
-      return { ...handoffConfigSchema.parse({}), ...shared }
     case 'condition':
       return { ...conditionConfigSchema.parse({}), ...shared }
     case 'loop':
@@ -1329,6 +1349,30 @@ export function defaultConfig(type: FlowNodeType): Record<string, unknown> {
       return { ...operationConfigSchema.parse({}), ...shared }
     case 'entity':
       return { ...entityConfigSchema.parse({}), ...shared }
+    case 'integration':
+      return {
+        ...shared,
+        provider: '',
+        integrationId: '',
+        action: '',
+        params: {},
+        resultVariable: '',
+      }
+    case 'handoff':
+      return {
+        ...shared,
+        message: 'Connecting you with an agent…',
+        queueId: '',
+      }
+    case 'transfer':
+      return {
+        ...shared,
+        targetChatbotId: '',
+        startNodeKey: '',
+        message: '',
+        passAllVariables: false,
+        variableMappings: [],
+      }
     case 'end':
       return { ...endConfigSchema.parse({}), ...shared }
   }
@@ -1344,10 +1388,6 @@ export function nodeTypeLabel(type: FlowNodeType): string {
       return 'HTTP request'
     case 'email':
       return 'Send email'
-    case 'integration':
-      return 'Integration'
-    case 'handoff':
-      return 'Escalate to agent'
     case 'condition':
       return 'Condition'
     case 'loop':
@@ -1358,6 +1398,12 @@ export function nodeTypeLabel(type: FlowNodeType): string {
       return 'Operation'
     case 'entity':
       return 'Entity'
+    case 'integration':
+      return 'Integration'
+    case 'handoff':
+      return 'Handoff'
+    case 'transfer':
+      return 'Transfer chatbot'
     case 'end':
       return 'End'
   }
@@ -1389,13 +1435,7 @@ export function collectConfigStrings(config: Record<string, unknown>): string[] 
 /** Step-produced variable key from a node config, if any. */
 export function getStepOutputVariable(node: DesignerNode): string | null {
   const cfg = node.config
-  if (
-    node.type === 'question' ||
-    node.type === 'http' ||
-    node.type === 'integration' ||
-    node.type === 'operation' ||
-    node.type === 'entity'
-  ) {
+  if (node.type === 'question' || node.type === 'http' || node.type === 'operation' || node.type === 'entity') {
     const key = cfg.outputVariable
     return typeof key === 'string' && key.trim() ? key.trim() : null
   }

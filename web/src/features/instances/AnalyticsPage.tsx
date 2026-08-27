@@ -17,6 +17,7 @@ import { PageHeader } from '@/shared/ui/page-header'
 import { Select } from '@/shared/ui/select'
 import { cn } from '@/shared/lib/utils'
 import { buildConversationAnalytics, buildDropOffForVersion, compareDropOff } from '@/features/instances/conversationAnalytics'
+import { ExperimentsPanel } from '@/features/instances/ExperimentsPanel'
 
 type SessionRow = ConversationSession & { chatbots: { name: string } | null }
 
@@ -45,6 +46,20 @@ export function AnalyticsPage() {
   const [versionB, setVersionB] = useState('')
 
   const rangeDays = RANGE_OPTIONS.find((r) => r.value === range)?.days ?? 30
+
+  const accessibleBots = useQuery({
+    queryKey: ['chatbots-lite', instance.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('chatbots')
+        .select('id, name')
+        .eq('instance_id', instance.id)
+        .is('deleted_at', null)
+        .order('name')
+      if (error) throw error
+      return (data ?? []) as Array<{ id: string; name: string }>
+    },
+  })
 
   const sessions = useQuery({
     queryKey: ['conversation-sessions-analytics', instance.id],
@@ -90,12 +105,19 @@ export function AnalyticsPage() {
   })
 
   const chatbots = useMemo(() => {
+    const fromBots = (accessibleBots.data ?? []).map((b) => [b.id, b.name] as [string, string])
+    if (fromBots.length) return fromBots
+    // Fallback if bots query empty but sessions returned (should be rare)
     const map = new Map<string, string>()
     for (const row of sessions.data ?? []) {
       if (!map.has(row.chatbot_id)) map.set(row.chatbot_id, row.chatbots?.name ?? row.chatbot_id)
     }
     return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]))
-  }, [sessions.data])
+  }, [accessibleBots.data, sessions.data])
+
+  // Drop filter if selected chatbot is no longer accessible
+  const effectiveChatbotId =
+    chatbotId && chatbots.some(([id]) => id === chatbotId) ? chatbotId : ''
 
   const stats = useMemo(
     () =>
@@ -103,10 +125,10 @@ export function AnalyticsPage() {
         sessions: sessions.data ?? [],
         events: events.data ?? [],
         payments: payments.data ?? [],
-        chatbotId: chatbotId || null,
+        chatbotId: effectiveChatbotId || null,
         rangeDays,
       }),
-    [sessions.data, events.data, payments.data, chatbotId, rangeDays],
+    [sessions.data, events.data, payments.data, effectiveChatbotId, rangeDays],
   )
 
   const versionOptions = stats.byVersion.map((v) => v.version)
@@ -122,14 +144,14 @@ export function AnalyticsPage() {
       sessions: sessions.data ?? [],
       events: events.data ?? [],
       version: effectiveA,
-      chatbotId: chatbotId || null,
+      chatbotId: effectiveChatbotId || null,
       rangeDays,
     })
     const b = buildDropOffForVersion({
       sessions: sessions.data ?? [],
       events: events.data ?? [],
       version: effectiveB,
-      chatbotId: chatbotId || null,
+      chatbotId: effectiveChatbotId || null,
       rangeDays,
     })
     return {
@@ -137,7 +159,7 @@ export function AnalyticsPage() {
       b,
       rows: compareDropOff(a.dropOff, b.dropOff).slice(0, 14),
     }
-  }, [sessions.data, events.data, effectiveA, effectiveB, chatbotId, rangeDays])
+  }, [sessions.data, events.data, effectiveA, effectiveB, effectiveChatbotId, rangeDays])
 
   const loading = sessions.isLoading || events.isLoading
 
@@ -162,7 +184,7 @@ export function AnalyticsPage() {
             </Select>
             <Select
               className="min-w-[180px]"
-              value={chatbotId}
+              value={effectiveChatbotId}
               onChange={(e) => setChatbotId(e.target.value)}
               aria-label="Chatbot"
             >
@@ -176,6 +198,8 @@ export function AnalyticsPage() {
           </div>
         }
       />
+
+      <ExperimentsPanel chatbotId={effectiveChatbotId || undefined} />
 
       {loading ? (
         <p className="text-sm text-[var(--color-ink-muted)]">Loading analytics…</p>

@@ -445,6 +445,25 @@ function TemplateKindFields({
             Snap to the grid and other blocks, then set font and color per block. Best fidelity is PDF.
           </p>
         </div>
+        <div>
+          <Label>Page orientation</Label>
+          <Select
+            disabled={readOnly}
+            value={c.orientation === 'landscape' ? 'landscape' : 'portrait'}
+            onChange={(e) =>
+              onChange({
+                ...c,
+                orientation: e.target.value === 'landscape' ? 'landscape' : 'portrait',
+              })
+            }
+          >
+            <option value="portrait">Portrait (A4 tall)</option>
+            <option value="landscape">Landscape (A4 wide)</option>
+          </Select>
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Applies to PDF and Word. Page layout canvas matches the chosen orientation.
+          </p>
+        </div>
         {c.layout === 'page' ? (
           <DocumentPageEditor content={c} onChange={onChange} suggestions={suggestions} readOnly={readOnly} />
         ) : (

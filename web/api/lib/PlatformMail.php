@@ -42,11 +42,47 @@ final class PlatformMail
         ];
     }
 
-    public static function appUrl(): string
+    /**
+     * Prefer Apache/env SMTP, then optional config.php `platform_smtp`.
+     *
+     * @param array<string, mixed>|null $config
+     * @return array<string, mixed>
+     */
+    public static function smtpConfig(?array $config = null): array
+    {
+        $fromEnv = self::smtpConfigFromEnv();
+        if (trim((string) ($fromEnv['smtpHost'] ?? '')) !== '' && trim((string) ($fromEnv['fromEmail'] ?? '')) !== '') {
+            return $fromEnv;
+        }
+
+        $smtp = is_array($config['platform_smtp'] ?? null) ? $config['platform_smtp'] : [];
+        $port = (int) ($smtp['smtpPort'] ?? $smtp['port'] ?? 465);
+        $username = trim((string) ($smtp['username'] ?? $smtp['fromEmail'] ?? ''));
+        $fromEmail = trim((string) ($smtp['fromEmail'] ?? $username));
+
+        return [
+            'smtpHost' => trim((string) ($smtp['smtpHost'] ?? $smtp['host'] ?? '')),
+            'smtpPort' => $port,
+            'username' => $username,
+            'password' => (string) ($smtp['password'] ?? ''),
+            'fromEmail' => $fromEmail,
+            'fromName' => trim((string) ($smtp['fromName'] ?? $smtp['name'] ?? 'FlowForge')) ?: 'FlowForge',
+            'encryption' => self::normalizeEncryption(
+                (string) ($smtp['encryption'] ?? $smtp['secure'] ?? ''),
+                $port
+            ),
+        ];
+    }
+
+    /** @param array<string, mixed>|null $config */
+    public static function appUrl(?array $config = null): string
     {
         $app = self::env('DEFAULT_SYSTEM_APP_URL');
         if ($app !== '') {
             return rtrim($app, '/');
+        }
+        if (is_array($config) && trim((string) ($config['app_url'] ?? '')) !== '') {
+            return rtrim((string) $config['app_url'], '/');
         }
         $site = self::env('SITE_URL');
         if ($site !== '') {

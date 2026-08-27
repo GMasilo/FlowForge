@@ -1,8 +1,9 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ChevronDown, ChevronRight, Download } from 'lucide-react'
+import { useAuth } from '@/features/auth/AuthProvider'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import {
   displaySessionStatus,
@@ -11,14 +12,25 @@ import {
 import { ChatMessageBody } from '@/features/chat/ChatMessageBody'
 import { UserMessageBubble } from '@/features/chat/UserMessageBubble'
 import { downloadJson } from '@/shared/lib/downloadJson'
+import { subscribeSessionEvents } from '@/shared/lib/realtime'
 import { safeDownloadBasename } from '@/features/designer/utils/flowTransfer'
-import { canEdit, type ConversationEvent, type ConversationSession, type Json } from '@/shared/types/database'
+import {
+  canAgentOperate,
+  type AgentQueue,
+  type ConversationEvent,
+  type ConversationNote,
+  type ConversationSession,
+  type ConversationTag,
+  type Json,
+} from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { PageHeader } from '@/shared/ui/page-header'
 import { FieldError } from '@/shared/ui/field-error'
 import { Input } from '@/shared/ui/input'
+import { Select } from '@/shared/ui/select'
+import { Textarea } from '@/shared/ui/textarea'
 import { cn } from '@/shared/lib/utils'
 import type { ChatMessage } from '@/features/designer/preview/previewRuntime'
 
@@ -34,17 +46,22 @@ function eventText(payload: Json): string {
 
 export function ConversationDetailPage() {
   const { instance, role } = useRequiredInstance()
+  const { user } = useAuth()
   const { sessionId } = useParams()
   const qc = useQueryClient()
-  const editable = canEdit(role)
+  const editable = canAgentOperate(role)
   const [openRuns, setOpenRuns] = useState<Record<string, boolean>>({})
   const [reply, setReply] = useState('')
   const [replyError, setReplyError] = useState<string | null>(null)
+  const [note, setNote] = useState('')
+  const [transferUser, setTransferUser] = useState('')
+  const [transferQueue, setTransferQueue] = useState('')
+  const [typing, setTyping] = useState(false)
 
   const sessionQuery = useQuery({
     queryKey: ['conversation-session', instance.id, sessionId],
     enabled: !!sessionId,
-    refetchInterval: (q) => (q.state.data?.status === 'escalated' ? 4000 : false),
+    refetchInterval: (q) => (q.state.data?.status === 'escalated' ? 8000 : false),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('conversation_sessions')
@@ -60,7 +77,7 @@ export function ConversationDetailPage() {
   const eventsQuery = useQuery({
     queryKey: ['conversation-events', sessionId],
     enabled: !!sessionId,
-    refetchInterval: () => (sessionQuery.data?.status === 'escalated' ? 4000 : false),
+    refetchInterval: () => (sessionQuery.data?.status === 'escalated' ? 8000 : false),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('conversation_events')
@@ -72,11 +89,96 @@ export function ConversationDetailPage() {
     },
   })
 
+  const notesQuery = useQuery({
+    queryKey: ['conversation-notes', sessionId],
+    enabled: !!sessionId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('conversation_notes')
+        .select('*')
+        .eq('session_id', sessionId!)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      return (data ?? []) as ConversationNote[]
+    },
+  })
+
+  const tagsQuery = useQuery({
+    queryKey: ['conversation-tags', instance.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('conversation_tags')
+        .select('*')
+        .eq('instance_id', instance.id)
+        .order('name')
+      if (error) throw error
+      return (data ?? []) as ConversationTag[]
+    },
+  })
+
+  const tagAssignments = useQuery({
+    queryKey: ['conversation-tag-assignments', sessionId],
+    enabled: !!sessionId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('conversation_tag_assignments')
+        .select('tag_id')
+        .eq('session_id', sessionId!)
+      if (error) throw error
+      return new Set((data ?? []).map((r) => r.tag_id as string))
+    },
+  })
+
+  const queuesQuery = useQuery({
+    queryKey: ['agent-queues', instance.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('agent_queues').select('*').eq('instance_id', instance.id)
+      if (error) throw error
+      return (data ?? []) as AgentQueue[]
+    },
+  })
+
+  const membersQuery = useQuery({
+    queryKey: ['instance-members-agents', instance.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('instance_members')
+        .select('user_id, role, display_name, profiles(email, display_name)')
+        .eq('instance_id', instance.id)
+        .in('role', ['owner', 'admin', 'editor', 'agent'])
+      if (error) throw error
+      return data ?? []
+    },
+  })
+
+  useEffect(() => {
+    if (!sessionId) return
+    const channel = subscribeSessionEvents(sessionId, () => {
+      void qc.invalidateQueries({ queryKey: ['conversation-events', sessionId] })
+      void qc.invalidateQueries({ queryKey: ['conversation-session', instance.id, sessionId] })
+    })
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [sessionId, instance.id, qc])
+
   const session = sessionQuery.data
   const events = eventsQuery.data ?? []
   const shownStatus = session ? displaySessionStatus(session) : 'active'
   const botName = session?.chatbots?.name ?? 'chatbot'
   const isEscalated = session?.status === 'escalated'
+  const slaBreached =
+    !!session?.sla_due_at && isEscalated && new Date(session.sla_due_at).getTime() < Date.now()
+
+  const invalidateAll = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['conversation-events', sessionId] }),
+      qc.invalidateQueries({ queryKey: ['conversation-session', instance.id, sessionId] }),
+      qc.invalidateQueries({ queryKey: ['conversation-inbox', instance.id] }),
+      qc.invalidateQueries({ queryKey: ['conversation-notes', sessionId] }),
+      qc.invalidateQueries({ queryKey: ['conversation-tag-assignments', sessionId] }),
+    ])
+  }
 
   const replyMutation = useMutation({
     mutationFn: async (text: string) => {
@@ -89,11 +191,8 @@ export function ConversationDetailPage() {
     onSuccess: async () => {
       setReply('')
       setReplyError(null)
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['conversation-events', sessionId] }),
-        qc.invalidateQueries({ queryKey: ['conversation-session', instance.id, sessionId] }),
-        qc.invalidateQueries({ queryKey: ['conversation-inbox', instance.id] }),
-      ])
+      setTyping(false)
+      await invalidateAll()
     },
     onError: (e: Error) => setReplyError(e.message),
   })
@@ -106,13 +205,60 @@ export function ConversationDetailPage() {
       if (error) throw error
     },
     onSuccess: async () => {
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['conversation-events', sessionId] }),
-        qc.invalidateQueries({ queryKey: ['conversation-session', instance.id, sessionId] }),
-        qc.invalidateQueries({ queryKey: ['conversation-inbox', instance.id] }),
-      ])
+      await invalidateAll()
     },
     onError: (e: Error) => setReplyError(e.message),
+  })
+
+  const claimMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('claim_conversation', { p_session_id: sessionId! })
+      if (error) throw error
+    },
+    onSuccess: invalidateAll,
+  })
+
+  const transferMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('transfer_conversation', {
+        p_session_id: sessionId!,
+        p_to_user: transferUser || null,
+        p_to_queue_id: transferQueue || null,
+        p_note: null,
+      })
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      setTransferUser('')
+      setTransferQueue('')
+      await invalidateAll()
+    },
+    onError: (e: Error) => setReplyError(e.message),
+  })
+
+  const noteMutation = useMutation({
+    mutationFn: async (body: string) => {
+      const { error } = await supabase.rpc('add_conversation_note', {
+        p_session_id: sessionId!,
+        p_body: body,
+      })
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      setNote('')
+      await invalidateAll()
+    },
+  })
+
+  const tagMutation = useMutation({
+    mutationFn: async (tagIds: string[]) => {
+      const { error } = await supabase.rpc('set_conversation_tags', {
+        p_session_id: sessionId!,
+        p_tag_ids: tagIds,
+      })
+      if (error) throw error
+    },
+    onSuccess: invalidateAll,
   })
 
   const variablesPretty = useMemo(() => {
@@ -130,6 +276,7 @@ export function ConversationDetailPage() {
     downloadJson(`${safeDownloadBasename(botName)}-session-${stamp}.json`, {
       session,
       events,
+      notes: notesQuery.data ?? [],
     })
   }
 
@@ -161,7 +308,7 @@ export function ConversationDetailPage() {
         title={botName}
         description={`Session started ${format(new Date(session.created_at), 'yyyy-MM-dd HH:mm')}${
           session.publish_version != null ? ` · published v${session.publish_version}` : ''
-        }`}
+        }${session.variant_key ? ` · variant ${session.variant_key}` : ''}`}
         actions={
           <>
             <Link
@@ -184,7 +331,7 @@ export function ConversationDetailPage() {
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
         <Card className="space-y-3 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <span
@@ -196,10 +343,22 @@ export function ConversationDetailPage() {
               {shownStatus}
               {shownStatus === 'abandoned' && session.status === 'active' ? ' (stale)' : ''}
             </span>
+            {slaBreached ? (
+              <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-800">
+                SLA breached
+              </span>
+            ) : session.sla_due_at && isEscalated ? (
+              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                SLA due {format(new Date(session.sla_due_at), 'HH:mm')}
+              </span>
+            ) : null}
             {session.visitor_key ? (
               <span className="font-mono text-[11px] text-slate-500">
                 visitor {session.visitor_key.slice(0, 8)}…
               </span>
+            ) : null}
+            {typing ? (
+              <span className="text-[11px] text-violet-700">Agent is typing…</span>
             ) : null}
           </div>
           {eventsQuery.isLoading ? (
@@ -292,13 +451,27 @@ export function ConversationDetailPage() {
               {replyError ? <FieldError>{replyError}</FieldError> : null}
               <Input
                 value={reply}
-                onChange={(e) => setReply(e.target.value)}
+                onChange={(e) => {
+                  setReply(e.target.value)
+                  setTyping(e.target.value.length > 0)
+                }}
                 placeholder="Type a reply for the visitor…"
               />
               <div className="flex flex-wrap gap-2">
                 <Button type="submit" size="sm" disabled={replyMutation.isPending || !reply.trim()}>
                   {replyMutation.isPending ? 'Sending…' : 'Send reply'}
                 </Button>
+                {!session.assigned_to || session.assigned_to !== user?.id ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={claimMutation.isPending}
+                    onClick={() => claimMutation.mutate()}
+                  >
+                    Claim
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   size="sm"
@@ -320,9 +493,106 @@ export function ConversationDetailPage() {
               <p className="mt-1 text-sm text-rose-800">{session.error_summary}</p>
             </Card>
           ) : null}
+
+          {editable && isEscalated ? (
+            <Card className="space-y-2 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Transfer</p>
+              <Select value={transferUser} onChange={(e) => setTransferUser(e.target.value)}>
+                <option value="">Agent…</option>
+                {(membersQuery.data ?? []).map((m) => {
+                  const profiles = m.profiles as { email?: string; display_name?: string } | null
+                  const label = profiles?.display_name || profiles?.email || m.user_id
+                  return (
+                    <option key={m.user_id} value={m.user_id}>
+                      {label}
+                    </option>
+                  )
+                })}
+              </Select>
+              <Select value={transferQueue} onChange={(e) => setTransferQueue(e.target.value)}>
+                <option value="">Queue…</option>
+                {(queuesQuery.data ?? []).map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.name}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={transferMutation.isPending || (!transferUser && !transferQueue)}
+                onClick={() => transferMutation.mutate()}
+              >
+                Transfer
+              </Button>
+            </Card>
+          ) : null}
+
+          <Card className="space-y-2 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Tags</p>
+            <div className="flex flex-wrap gap-1.5">
+              {(tagsQuery.data ?? []).map((tag) => {
+                const on = tagAssignments.data?.has(tag.id)
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    disabled={!editable}
+                    className={cn(
+                      'rounded-full px-2 py-0.5 text-[11px] font-medium ring-1',
+                      on ? 'text-white' : 'bg-white text-slate-600 ring-slate-200',
+                    )}
+                    style={on ? { backgroundColor: tag.color } : undefined}
+                    onClick={() => {
+                      if (!editable) return
+                      const next = new Set(tagAssignments.data ?? [])
+                      if (next.has(tag.id)) next.delete(tag.id)
+                      else next.add(tag.id)
+                      tagMutation.mutate([...next])
+                    }}
+                  >
+                    {tag.name}
+                  </button>
+                )
+              })}
+              {!tagsQuery.data?.length ? (
+                <p className="text-xs text-slate-500">No tags yet — create them under Conversations.</p>
+              ) : null}
+            </div>
+          </Card>
+
+          <Card className="space-y-2 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Internal notes</p>
+            <ul className="max-h-40 space-y-2 overflow-auto">
+              {(notesQuery.data ?? []).map((n) => (
+                <li key={n.id} className="rounded-lg bg-slate-50 px-2 py-1.5 text-xs text-slate-700">
+                  {n.body}
+                  <span className="mt-0.5 block text-[10px] text-slate-400">
+                    {format(new Date(n.created_at), 'yyyy-MM-dd HH:mm')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {editable ? (
+              <form
+                className="space-y-2"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (!note.trim()) return
+                  noteMutation.mutate(note.trim())
+                }}
+              >
+                <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Add a note…" />
+                <Button type="submit" size="sm" variant="secondary" disabled={!note.trim() || noteMutation.isPending}>
+                  Add note
+                </Button>
+              </form>
+            ) : null}
+          </Card>
+
           <Card className="p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Variables</p>
-            <pre className="mt-2 max-h-[28rem] overflow-auto font-mono text-[11px] leading-snug text-slate-800">
+            <pre className="mt-2 max-h-[18rem] overflow-auto font-mono text-[11px] leading-snug text-slate-800">
               {variablesPretty}
             </pre>
           </Card>

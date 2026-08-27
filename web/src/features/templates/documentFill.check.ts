@@ -74,6 +74,7 @@ const embed = encodeDocumentEmbed(filled)
 const roundTrip = decodeDocumentEmbed(embed.slice('<<ff:doc:'.length, -2))
 assert(roundTrip?.filename === filled.filename, 'embed round-trip')
 assert(filled.layout === 'flow', 'starter stays list layout')
+assert(filled.orientation === 'portrait', 'starter orientation portrait')
 
 {
   const docExpr = templateExprValue({
@@ -118,12 +119,35 @@ assert(filled.layout === 'flow', 'starter stays list layout')
   assert(pagePdf.bytes[0] === 0x25 && pagePdf.bytes[1] === 0x50, 'page pdf magic')
 }
 
+{
+  const landscapeContent: DocumentContent = {
+    ...content,
+    layout: 'page',
+    orientation: 'landscape',
+    blocks: flowToPageBlocks({ ...content, orientation: 'landscape' }),
+  }
+  const landscapeFilled = fillDocumentSnapshot(
+    landscapeContent,
+    (source) => interpolateTemplate(source, ctx),
+    (source) => resolveExpressionValue(source, ctx),
+    ctx.vars,
+  )
+  assert(landscapeFilled.orientation === 'landscape', 'landscape snapshot')
+  const landscapePdf = await generateDocumentFile(landscapeFilled)
+  assert(landscapePdf.bytes[0] === 0x25 && landscapePdf.bytes[1] === 0x50, 'landscape pdf magic')
+  const landscapeEmbed = decodeDocumentEmbed(encodeDocumentEmbed(landscapeFilled).slice('<<ff:doc:'.length, -2))
+  assert(landscapeEmbed?.orientation === 'landscape', 'embed keeps landscape')
+}
+
 assert(snapToGrid(7.4) === 8, 'snap 7.4 to 8')
 assert(snapToGrid(1) === 0 || snapToGrid(1) === 2, 'snap 1 to nearest 2%')
 assert(normalizeDocumentColor('#c00') === '#cc0000', 'expand 3-digit hex')
 assert(pctToMm(100, 'x') === 210, 'full A4 width mm')
 assert(Math.abs(mmToPct(21, 'x') - 10) < 0.01, '21mm is 10% width')
 assert(pctToMm(100, 'y') === 297, 'full A4 height mm')
+assert(pctToMm(100, 'x', 'landscape') === 297, 'landscape A4 width mm')
+assert(pctToMm(100, 'y', 'landscape') === 210, 'landscape A4 height mm')
+assert(Math.abs(mmToPct(29.7, 'x', 'landscape') - 10) < 0.01, '29.7mm is 10% landscape width')
 {
   const line = clampBlock({ ...emptyDocumentBlock('divider', 10), h: mmToPct(0.1, 'y') })
   assert(Math.abs(pctToMm(line.h, 'y') - 0.1) < 0.001, `0.1mm line kept, got ${pctToMm(line.h, 'y')}`)

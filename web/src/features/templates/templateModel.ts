@@ -110,6 +110,8 @@ export type DocumentField = {
 
 export const DOCUMENT_LAYOUTS = ['flow', 'page'] as const
 export type DocumentLayout = (typeof DOCUMENT_LAYOUTS)[number]
+export const DOCUMENT_ORIENTATIONS = ['portrait', 'landscape'] as const
+export type DocumentOrientation = (typeof DOCUMENT_ORIENTATIONS)[number]
 export const DOCUMENT_BLOCK_TYPES = ['heading', 'text', 'field', 'image', 'divider', 'cart'] as const
 export type DocumentBlockType = (typeof DOCUMENT_BLOCK_TYPES)[number]
 export type DocumentAlign = 'left' | 'center' | 'right'
@@ -118,6 +120,10 @@ export type DocumentFont = (typeof DOCUMENT_FONTS)[number]
 
 export function isDocumentFont(value: string): value is DocumentFont {
   return value === 'helvetica' || value === 'times' || value === 'courier'
+}
+
+export function isDocumentOrientation(value: string): value is DocumentOrientation {
+  return value === 'portrait' || value === 'landscape'
 }
 
 export type DocumentBlock = {
@@ -149,6 +155,7 @@ export type DocumentContent = {
   fields: DocumentField[]
   includeCart: boolean
   layout: DocumentLayout
+  orientation: DocumentOrientation
   blocks: DocumentBlock[]
   inputs: TemplateInput[]
 }
@@ -210,7 +217,7 @@ export const TEMPLATE_KIND_META: Record<
   },
   document: {
     label: 'Downloadable file',
-    hint: 'PDF, Word, or Excel filled from answers — list layout or a visual A4 page',
+    hint: 'PDF, Word, or Excel filled from answers — list layout or a visual A4 page (portrait or landscape)',
     insertField: 'file',
   },
 }
@@ -418,6 +425,7 @@ export function parseDocumentContent(raw: Record<string, unknown> | DocumentCont
     fields: parseDocumentFields(c.fields),
     includeCart: c.includeCart === true,
     layout: str(c.layout) === 'page' ? 'page' : 'flow',
+    orientation: isDocumentOrientation(str(c.orientation)) ? (str(c.orientation) as DocumentOrientation) : 'portrait',
     blocks: parseDocumentBlocks(c.blocks),
     inputs: parseTemplateInputs(c.inputs),
   }
@@ -475,6 +483,7 @@ export function emptyTemplateContent(kind: TemplateKind): TemplateContent {
         fields: [emptyDocumentField()],
         includeCart: false,
         layout: 'flow',
+        orientation: 'portrait',
         blocks: [],
         inputs: [],
       }
@@ -635,6 +644,7 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
         ],
         includeCart: false,
         layout: 'flow',
+        orientation: 'portrait',
         blocks: [],
         inputs: [
           { key: 'name', label: 'Full name', type: 'string', required: true },

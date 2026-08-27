@@ -58,6 +58,27 @@ function assert(cond: unknown, msg: string): asserts cond {
   assert(r.ok && r.value === 'Female', 'gender uses default choices')
 }
 {
+  const r = validateQuestionAnswer(
+    { answerType: 'numbered_choice', choices: ['Red', 'Blue'], answerRequired: true },
+    '2',
+  )
+  assert(r.ok && r.value === 'Blue' && r.displayText === '2. Blue', 'numbered choice maps 2 → Blue')
+}
+{
+  const r = validateQuestionAnswer(
+    { answerType: 'numbered_choice', choices: ['Red', 'Blue'], answerRequired: true },
+    'Blue',
+  )
+  assert(r.ok && r.value === 'Blue', 'numbered choice accepts label')
+}
+{
+  const r = validateQuestionAnswer(
+    { answerType: 'numbered_choice', choices: ['Red', 'Blue'], answerRequired: true },
+    '9',
+  )
+  assert(!r.ok, 'numbered choice rejects out-of-range number')
+}
+{
   const r = validateQuestionAnswer({ answerType: 'phone', phoneFormat: 'e164', answerRequired: true }, '555')
   assert(!r.ok, 'e164 phone rejects local')
 }

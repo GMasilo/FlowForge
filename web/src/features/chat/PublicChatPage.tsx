@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns'
 import { Send, Sparkles } from 'lucide-react'
 import {
   createInitialPreviewState,
   runConnectionStep,
   runEntityStep,
-  runIntegrationStep,
   sendOtpEmailChallenge,
   skipPreviewQuestion,
   submitPreviewAnswer,
@@ -24,6 +23,7 @@ import {
   readImageChoiceLayout,
 } from '@/features/designer/model/flowSchema'
 import { parsePublishedGraph } from '@/features/designer/utils/flowPublish'
+import { executeChatbotTransfer } from '@/features/designer/model/chatbotTransfer'
 import { collectStoreImageFilenames, templatesExprMap } from '@/features/templates/templateModel'
 import {
   TemporalAnswerField,
@@ -39,6 +39,7 @@ import { ColorAnswerField } from '@/features/chat/ColorAnswerField'
 import { ThumbsAnswerField } from '@/features/chat/ThumbsAnswerField'
 import { MoodAnswerField } from '@/features/chat/MoodAnswerField'
 import { LikertAnswerField } from '@/features/chat/LikertAnswerField'
+import { NumberedChoiceAnswerField } from '@/features/chat/NumberedChoiceAnswerField'
 import { StepperAnswerField } from '@/features/chat/StepperAnswerField'
 import { CurrencyAnswerField } from '@/features/chat/CurrencyAnswerField'
 import { OtpAnswerField } from '@/features/chat/OtpAnswerField'
@@ -60,19 +61,14 @@ import {
   normalizeMaxFiles,
 } from '@/features/designer/model/conversationFiles'
 import { supabase } from '@/shared/lib/supabase'
-import {
-  applyInstanceBranding,
-  clearInstanceBranding,
-  normalizeBrandAccent,
-} from '@/shared/lib/instanceBranding'
 import { getPaymentStatus, instanceFileUrl, isFlowForgeApiConfigured, startPaymentIntent } from '@/shared/lib/flowforgeApi'
 import {
   catalogFromFilenames,
   collectMediaFilenamesFromNodes,
 } from '@/features/designer/model/chatbotMedia'
 import { Button } from '@/shared/ui/button'
-import { Input } from '@/shared/ui/input'
 import { cn } from '@/shared/lib/utils'
+import { parseChatEnvironment } from '@/shared/types/database'
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
 import type { Json } from '@/shared/types/database'
 
@@ -102,24 +98,6 @@ function visitorKey(): string {
   }
 }
 
-type PublicChatBranding = {
-  display_name: string | null
-  accent_color: string | null
-  logo_url: string | null
-}
-
-function parsePublicBranding(raw: unknown): PublicChatBranding | null {
-  if (!raw || typeof raw !== 'object') return null
-  const row = raw as Record<string, unknown>
-  return {
-    display_name: typeof row.display_name === 'string' ? row.display_name : null,
-    accent_color: normalizeBrandAccent(
-      typeof row.accent_color === 'string' ? row.accent_color : null,
-    ),
-    logo_url: typeof row.logo_url === 'string' && row.logo_url.trim() ? row.logo_url.trim() : null,
-  }
-}
-
 function rpcErrorMessage(err: unknown): string {
   if (err && typeof err === 'object' && 'message' in err) {
     const message = (err as { message?: unknown }).message
@@ -141,6 +119,22 @@ async function appendEvent(
     p_node_key: nodeKey ?? null,
     p_payload: (payload ?? {}) as Json,
   })
+}
+
+async function escalateSession(sessionId: string, nodeKey?: string | null) {
+  const { error } = await supabase.rpc('escalate_conversation_session', {
+    p_session_id: sessionId,
+    p_node_key: nodeKey ?? null,
+  })
+  if (error) throw error
+}
+
+function eventPayloadText(payload: unknown): string {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return ''
+  const o = payload as Record<string, unknown>
+  if (typeof o.text === 'string') return o.text
+  if (typeof o.message === 'string') return o.message
+  return ''
 }
 
 async function completeSession(
@@ -167,9 +161,10 @@ async function completeSession(
 
 export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   const { publicSlug } = useParams()
+  const [searchParams] = useSearchParams()
+  const chatEnvironment = parseChatEnvironment(searchParams.get('env'))
   const [bootError, setBootError] = useState<string | null>(null)
   const [botName, setBotName] = useState('Chat')
-  const [branding, setBranding] = useState<PublicChatBranding | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [chatbotId, setChatbotId] = useState<string | null>(null)
   const [instanceId, setInstanceId] = useState<string | null>(null)
@@ -188,10 +183,9 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   const completedRef = useRef(false)
   const lastLoggedRunCount = useRef(0)
   const lastLoggedMsgCount = useRef(0)
-  const escalatedRef = useRef(false)
-  const lastEventSeqRef = useRef(0)
-  const [handoffDraft, setHandoffDraft] = useState('')
-  const [handoffSending, setHandoffSending] = useState(false)
+  const escalatedForSession = useRef<string | null>(null)
+  const handoffEventSeq = useRef(0)
+  const seenAgentEventIds = useRef(new Set<string>())
 
   useEffect(() => {
     if (!embed) return
@@ -231,9 +225,10 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     let cancelled = false
     ;(async () => {
       try {
-        const { data, error } = await supabase.rpc('start_public_conversation', {
+        const { data, error } = await supabase.rpc('start_public_conversation_env', {
           p_slug: publicSlug,
           p_visitor_key: visitorKey(),
+          p_environment: chatEnvironment,
         })
         if (error) throw error
         if (!data || typeof data !== 'object') throw new Error('Invalid session response')
@@ -243,13 +238,6 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         for (const g of graph.globals) globalsMap[g.key] = g.default_value
         if (cancelled) return
         setBotName(typeof row.name === 'string' ? row.name : 'Chat')
-        const nextBranding = parsePublicBranding(row.branding)
-        setBranding(nextBranding)
-        if (nextBranding?.accent_color) {
-          applyInstanceBranding({ brand_accent_color: nextBranding.accent_color })
-        } else {
-          clearInstanceBranding()
-        }
         setSessionId(String(row.session_id))
         setChatbotId(String(row.chatbot_id))
         setInstanceId(String(row.instance_id))
@@ -276,6 +264,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         setState(createInitialPreviewState(graph.nodes, graph.edges, globalsMap, mediaCatalog, templatesExprMap(graph.templates ?? [])))
         void appendEvent(String(row.session_id), 'session.started', null, {
           publish_version: row.publish_version ?? null,
+          environment: chatEnvironment,
           embed: embed || null,
         })
         if (embed) {
@@ -298,9 +287,8 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     })()
     return () => {
       cancelled = true
-      clearInstanceBranding()
     }
-  }, [publicSlug, embed])
+  }, [publicSlug, embed, chatEnvironment])
 
   // Tick / connection steps
   useEffect(() => {
@@ -309,19 +297,57 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     const delaySeconds = node ? readDelaySeconds(node.config) : 0
     const waitMs = delaySeconds > 0 ? Math.round(delaySeconds * 1000) : 480
 
-    if (node?.type === 'http' || node?.type === 'email' || node?.type === 'integration' || node?.type === 'entity') {
+    if (node?.type === 'http' || node?.type === 'email' || node?.type === 'entity' || node?.type === 'transfer') {
       if (connectionBusy.current) return
       const timer = window.setTimeout(() => {
         if (connectionBusy.current) return
         connectionBusy.current = true
         const run =
-          node.type === 'entity'
-            ? runEntityStep(state, nodes, edges)
-            : node.type === 'integration'
-              ? runIntegrationStep(state, nodes, edges, connectionCtx)
+          node.type === 'transfer'
+            ? !chatbotId || !instanceId
+              ? Promise.reject(new Error('Chat session is not ready for transfer'))
+              : executeChatbotTransfer({
+                  state,
+                  node,
+                  mode: 'public',
+                  sessionId,
+                  environment: chatEnvironment,
+                  fromChatbotId: chatbotId,
+                  fromChatbotName: botName,
+                  instanceId,
+                }).then((result) => {
+                  setNodes(result.graph.nodes)
+                  setEdges(result.graph.edges)
+                  setChatbotId(result.chatbotId)
+                  setBotName(result.name)
+                  return result.state
+                })
+            : node.type === 'entity'
+              ? runEntityStep(state, nodes, edges)
               : runConnectionStep(state, nodes, edges, connectionsById, connectionCtx)
         void run
           .then((next) => setState(next))
+          .catch((err) => {
+            console.error('Step failed', err)
+            setState((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    messages: [
+                      ...prev.messages,
+                      {
+                        id: crypto.randomUUID(),
+                        role: 'bot',
+                        text: err instanceof Error ? err.message : 'Transfer failed',
+                        createdAt: new Date().toISOString(),
+                      },
+                    ],
+                    phase: { kind: 'finished' },
+                    currentId: null,
+                  }
+                : prev,
+            )
+          })
           .finally(() => {
             connectionBusy.current = false
           })
@@ -333,7 +359,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       setState((prev) => (prev ? tickPreview(prev, nodes, edges) : prev))
     }, waitMs)
     return () => window.clearTimeout(timer)
-  }, [state, nodes, edges, connectionsById, connectionCtx])
+  }, [state, nodes, edges, connectionsById, connectionCtx, sessionId, chatbotId, botName, instanceId, chatEnvironment])
 
   // Optional question timeout
   useEffect(() => {
@@ -373,114 +399,6 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       })
   }, [state, nodes, connectionsById, connectionCtx])
 
-  // Escalate on handoff phase
-  useEffect(() => {
-    if (!sessionId || !state || state.phase.kind !== 'waiting_handoff') return
-    if (escalatedRef.current) return
-    escalatedRef.current = true
-    const nodeId = state.phase.nodeId
-    const node = nodes.find((n) => n.id === nodeId)
-    void supabase.rpc('escalate_conversation_session', {
-      p_session_id: sessionId,
-      p_node_key: node?.key ?? null,
-    })
-  }, [sessionId, state, nodes])
-
-  // Poll agent replies / resolution while waiting for handoff
-  useEffect(() => {
-    if (!sessionId || !state || state.phase.kind !== 'waiting_handoff') return
-    let cancelled = false
-    const tick = async () => {
-      const { data, error } = await supabase.rpc('list_conversation_events_after', {
-        p_session_id: sessionId,
-        p_after_seq: lastEventSeqRef.current,
-      })
-      if (cancelled || error || !data) return
-      const rows = data as Array<{
-        seq: number
-        kind: string
-        payload: Json
-        created_at: string
-        id: string
-      }>
-      if (!rows.length) {
-        const { data: sess } = await supabase
-          .from('conversation_sessions')
-          .select('status')
-          .eq('id', sessionId)
-          .maybeSingle()
-        if (!cancelled && sess && sess.status !== 'escalated' && sess.status !== 'active') {
-          setState((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  phase: { kind: 'finished' },
-                  currentId: null,
-                  messages: [
-                    ...prev.messages,
-                    {
-                      id: `resolved-${Date.now()}`,
-                      role: 'system',
-                      text: 'An agent closed this conversation.',
-                      createdAt: new Date().toISOString(),
-                    },
-                  ],
-                }
-              : prev,
-          )
-        }
-        return
-      }
-      setState((prev) => {
-        if (!prev || prev.phase.kind !== 'waiting_handoff') return prev
-        let next = { ...prev, messages: [...prev.messages] }
-        let finished = false
-        for (const row of rows) {
-          lastEventSeqRef.current = Math.max(lastEventSeqRef.current, row.seq)
-          const payload =
-            row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload)
-              ? (row.payload as Record<string, unknown>)
-              : {}
-          const text = String(payload.text ?? payload.message ?? '')
-          if (row.kind === 'message.agent' && text) {
-            next.messages.push({
-              id: row.id,
-              role: 'agent',
-              text,
-              createdAt: row.created_at,
-            })
-            lastLoggedMsgCount.current = next.messages.length
-          } else if (row.kind === 'session.completed') {
-            finished = true
-          }
-        }
-        if (finished) {
-          return {
-            ...next,
-            phase: { kind: 'finished' },
-            currentId: null,
-            messages: [
-              ...next.messages,
-              {
-                id: `resolved-${Date.now()}`,
-                role: 'system',
-                text: 'An agent closed this conversation.',
-                createdAt: new Date().toISOString(),
-              },
-            ],
-          }
-        }
-        return next
-      })
-    }
-    void tick()
-    const timer = window.setInterval(() => void tick(), 4000)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [sessionId, state?.phase.kind])
-
   // Log new messages / runs
   useEffect(() => {
     if (!sessionId || !state) return
@@ -488,7 +406,8 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       const fresh = state.messages.slice(lastLoggedMsgCount.current)
       lastLoggedMsgCount.current = state.messages.length
       for (const m of fresh) {
-        if (m.role === 'agent') continue
+        // Agent messages are already persisted by agent_reply_to_conversation.
+        if (m.role === 'agent' || m.role === 'system') continue
         void appendEvent(sessionId, `message.${m.role}`, null, { text: m.text, id: m.id })
       }
     }
@@ -530,6 +449,86 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     }
   }, [sessionId, state, embed])
 
+  // Escalate to agent inbox when the flow reaches a handoff step.
+  useEffect(() => {
+    if (!sessionId || !state) return
+    const phase = state.phase
+    if (phase.kind !== 'waiting_handoff') return
+    if (escalatedForSession.current === sessionId) return
+    escalatedForSession.current = sessionId
+    const node = nodes.find((n) => n.id === phase.nodeId)
+    void escalateSession(sessionId, node?.key ?? phase.nodeId).catch((err) => {
+      console.error('Failed to escalate conversation for handoff', err)
+      // Allow a retry on the next render if escalate failed.
+      if (escalatedForSession.current === sessionId) escalatedForSession.current = null
+    })
+  }, [sessionId, state, nodes])
+
+  // While waiting for an agent, pull agent replies (and handoff resolution).
+  useEffect(() => {
+    if (!sessionId || !state || state.phase.kind !== 'waiting_handoff') return
+    let cancelled = false
+
+    async function pullAgentEvents() {
+      const { data, error } = await supabase.rpc('list_conversation_events_after', {
+        p_session_id: sessionId!,
+        p_after_seq: handoffEventSeq.current,
+      })
+      if (cancelled || error || !data?.length) return
+
+      for (const ev of data) {
+        handoffEventSeq.current = Math.max(handoffEventSeq.current, ev.seq)
+        if (ev.kind === 'message.agent') {
+          if (seenAgentEventIds.current.has(ev.id)) continue
+          seenAgentEventIds.current.add(ev.id)
+          const text = eventPayloadText(ev.payload).trim()
+          if (!text) continue
+          setState((prev) => {
+            if (!prev) return prev
+            if (prev.messages.some((m) => m.id === ev.id)) return prev
+            return {
+              ...prev,
+              messages: [
+                ...prev.messages,
+                {
+                  id: ev.id,
+                  role: 'agent',
+                  text,
+                  createdAt: ev.created_at,
+                },
+              ],
+            }
+          })
+        } else if (ev.kind === 'session.completed') {
+          setState((prev) =>
+            prev && prev.phase.kind === 'waiting_handoff'
+              ? {
+                  ...prev,
+                  messages: [
+                    ...prev.messages,
+                    {
+                      id: crypto.randomUUID(),
+                      role: 'system',
+                      text: 'An agent has resolved this conversation.',
+                      createdAt: new Date().toISOString(),
+                    },
+                  ],
+                  phase: { kind: 'finished' },
+                }
+              : prev,
+          )
+        }
+      }
+    }
+
+    void pullAgentEvents()
+    const timer = window.setInterval(() => void pullAgentEvents(), 2500)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [sessionId, state?.phase.kind === 'waiting_handoff'])
+
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: 'smooth' })
   }, [state?.messages, state?.phase])
@@ -561,6 +560,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   }, [state?.phase.kind === 'waiting_input' ? state.phase.nodeId : null])
 
   const waiting = state?.phase.kind === 'waiting_input' ? state.phase : null
+  const waitingHandoff = state?.phase.kind === 'waiting_handoff' ? state.phase : null
   const waitingNode = waiting ? nodes.find((n) => n.id === waiting.nodeId) : null
   const waitingOptional = !!waitingNode && !isAnswerRequired(waitingNode.config)
   const waitingCfg = waitingNode?.config ?? {}
@@ -574,6 +574,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   const isThumbs = waiting?.answerType === 'thumbs'
   const isMood = waiting?.answerType === 'mood'
   const isLikert = waiting?.answerType === 'likert'
+  const isNumberedChoice = waiting?.answerType === 'numbered_choice'
   const isStepper = waiting?.answerType === 'stepper'
   const isCurrency = waiting?.answerType === 'currency'
   const isOtp = waiting?.answerType === 'otp'
@@ -611,6 +612,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       ? waitingCfg.confirmLabel
       : 'I agree'
   const likertChoices = waiting?.choices?.length ? waiting.choices : [...DEFAULT_LIKERT_CHOICES]
+  const numberedChoices = waiting?.choices?.length ? waiting.choices : []
   const ratingOptions = useMemo(() => {
     const lo = Math.min(ratingMin, ratingMax)
     const hi = Math.max(ratingMin, ratingMax)
@@ -625,6 +627,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     isThumbs ||
     isMood ||
     isLikert ||
+    isNumberedChoice ||
     isFile ||
     isSignature ||
     isImageChoice ||
@@ -657,6 +660,30 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     const answer = draft.trim()
     setDraft('')
     setState(submitPreviewAnswer(state, nodes, edges, answer))
+  }
+
+  function onHandoffSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!state || state.phase.kind !== 'waiting_handoff') return
+    const text = draft.trim()
+    if (!text) return
+    setDraft('')
+    setState((prev) =>
+      prev
+        ? {
+            ...prev,
+            messages: [
+              ...prev.messages,
+              {
+                id: crypto.randomUUID(),
+                role: 'user',
+                text,
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          }
+        : prev,
+    )
   }
 
   function onSkipOptional() {
@@ -759,57 +786,45 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         className={cn(
           'text-white shadow-sm',
           embed
-            ? 'border-b border-black/10 px-3 py-2.5'
-            : 'border-b border-white/60 px-4 py-4',
-          !branding?.accent_color && embed ? 'bg-teal-700' : null,
-          !branding?.accent_color && !embed
-            ? 'bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600'
-            : null,
+            ? 'border-b border-teal-700/20 bg-teal-700 px-3 py-2.5'
+            : 'border-b border-white/60 bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600 px-4 py-4',
         )}
-        style={
-          branding?.accent_color
-            ? {
-                background: embed
-                  ? branding.accent_color
-                  : `linear-gradient(135deg, ${branding.accent_color}, color-mix(in srgb, ${branding.accent_color} 70%, #0891b2))`,
-              }
-            : undefined
-        }
       >
         <div className={cn('flex items-center gap-3', embed ? '' : 'mx-auto max-w-2xl')}>
-          {branding?.logo_url ? (
-            <img
-              src={branding.logo_url}
-              alt=""
-              className={cn(
-                'rounded-2xl bg-white/20 object-contain ring-1 ring-white/30',
-                embed ? 'h-8 w-8' : 'h-10 w-10',
-              )}
-            />
-          ) : (
-            <span
-              className={cn(
-                'grid place-items-center rounded-2xl bg-white/20 ring-1 ring-white/30',
-                embed ? 'h-8 w-8' : 'h-10 w-10',
-              )}
-            >
-              <Sparkles className={embed ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-            </span>
-          )}
+          <span
+            className={cn(
+              'grid place-items-center rounded-2xl bg-white/20 ring-1 ring-white/30',
+              embed ? 'h-8 w-8' : 'h-10 w-10',
+            )}
+          >
+            <Sparkles className={embed ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+          </span>
           <div className="min-w-0">
             {!embed ? (
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75">
-                {branding?.display_name?.trim() || 'FlowForge'}
+                {chatEnvironment === 'staging' ? 'Staging' : 'FlowForge'}
               </p>
             ) : null}
-            <h1
-              className={cn(
-                'truncate font-[family-name:var(--font-display)] font-semibold',
-                embed ? 'text-sm' : 'text-lg',
-              )}
-            >
-              {botName}
-            </h1>
+            <div className="flex min-w-0 items-center gap-2">
+              <h1
+                className={cn(
+                  'truncate font-[family-name:var(--font-display)] font-semibold',
+                  embed ? 'text-sm' : 'text-lg',
+                )}
+              >
+                {botName}
+              </h1>
+              {chatEnvironment === 'staging' ? (
+                <span
+                  className={cn(
+                    'shrink-0 rounded-full bg-white/20 px-2 py-0.5 font-semibold uppercase tracking-wide text-white ring-1 ring-white/30',
+                    embed ? 'text-[9px]' : 'text-[10px]',
+                  )}
+                >
+                  Staging
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
       </header>
@@ -828,20 +843,24 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
                 <UserMessageBubble message={m} />
               </div>
             </div>
+          ) : m.role === 'system' ? (
+            <p key={m.id} className="text-center text-xs text-slate-400">
+              {m.text}
+            </p>
           ) : (
             <div
               key={m.id}
               className={cn(
                 'max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm',
-                m.role === 'bot'
-                  ? 'bg-white text-slate-800 ring-1 ring-slate-200/80'
-                  : m.role === 'agent'
-                    ? 'bg-violet-50 text-violet-950 ring-1 ring-violet-200/80'
-                    : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60',
+                m.role === 'agent'
+                  ? 'bg-violet-50 text-violet-950 ring-1 ring-violet-200/80'
+                  : 'bg-white text-slate-800 ring-1 ring-slate-200/80',
               )}
             >
               {m.role === 'agent' ? (
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-violet-700">Agent</p>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                  Agent
+                </p>
               ) : null}
               <ChatMessageBody text={m.text} attachments={m.media} />
               <p className="mt-1 text-[10px] text-slate-400">{prettyTimestamp(m.createdAt)}</p>
@@ -855,8 +874,10 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-500 [animation-delay:240ms]" />
           </div>
         ) : null}
-        {state.phase.kind === 'waiting_handoff' ? (
-          <p className="text-center text-xs text-violet-600">Waiting for an agent…</p>
+        {waitingHandoff ? (
+          <p className="rounded-xl bg-violet-50 px-3 py-2 text-center text-xs text-violet-800 ring-1 ring-violet-200/70">
+            Waiting for an agent… You can keep sending messages below.
+          </p>
         ) : null}
         {state.phase.kind === 'finished' ? (
           <p className="text-center text-xs text-slate-400">Conversation complete</p>
@@ -893,6 +914,19 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
           )}
         >          <LikertAnswerField
             choices={likertChoices}
+            onSelect={(v) => setState(submitPreviewAnswer(state, nodes, edges, v))}
+          />
+        </div>
+      ) : null}
+      {waiting && isNumberedChoice ? (
+        <div
+          className={cn(
+            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            embed ? '' : 'mx-auto max-w-2xl',
+          )}
+        >
+          <NumberedChoiceAnswerField
+            choices={numberedChoices}
             onSelect={(v) => setState(submitPreviewAnswer(state, nodes, edges, v))}
           />
         </div>
@@ -1297,45 +1331,25 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         </div>
       ) : null}
 
-      {state?.phase.kind === 'waiting_handoff' ? (
-        <form
+      {waitingHandoff ? (
+        <div
           className={cn(
-            'flex w-full gap-2 border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-slate-100 bg-white/95 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
-          onSubmit={(e) => {
-            e.preventDefault()
-            const text = handoffDraft.trim()
-            if (!text || !sessionId || handoffSending) return
-            setHandoffSending(true)
-            const id = `user-handoff-${Date.now()}`
-            setState((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    messages: [
-                      ...prev.messages,
-                      { id, role: 'user', text, createdAt: new Date().toISOString() },
-                    ],
-                  }
-                : prev,
-            )
-            setHandoffDraft('')
-            void appendEvent(sessionId, 'message.user', null, { text, id }).finally(() =>
-              setHandoffSending(false),
-            )
-          }}
         >
-          <Input
-            value={handoffDraft}
-            onChange={(e) => setHandoffDraft(e.target.value)}
-            placeholder="Message the agent…"
-            disabled={handoffSending}
-          />
-          <Button type="submit" disabled={handoffSending || !handoffDraft.trim()}>
-            Send
-          </Button>
-        </form>
+          <form onSubmit={onHandoffSubmit} className="flex items-end gap-2">
+            <input
+              className="h-11 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-500/15"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Message the agent…"
+            />
+            <Button type="submit" size="md" disabled={!draft.trim()} aria-label="Send">
+              <Send className="h-4 w-4" />
+            </Button>
+          </form>
+        </div>
       ) : null}
       </ChatMediaPlayerProvider>
     </div>

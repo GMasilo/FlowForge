@@ -982,8 +982,14 @@ export function tickPreview(
     return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
   }
 
-  if (node.type === 'http' || node.type === 'email' || node.type === 'integration' || node.type === 'entity') {
-    // Handled asynchronously by PreviewChat via runConnectionStep / runIntegrationStep / runEntityStep
+  if (
+    node.type === 'http' ||
+    node.type === 'email' ||
+    node.type === 'integration' ||
+    node.type === 'entity' ||
+    node.type === 'transfer'
+  ) {
+    // Handled asynchronously by PreviewChat / PublicChat
     return state
   }
 
@@ -1903,6 +1909,10 @@ export async function runEntityStep(
   const recordIdRaw = String(node.config.recordId ?? '')
   const filterAttribute = String(node.config.filterAttribute ?? '').trim()
   const filterEqualsRaw = String(node.config.filterEquals ?? '')
+  const filtersRaw =
+    node.config.filters && typeof node.config.filters === 'object' && !Array.isArray(node.config.filters)
+      ? (node.config.filters as { logic?: string; clauses?: Array<{ attribute?: string; operator?: string; value?: string }> })
+      : undefined
   const fieldMap =
     node.config.fieldMap && typeof node.config.fieldMap === 'object' && !Array.isArray(node.config.fieldMap)
       ? (node.config.fieldMap as Record<string, string>)
@@ -1919,6 +1929,7 @@ export async function runEntityStep(
     recordId: recordIdRaw || undefined,
     filterAttribute: filterAttribute || undefined,
     filterEquals: filterEqualsRaw || undefined,
+    filters: filtersRaw,
     fieldMap: Object.keys(fieldMap).length ? fieldMap : undefined,
   }
 
@@ -1936,13 +1947,18 @@ export async function runEntityStep(
     const {
       createDynamicRecord,
       deleteDynamicRecord,
-      filterRecords,
       listEntityRecords,
       toRecordPayload,
       updateDynamicRecord,
     } = await import('@/features/entities/entityApi')
+    const { coalesceEntityFilters, queryEntityRecords } = await import('@/features/entities/entityQuery')
 
     const recordId = recordIdRaw ? String(resolveValue(recordIdRaw, next.vars, next.stepOutputs, next.media, next.templates) ?? '') : ''
+    const filters = coalesceEntityFilters({
+      filters: filtersRaw as import('@/features/entities/entityQuery').EntityFilters | undefined,
+      filterAttribute,
+      filterEquals: filterEqualsRaw,
+    })
     const filterEquals = filterEqualsRaw
       ? resolveValue(filterEqualsRaw, next.vars, next.stepOutputs, next.media, next.templates)
       : undefined
@@ -1964,8 +1980,12 @@ export async function runEntityStep(
         .eq('entity_id', entityId)
         .order('sort_order')
       if (attrsError) throw new Error(attrsError.message)
+      const { ensurePrimaryKeyValue } = await import('@/features/entities/entityPrimaryKey')
       const { validateAndCoerceEntityValues } = await import('@/features/entities/entityValueValidation')
-      resolvedFields = validateAndCoerceEntityValues(incomingFields, attrs ?? [], {
+      // Create: auto-generate unique primary key `id` when the field map left it blank.
+      const fieldsForValidate =
+        operation === 'create' ? ensurePrimaryKeyValue(incomingFields) : incomingFields
+      resolvedFields = validateAndCoerceEntityValues(fieldsForValidate, attrs ?? [], {
         partial: operation === 'update',
       })
     }
@@ -1974,6 +1994,7 @@ export async function runEntityStep(
       entityKey: entity.key,
       entityKind: entity.kind,
       recordId: recordId || undefined,
+      filters,
       filterEquals,
       resolvedFields: Object.keys(resolvedFields).length ? resolvedFields : undefined,
     }
@@ -1984,7 +2005,9 @@ export async function runEntityStep(
 
     if (operation === 'list' || operation === 'get') {
       let rows = await listEntityRecords(entity)
-      if (filterAttribute) rows = filterRecords(rows, filterAttribute, filterEquals)
+      rows = queryEntityRecords(rows, filters, (raw) =>
+        resolveValue(raw, next.vars, next.stepOutputs, next.media, next.templates),
+      )
       if (operation === 'get') {
         if (recordId) rows = rows.filter((r) => r.id === recordId)
         const one = rows[0] ?? null

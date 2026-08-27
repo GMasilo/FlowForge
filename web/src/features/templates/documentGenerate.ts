@@ -1,7 +1,36 @@
 import { zipSync } from 'fflate'
 import type { FilledDocument, FilledDocumentBlock } from '@/features/templates/documentFill'
-import { A4_HEIGHT_PT, A4_WIDTH_PT, DIVIDER_MIN_MM, blockBoxPts, documentPageCount, docxFontName, hexToRgb01, normalizeDocumentColor, optionalDocumentFill } from '@/features/templates/documentLayout'
-import { documentMime, type DocumentFont } from '@/features/templates/templateModel'
+import {
+  A4_HEIGHT_PT,
+  A4_WIDTH_PT,
+  a4SizePt,
+  DIVIDER_MIN_MM,
+  blockBoxPts,
+  documentPageCount,
+  docxFontName,
+  hexToRgb01,
+  normalizeDocumentColor,
+  optionalDocumentFill,
+} from '@/features/templates/documentLayout'
+import { documentMime, type DocumentFont, type DocumentOrientation } from '@/features/templates/templateModel'
+
+function docOrientation(doc: Pick<FilledDocument, 'orientation'>): DocumentOrientation {
+  return doc.orientation === 'landscape' ? 'landscape' : 'portrait'
+}
+
+/** A4 size in twips (1/20 pt) for Word page setup. */
+function a4PageSize(orientation: DocumentOrientation): {
+  width: number
+  height: number
+  orientation: 'portrait' | 'landscape'
+} {
+  // Word expects portrait dimensions plus an orientation flag (it swaps for landscape).
+  return {
+    width: Math.round(A4_WIDTH_PT * 20),
+    height: Math.round(A4_HEIGHT_PT * 20),
+    orientation,
+  }
+}
 
 function xmlEscape(value: string): string {
   return value
@@ -71,6 +100,8 @@ function sortedBlocks(blocks: FilledDocumentBlock[]): FilledDocumentBlock[] {
 async function generatePdfPage(doc: FilledDocument): Promise<Uint8Array> {
   const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib')
   const pdf = await PDFDocument.create()
+  const orientation = docOrientation(doc)
+  const pageSize = a4SizePt(orientation)
   const families = new Set<DocumentFont>(['helvetica'])
   for (const block of doc.blocks) families.add(block.fontFamily || 'helvetica')
   const faces: Record<DocumentFont, { regular: Awaited<ReturnType<typeof pdf.embedFont>>; bold: Awaited<ReturnType<typeof pdf.embedFont>> }> =
@@ -94,13 +125,13 @@ async function generatePdfPage(doc: FilledDocument): Promise<Uint8Array> {
     }
   }
   const pages = Array.from({ length: documentPageCount(doc.blocks) }, () =>
-    pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]),
+    pdf.addPage([pageSize.width, pageSize.height]),
   )
 
   for (const block of doc.blocks) {
     const page = pages[Math.max(0, block.page - 1)]
     if (!page) continue
-    const box = blockBoxPts(block)
+    const box = blockBoxPts(block, orientation)
     const size = block.fontSize || 11
     const pair = faces[block.fontFamily || 'helvetica'] ?? faces.helvetica
     if (!pair) continue
@@ -195,7 +226,8 @@ async function generatePdf(doc: FilledDocument): Promise<Uint8Array> {
   const pdf = await PDFDocument.create()
   const font = await pdf.embedFont(StandardFonts.Helvetica)
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
-  const pageSize: [number, number] = [595.28, 841.89]
+  const size = a4SizePt(docOrientation(doc))
+  const pageSize: [number, number] = [size.width, size.height]
   let page = pdf.addPage(pageSize)
   const margin = 48
   let y = page.getHeight() - margin
@@ -394,7 +426,18 @@ async function generateDocxPage(doc: FilledDocument): Promise<Uint8Array> {
       )
     }
   }
-  const file = new Document({ sections: [{ properties: {}, children }] })
+  const file = new Document({
+    sections: [
+      {
+        properties: {
+          page: {
+            size: a4PageSize(docOrientation(doc)),
+          },
+        },
+        children,
+      },
+    ],
+  })
   const buf = await Packer.toBuffer(file)
   return buf instanceof Uint8Array ? buf : new Uint8Array(buf)
 }
@@ -473,7 +516,16 @@ async function generateDocxFlow(doc: FilledDocument): Promise<Uint8Array> {
   }
   pushText(doc.footer, { color: '64748b', size: 18 })
   const file = new Document({
-    sections: [{ properties: {}, children }],
+    sections: [
+      {
+        properties: {
+          page: {
+            size: a4PageSize(docOrientation(doc)),
+          },
+        },
+        children,
+      },
+    ],
   })
   const buf = await Packer.toBuffer(file)
   return buf instanceof Uint8Array ? buf : new Uint8Array(buf)

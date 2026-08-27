@@ -1,7 +1,21 @@
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
-import { flowNodeTypes } from '@/features/designer/model/flowSchema'
+import { flowNodeTypes, variableTypes } from '@/features/designer/model/flowSchema'
 import type { PreviewStepRun } from '@/features/designer/preview/previewRuntime'
-import type { VariableType } from '@/shared/types/database'
+import type { EntityKind, TemplateKind, VariableType } from '@/shared/types/database'
+
+const TEMPLATE_KIND_SET = new Set<string>([
+  'email',
+  'faq',
+  'cart',
+  'menu',
+  'message',
+  'hours',
+  'legal',
+  'receipt',
+  'document',
+])
+const VARIABLE_TYPE_SET = new Set<string>(variableTypes)
+const ENTITY_KIND_SET = new Set<string>(['static', 'dynamic'])
 
 export const FLOW_EXPORT_KIND = 'flowforge.chatbotFlow' as const
 export const RUN_HISTORY_KIND = 'flowforge.previewRunHistory' as const
@@ -17,6 +31,41 @@ export type FlowGlobalExport = {
 export type FlowEntityExport = {
   id: string
   key: string
+}
+
+export type FlowTemplateExport = {
+  key: string
+  name: string
+  description?: string | null
+  kind: TemplateKind
+  content: unknown
+}
+
+export type FlowEntityAttributeExport = {
+  key: string
+  label?: string | null
+  value_type: VariableType
+  required?: boolean
+  is_identifier?: boolean
+  is_unique?: boolean
+  default_value?: unknown
+  sort_order?: number
+}
+
+export type FlowEntityDefExport = {
+  id: string
+  key: string
+  name: string
+  description?: string | null
+  kind: EntityKind
+  attributes: FlowEntityAttributeExport[]
+  records?: Array<Record<string, unknown>>
+}
+
+export type FlowTestScenarioExport = {
+  name: string
+  globals?: Record<string, unknown>
+  expected?: { variables?: string[]; stepKeys?: string[] }
 }
 
 export type ChatbotFlowExport = {
@@ -38,6 +87,10 @@ export type ChatbotFlowExport = {
   edges: DesignerEdge[]
   /** Entity id/key pairs for remapping entity steps on import. */
   entities?: FlowEntityExport[]
+  /** Full entity schemas (and optional catalog rows) created on import. */
+  entityDefs?: FlowEntityDefExport[]
+  templates?: FlowTemplateExport[]
+  testScenarios?: FlowTestScenarioExport[]
 }
 
 export type PreviewRunHistoryExport = {
@@ -99,6 +152,9 @@ export function buildFlowExport(args: {
   nodes: DesignerNode[]
   edges: DesignerEdge[]
   entities?: FlowEntityExport[]
+  entityDefs?: FlowEntityDefExport[]
+  templates?: FlowTemplateExport[]
+  testScenarios?: FlowTestScenarioExport[]
 }): ChatbotFlowExport {
   return {
     kind: FLOW_EXPORT_KIND,
@@ -118,6 +174,9 @@ export function buildFlowExport(args: {
     nodes: args.nodes,
     edges: args.edges,
     ...(args.entities?.length ? { entities: args.entities } : {}),
+    ...(args.entityDefs?.length ? { entityDefs: args.entityDefs } : {}),
+    ...(args.templates?.length ? { templates: args.templates } : {}),
+    ...(args.testScenarios?.length ? { testScenarios: args.testScenarios } : {}),
   }
 }
 
@@ -177,11 +236,106 @@ export function buildRunHistoryExport(args: {
   }
 }
 
+function parseTemplates(raw: unknown): FlowTemplateExport[] {
+  if (!Array.isArray(raw)) return []
+  const out: FlowTemplateExport[] = []
+  const seen = new Set<string>()
+  for (const item of raw) {
+    if (!isRecord(item)) continue
+    const key = String(item.key ?? '').trim()
+    const name = String(item.name ?? '').trim() || key
+    const kind = String(item.kind ?? '').trim()
+    if (!key || seen.has(key) || !TEMPLATE_KIND_SET.has(kind)) continue
+    seen.add(key)
+    out.push({
+      key,
+      name,
+      description: (item.description as string | null | undefined) ?? null,
+      kind: kind as TemplateKind,
+      content: item.content ?? {},
+    })
+  }
+  return out
+}
+
+function parseEntityDefs(raw: unknown): FlowEntityDefExport[] {
+  if (!Array.isArray(raw)) return []
+  const out: FlowEntityDefExport[] = []
+  const seen = new Set<string>()
+  for (const item of raw) {
+    if (!isRecord(item)) continue
+    const key = String(item.key ?? '').trim()
+    const kind = String(item.kind ?? 'dynamic').trim()
+    if (!key || seen.has(key) || !ENTITY_KIND_SET.has(kind)) continue
+    seen.add(key)
+    const attributes: FlowEntityAttributeExport[] = []
+    const attrKeys = new Set<string>()
+    if (Array.isArray(item.attributes)) {
+      for (const attr of item.attributes) {
+        if (!isRecord(attr)) continue
+        const attrKey = String(attr.key ?? '').trim()
+        const valueType = String(attr.value_type ?? 'string')
+        if (!attrKey || attrKeys.has(attrKey) || !VARIABLE_TYPE_SET.has(valueType)) continue
+        attrKeys.add(attrKey)
+        attributes.push({
+          key: attrKey,
+          label: (attr.label as string | null | undefined) ?? attrKey,
+          value_type: valueType as VariableType,
+          required: attr.required === true,
+          is_identifier: attr.is_identifier === true,
+          is_unique: attr.is_unique === true,
+          default_value: attr.default_value ?? null,
+          sort_order: Number(attr.sort_order) || attributes.length,
+        })
+      }
+    }
+    const records: Array<Record<string, unknown>> = []
+    if (Array.isArray(item.records)) {
+      for (const rec of item.records) {
+        if (isRecord(rec)) records.push(rec)
+      }
+    }
+    out.push({
+      id: String(item.id ?? '').trim() || crypto.randomUUID(),
+      key,
+      name: String(item.name ?? '').trim() || key,
+      description: (item.description as string | null | undefined) ?? null,
+      kind: kind as EntityKind,
+      attributes,
+      ...(records.length ? { records } : {}),
+    })
+  }
+  return out
+}
+
+function parseTestScenarios(raw: unknown): FlowTestScenarioExport[] {
+  if (!Array.isArray(raw)) return []
+  const out: FlowTestScenarioExport[] = []
+  for (const item of raw) {
+    if (!isRecord(item)) continue
+    const name = String(item.name ?? '').trim()
+    if (!name) continue
+    const globals = isRecord(item.globals) ? item.globals : {}
+    const expectedRaw = isRecord(item.expected) ? item.expected : {}
+    const variables = Array.isArray(expectedRaw.variables)
+      ? expectedRaw.variables.map((v) => String(v).trim()).filter(Boolean)
+      : []
+    const stepKeys = Array.isArray(expectedRaw.stepKeys)
+      ? expectedRaw.stepKeys.map((v) => String(v).trim()).filter(Boolean)
+      : []
+    out.push({ name, globals, expected: { variables, stepKeys } })
+  }
+  return out
+}
+
 export function parseFlowExport(raw: unknown): {
   nodes: DesignerNode[]
   edges: DesignerEdge[]
   globals: FlowGlobalExport[]
   entities?: FlowEntityExport[]
+  entityDefs?: FlowEntityDefExport[]
+  templates?: FlowTemplateExport[]
+  testScenarios?: FlowTestScenarioExport[]
   meta: {
     chatbotId?: string
     chatbotName?: string
@@ -243,11 +397,18 @@ export function parseFlowExport(raw: unknown): {
     }
   }
 
+  const entityDefs = parseEntityDefs(raw.entityDefs)
+  const templates = parseTemplates(raw.templates)
+  const testScenarios = parseTestScenarios(raw.testScenarios)
+
   return {
     nodes,
     edges,
     globals,
     ...(entities.length ? { entities } : {}),
+    ...(entityDefs.length ? { entityDefs } : {}),
+    ...(templates.length ? { templates } : {}),
+    ...(testScenarios.length ? { testScenarios } : {}),
     meta: {
       chatbotId: chatbot && typeof chatbot.id === 'string' ? chatbot.id : undefined,
       chatbotName: chatbot && typeof chatbot.name === 'string' ? chatbot.name : undefined,

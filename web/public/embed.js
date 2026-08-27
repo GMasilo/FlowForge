@@ -6,6 +6,7 @@
  *
  * Optional attributes on the mount node:
  *   data-flowforge-slug   (required) public chatbot slug
+ *   data-flowforge-env    production (default) or staging
  *   data-flowforge-height initial iframe height (default 560)
  *   data-flowforge-width  iframe width (default 100%)
  *   data-flowforge-title  iframe title (default "Chat")
@@ -34,9 +35,14 @@
     var height = el.getAttribute('data-flowforge-height') || '560'
     var width = el.getAttribute('data-flowforge-width') || '100%'
     var title = el.getAttribute('data-flowforge-title') || 'Chat'
+    var env = (el.getAttribute('data-flowforge-env') || 'production').trim().toLowerCase()
 
     var iframe = document.createElement('iframe')
-    iframe.src = base + '/embed/' + encodeURIComponent(slug)
+    iframe.src =
+      base +
+      '/embed/' +
+      encodeURIComponent(slug) +
+      (env === 'staging' ? '?env=staging' : '')
     iframe.title = title
     iframe.loading = 'lazy'
     iframe.referrerPolicy = 'strict-origin-when-cross-origin'

@@ -18,7 +18,7 @@ final class AlertDelivery
         if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
             return ['ok' => false, 'error' => 'No valid contact_email on organisation'];
         }
-        $smtp = PlatformMail::smtpConfigFromEnv();
+        $smtp = PlatformMail::smtpConfig(null);
         if (trim((string) ($smtp['smtpHost'] ?? '')) === '' || trim((string) ($smtp['fromEmail'] ?? '')) === '') {
             return ['ok' => false, 'error' => 'Platform SMTP is not configured'];
         }
@@ -114,5 +114,42 @@ final class AlertDelivery
             'ok' => $ok,
             'error' => $error,
         ]);
+    }
+
+    /**
+     * Create in-app notifications for organisation owners/admins.
+     *
+     * @param array<string, mixed> $config
+     * @param array<string, mixed> $meta
+     * @return array{ok: bool, error: ?string}
+     */
+    public static function notifyInApp(
+        array $config,
+        string $instanceId,
+        string $kind,
+        string $title,
+        string $body,
+        string $href,
+        ?string $resourceType = null,
+        ?string $resourceId = null,
+        array $meta = [],
+    ): array {
+        $roles = ['owner', 'admin'];
+        $rpc = SupabaseRest::rpcAsService($config, 'notify_instance_roles', [
+            'p_instance_id' => $instanceId,
+            'p_roles' => $roles,
+            'p_kind' => $kind,
+            'p_title' => $title,
+            'p_body' => $body,
+            'p_href' => $href,
+            'p_resource_type' => $resourceType,
+            'p_resource_id' => $resourceId,
+            'p_meta' => (object) $meta,
+            'p_exclude_user' => null,
+        ]);
+        if (empty($rpc['ok'])) {
+            return ['ok' => false, 'error' => (string) ($rpc['error'] ?? 'notify_failed')];
+        }
+        return ['ok' => true, 'error' => null];
     }
 }

@@ -452,29 +452,37 @@ export function TemplatesPage() {
               {filtered.map((row) => {
                 const Icon = KIND_ICONS[row.kind]
                 return (
-                  <button
+                  <div
                     key={row.id}
-                    type="button"
-                    onClick={() => startEdit(row)}
                     className={cn(
-                      'rounded-2xl border border-[var(--color-border)] bg-white/80 p-4 text-left shadow-[var(--shadow-soft)] transition',
+                      'group relative rounded-2xl border border-[var(--color-border)] bg-white/80 p-4 text-left shadow-[var(--shadow-soft)] transition',
                       'hover:border-teal-300 hover:shadow-md',
                     )}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-teal-50 to-cyan-50 text-teal-800">
-                        <Icon className="h-5 w-5" />
-                      </span>
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                        {TEMPLATE_KIND_META[row.kind].label}
-                      </span>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(row)}
+                      aria-label={`Edit template ${row.name}`}
+                      className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
+                    />
+                    <div className="pointer-events-none relative">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-teal-50 to-cyan-50 text-teal-800">
+                          <Icon className="h-5 w-5" />
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                          {TEMPLATE_KIND_META[row.kind].label}
+                        </span>
+                      </div>
+                      <h3 className="mt-3 text-sm font-semibold text-slate-900">{row.name}</h3>
+                      <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                        {snippetPreview(row) || row.description || 'Empty'}
+                      </p>
                     </div>
-                    <h3 className="mt-3 text-sm font-semibold text-slate-900">{row.name}</h3>
-                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">{snippetPreview(row) || row.description || 'Empty'}</p>
-                    <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="relative mt-3">
                       <CopyChip value={insertSnippet(row.key, row.kind)} />
                     </div>
-                  </button>
+                  </div>
                 )
               })}
             </div>

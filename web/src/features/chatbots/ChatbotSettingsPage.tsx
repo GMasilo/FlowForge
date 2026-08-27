@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
-import { canEdit, type VariableType } from '@/shared/types/database'
+import { canEdit, instanceFeatureEnabled, type VariableType } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import { slugify } from '@/shared/lib/utils'
 import { ChatbotSubNav } from '@/features/chatbots/ChatbotSubNav'
+import { parseTransferEntrySettings } from '@/features/designer/model/chatbotTransfer'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Input } from '@/shared/ui/input'
@@ -31,11 +32,15 @@ export function ChatbotSettingsPage() {
   const [varKey, setVarKey] = useState('')
   const [varType, setVarType] = useState<VariableType>('string')
   const [varDefault, setVarDefault] = useState('')
+  const [varRequireTransfer, setVarRequireTransfer] = useState(false)
   const [varError, setVarError] = useState<string | null>(null)
   const [publicEnabled, setPublicEnabled] = useState(false)
   const [publicSlug, setPublicSlug] = useState('')
   const [publicError, setPublicError] = useState<string | null>(null)
   const [publicHydrated, setPublicHydrated] = useState(false)
+  const [requiredTransferVars, setRequiredTransferVars] = useState<string[]>([])
+  const [transferEntryHydrated, setTransferEntryHydrated] = useState(false)
+  const [transferEntryError, setTransferEntryError] = useState<string | null>(null)
 
   const chatbot = useQuery({
     queryKey: ['chatbot', chatbotId],
@@ -49,6 +54,7 @@ export function ChatbotSettingsPage() {
 
   useEffect(() => {
     setPublicHydrated(false)
+    setTransferEntryHydrated(false)
   }, [chatbotId])
 
   useEffect(() => {
@@ -57,6 +63,12 @@ export function ChatbotSettingsPage() {
     setPublicSlug(chatbot.data.public_slug ?? '')
     setPublicHydrated(true)
   }, [chatbot.data, publicHydrated])
+
+  useEffect(() => {
+    if (!chatbot.data || transferEntryHydrated) return
+    setRequiredTransferVars(parseTransferEntrySettings(chatbot.data.settings).requiredVariables)
+    setTransferEntryHydrated(true)
+  }, [chatbot.data, transferEntryHydrated])
 
   const publicUrl = useMemo(() => {
     if (!publicEnabled || !publicSlug.trim()) return null
@@ -69,6 +81,18 @@ export function ChatbotSettingsPage() {
     const basename = (import.meta.env.BASE_URL as string).replace(/\/$/, '')
     return `${window.location.origin}${basename}/embed/${publicSlug.trim()}`
   }, [publicEnabled, publicSlug])
+
+  const stagingUrl = useMemo(() => {
+    if (!instanceFeatureEnabled(instance, 'staging') || !publicSlug.trim()) return null
+    const basename = (import.meta.env.BASE_URL as string).replace(/\/$/, '')
+    return `${window.location.origin}${basename}/c/${publicSlug.trim()}?env=staging`
+  }, [instance, publicSlug])
+
+  const stagingEmbedUrl = useMemo(() => {
+    if (!instanceFeatureEnabled(instance, 'staging') || !publicSlug.trim()) return null
+    const basename = (import.meta.env.BASE_URL as string).replace(/\/$/, '')
+    return `${window.location.origin}${basename}/embed/${publicSlug.trim()}?env=staging`
+  }, [instance, publicSlug])
 
   const iframeSnippet = useMemo(() => {
     if (!embedUrl) return null
@@ -110,7 +134,9 @@ export function ChatbotSettingsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('chatbot_flows')
-        .select('published_at, published_graph, version, has_draft_changes')
+        .select(
+          'published_at, published_graph, version, has_draft_changes, staging_published_at, staging_published_graph, staging_version',
+        )
         .eq('chatbot_id', chatbotId!)
         .maybeSingle()
       if (error) throw error
@@ -119,9 +145,12 @@ export function ChatbotSettingsPage() {
   })
 
   const isPublished = !!(flowPublish.data?.published_at && flowPublish.data.published_graph != null)
+  const isStagingPublished = !!(
+    flowPublish.data?.staging_published_at && flowPublish.data.staging_published_graph != null
+  )
 
   const variables = useQuery({
-    queryKey: ['chatbot-variables', chatbotId],
+    queryKey: ['chatbot-variable-rows', chatbotId],
     enabled: !!chatbotId,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -131,7 +160,7 @@ export function ChatbotSettingsPage() {
         .eq('scope', 'global')
         .order('key')
       if (error) throw error
-      return data
+      return data ?? []
     },
   })
 
@@ -152,7 +181,9 @@ export function ChatbotSettingsPage() {
   const savePublic = useMutation({
     mutationFn: async () => {
       const slug = publicSlug.trim() ? slugify(publicSlug.trim()) || publicSlug.trim() : null
-      if (publicEnabled && !slug) throw new Error('Public slug is required when public access is enabled')
+      if ((publicEnabled || instanceFeatureEnabled(instance, 'staging')) && !slug) {
+        throw new Error('Public slug is required for production or staging links')
+      }
       if (publicEnabled && !isPublished) {
         throw new Error('Publish the flow in Design before enabling public chat')
       }
@@ -160,12 +191,12 @@ export function ChatbotSettingsPage() {
         .from('chatbots')
         .update({
           public_enabled: publicEnabled,
-          public_slug: publicEnabled ? slug : null,
+          // Keep slug even when production is off so staging links still work.
+          public_slug: slug,
         })
         .eq('id', chatbotId!)
       if (error) throw error
-      if (publicEnabled && slug) setPublicSlug(slug)
-      if (!publicEnabled) setPublicSlug('')
+      if (slug) setPublicSlug(slug)
     },
     onSuccess: async () => {
       setPublicError(null)
@@ -175,6 +206,44 @@ export function ChatbotSettingsPage() {
     onError: (err: Error) => setPublicError(err.message),
   })
 
+  const saveTransferEntry = useMutation({
+    mutationFn: async (keys: string[]) => {
+      const current =
+        chatbot.data?.settings && typeof chatbot.data.settings === 'object' && !Array.isArray(chatbot.data.settings)
+          ? { ...(chatbot.data.settings as Record<string, unknown>) }
+          : {}
+      const { error } = await supabase
+        .from('chatbots')
+        .update({
+          settings: {
+            ...current,
+            transferEntry: { requiredVariables: keys },
+          },
+        })
+        .eq('id', chatbotId!)
+      if (error) throw error
+      return keys
+    },
+    onSuccess: async (keys) => {
+      setRequiredTransferVars(keys)
+      setTransferEntryError(null)
+      await qc.invalidateQueries({ queryKey: ['chatbot', chatbotId] })
+    },
+    onError: (err: Error) => setTransferEntryError(err.message),
+  })
+
+  function persistTransferRequired(keys: string[]) {
+    setRequiredTransferVars(keys)
+    saveTransferEntry.mutate(keys)
+  }
+
+  function toggleTransferRequired(key: string, required: boolean) {
+    const next = required
+      ? [...new Set([...requiredTransferVars, key])]
+      : requiredTransferVars.filter((k) => k !== key)
+    persistTransferRequired(next)
+  }
+
   const addVariable = useMutation({
     mutationFn: async () => {
       let defaultValue: unknown = null
@@ -183,31 +252,43 @@ export function ChatbotSettingsPage() {
       } catch {
         throw new Error('Default value must be valid JSON for array/object types')
       }
+      const key = varKey.trim()
       const { error } = await supabase.from('chatbot_variables').insert({
         chatbot_id: chatbotId!,
-        key: varKey.trim(),
+        key,
         value_type: varType,
         default_value: defaultValue as never,
         scope: 'global',
       })
       if (error) throw error
+      return { key, requireTransfer: varRequireTransfer }
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       setVarKey('')
       setVarDefault('')
+      setVarRequireTransfer(false)
       setVarError(null)
-      await qc.invalidateQueries({ queryKey: ['chatbot-variables', chatbotId] })
+      await qc.invalidateQueries({ queryKey: ['chatbot-variable-rows', chatbotId] })
+      await qc.invalidateQueries({ queryKey: ['chatbot-variable-defaults', chatbotId] })
+      if (result.requireTransfer) {
+        persistTransferRequired([...new Set([...requiredTransferVars, result.key])])
+      }
     },
     onError: (err: Error) => setVarError(err.message),
   })
 
   const deleteVariable = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('chatbot_variables').delete().eq('id', id)
+    mutationFn: async (row: { id: string; key: string }) => {
+      const { error } = await supabase.from('chatbot_variables').delete().eq('id', row.id)
       if (error) throw error
+      return row.key
     },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['chatbot-variables', chatbotId] })
+    onSuccess: async (key) => {
+      await qc.invalidateQueries({ queryKey: ['chatbot-variable-rows', chatbotId] })
+      await qc.invalidateQueries({ queryKey: ['chatbot-variable-defaults', chatbotId] })
+      if (requiredTransferVars.includes(key)) {
+        persistTransferRequired(requiredTransferVars.filter((k) => k !== key))
+      }
     },
   })
 
@@ -263,7 +344,8 @@ export function ChatbotSettingsPage() {
       <Card>
         <h2 className="text-lg font-medium">Public chat</h2>
         <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-          Share a link so visitors can run the published flow without signing in.
+          Share a link so visitors can run the published flow without signing in. Staging uses the same
+          slug with <code className="text-[11px]">?env=staging</code> and does not require production to be enabled.
         </p>
         <div className="mt-4 space-y-3">
           <label className="flex items-center gap-2 text-sm">
@@ -273,7 +355,7 @@ export function ChatbotSettingsPage() {
               disabled={!editable}
               onChange={(e) => setPublicEnabled(e.target.checked)}
             />
-            Enable public access
+            Enable production public access
           </label>
           <div>
             <Label htmlFor="public-slug">Public slug</Label>
@@ -292,11 +374,44 @@ export function ChatbotSettingsPage() {
           ) : null}
           {publicUrl ? (
             <p className="break-all text-xs text-teal-800">
-              Public URL:{' '}
+              Production URL:{' '}
               <a href={publicUrl} className="font-medium underline" target="_blank" rel="noreferrer">
                 {publicUrl}
               </a>
             </p>
+          ) : null}
+          {instanceFeatureEnabled(instance, 'staging') ? (
+            <div className="space-y-2 rounded-xl border border-sky-200/70 bg-sky-50/50 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-medium text-sky-900">Staging</p>
+                {isStagingPublished ? (
+                  <Badge className="bg-sky-100 text-sky-900">
+                    v{flowPublish.data?.staging_version ?? 0}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-slate-100 text-slate-600">Not published</Badge>
+                )}
+              </div>
+              <p className="text-[11px] text-sky-800/90">
+                Publish staging from Design to test without changing the live bot.
+              </p>
+              {stagingUrl && isStagingPublished ? (
+                <p className="break-all text-xs text-sky-900">
+                  Staging URL:{' '}
+                  <a href={stagingUrl} className="font-medium underline" target="_blank" rel="noreferrer">
+                    {stagingUrl}
+                  </a>
+                </p>
+              ) : null}
+              {stagingEmbedUrl && isStagingPublished ? (
+                <p className="break-all text-[11px] text-sky-800">
+                  Staging embed:{' '}
+                  <a href={stagingEmbedUrl} className="font-medium underline" target="_blank" rel="noreferrer">
+                    {stagingEmbedUrl}
+                  </a>
+                </p>
+              ) : null}
+            </div>
           ) : null}
           {embedUrl ? (
             <div className="space-y-3 rounded-xl border border-teal-200/70 bg-teal-50/40 p-3">
@@ -358,7 +473,9 @@ export function ChatbotSettingsPage() {
       <Card>
         <h2 className="text-lg font-medium">Global variables</h2>
         <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-          Available throughout the flow as {'{{vars.key}}'}
+          Available throughout the flow as {'{{vars.key}}'}. Mark variables as{' '}
+          <span className="font-medium text-[var(--color-ink)]">Transfer variables</span> when this
+          chatbot receives a transfer — the sending bot must map them (or use pass-all).
         </p>
         {editable ? (
           <form
@@ -390,7 +507,15 @@ export function ChatbotSettingsPage() {
                 placeholder={varType === 'array' || varType === 'object' ? 'JSON' : 'Value'}
               />
             </div>
-            <div className="sm:col-span-4">
+            <div className="sm:col-span-4 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={varRequireTransfer}
+                  onChange={(e) => setVarRequireTransfer(e.target.checked)}
+                />
+                Required transfer variable
+              </label>
               <Button type="submit" size="sm" disabled={addVariable.isPending}>
                 Add variable
               </Button>
@@ -399,26 +524,91 @@ export function ChatbotSettingsPage() {
           </form>
         ) : null}
         <ul className="mt-4 divide-y divide-[var(--color-border)]">
-          {variables.data?.map((v) => (
-            <li key={v.id} className="flex items-center justify-between gap-3 py-3 text-sm">
-              <div>
-                <span className="font-medium">{v.key}</span>
-                <Badge className="ml-2">{v.value_type}</Badge>
-                <div className="mt-1 text-xs text-[var(--color-ink-muted)]">
-                  default: {JSON.stringify(v.default_value)}
+          {(variables.data ?? []).map((v) => {
+            const isTransferRequired = requiredTransferVars.includes(v.key)
+            return (
+              <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{v.key}</span>
+                    <Badge className="ml-0">{v.value_type}</Badge>
+                    {isTransferRequired ? (
+                      <Badge className="bg-teal-100 text-teal-900">Transfer</Badge>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                    default: {JSON.stringify(v.default_value)}
+                  </div>
                 </div>
-              </div>
-              {editable ? (
-                <Button variant="ghost" size="sm" onClick={() => deleteVariable.mutate(v.id)}>
-                  Remove
-                </Button>
-              ) : null}
-            </li>
-          ))}
+                <div className="flex flex-wrap items-center gap-2">
+                  {editable ? (
+                    <label className="flex items-center gap-2 text-xs text-[var(--color-ink-muted)]">
+                      <input
+                        type="checkbox"
+                        checked={isTransferRequired}
+                        disabled={saveTransferEntry.isPending}
+                        onChange={(e) => toggleTransferRequired(v.key, e.target.checked)}
+                      />
+                      Required on transfer
+                    </label>
+                  ) : null}
+                  {editable ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteVariable.mutate({ id: v.id, key: v.key })}
+                    >
+                      Remove
+                    </Button>
+                  ) : null}
+                </div>
+              </li>
+            )
+          })}
           {!variables.data?.length ? (
             <li className="py-3 text-sm text-[var(--color-ink-muted)]">No global variables yet.</li>
           ) : null}
         </ul>
+
+        <div className="mt-6 border-t border-[var(--color-border)] pt-4">
+          <h3 className="text-sm font-semibold text-[var(--color-ink)]">Transfer variables</h3>
+          <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+            When another chatbot transfers into this one, these must be provided as mapped inputs (or
+            via pass-all). They show as required targets on the Transfer step.
+          </p>
+          <ul className="mt-3 space-y-1.5">
+            {requiredTransferVars.length ? (
+              requiredTransferVars.map((key) => {
+                const exists = (variables.data ?? []).some((v) => v.key === key)
+                return (
+                  <li key={key} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="flex items-center gap-2">
+                      <code className="text-xs">{`{{vars.${key}}}`}</code>
+                      {!exists ? (
+                        <span className="text-[11px] text-amber-800">Not in globals — add or remove</span>
+                      ) : null}
+                    </span>
+                    {editable ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => toggleTransferRequired(key, false)}
+                      >
+                        Remove
+                      </Button>
+                    ) : null}
+                  </li>
+                )
+              })
+            ) : (
+              <li className="text-sm text-[var(--color-ink-muted)]">
+                No transfer variables marked yet. Use “Required on transfer” on a global above.
+              </li>
+            )}
+          </ul>
+          {transferEntryError ? <FieldError>{transferEntryError}</FieldError> : null}
+        </div>
       </Card>
     </div>
   )

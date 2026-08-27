@@ -20,6 +20,8 @@ $map = [
     '/email/send' => __DIR__ . '/email/send.php',
     '/email/test' => __DIR__ . '/email/test.php',
     '/email/invite' => __DIR__ . '/email/invite.php',
+    '/email/invite-member' => __DIR__ . '/email/invite-member.php',
+    '/email/invite-resend' => __DIR__ . '/email/invite-resend.php',
     '/auth/check' => __DIR__ . '/auth/check.php',
     '/url/preview' => __DIR__ . '/url/preview.php',
     '/webhooks/dispatch' => __DIR__ . '/webhooks/dispatch.php',
@@ -37,10 +39,17 @@ $map = [
     '/template/download' => __DIR__ . '/template/download.php',
     '/template/export' => __DIR__ . '/template/export.php',
     '/template/import' => __DIR__ . '/template/import.php',
+    '/scim/v2/Users' => __DIR__ . '/scim/v2/Users.php',
+    '/scim/v2/ServiceProviderConfig' => __DIR__ . '/scim/v2/Users.php',
 ];
 
 if (isset($map[$path])) {
     require $map[$path];
+    exit;
+}
+
+if (str_starts_with($path, '/scim/v2/')) {
+    require __DIR__ . '/scim/v2/Users.php';
     exit;
 }
 

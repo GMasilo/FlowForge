@@ -201,7 +201,24 @@ foreach ($instancesRes['data'] as $instance) {
             }
         }
 
-        if ($anyOk) {
+        // Always create in-app notifications for owners/admins when a threshold fires,
+        // even if email/Slack channels are off or fail.
+        $inApp = AlertDelivery::notifyInApp(
+            $config,
+            $instanceId,
+            'alert.threshold',
+            (string) ($rule['name'] ?? 'Alert'),
+            $subject . ' — ' . $valueLabel,
+            '/instances/' . $instanceId . '/alerts',
+            'instance_alert_rule',
+            $ruleId,
+            $payloadBase,
+        );
+        if (!$inApp['ok']) {
+            $summary['errors'][] = $instanceId . ':inapp:' . ($inApp['error'] ?? 'failed');
+        }
+
+        if ($anyOk || $inApp['ok']) {
             $summary['notified']++;
             SupabaseRest::restPatchAsService(
                 $config,
@@ -282,7 +299,22 @@ foreach ($instancesRes['data'] as $instance) {
                 }
             }
 
-            if ($digestOk) {
+            $inApp = AlertDelivery::notifyInApp(
+                $config,
+                $instanceId,
+                'alert.digest',
+                'Weekly digest',
+                'Sessions ' . $stats['sessions'] . ' · completed ' . $stats['completed'] . ' · completion ' . $stats['completion_pct'] . '%',
+                '/instances/' . $instanceId . '/alerts',
+                'instance_alert_settings',
+                $instanceId,
+                $stats,
+            );
+            if (!$inApp['ok']) {
+                $summary['errors'][] = $instanceId . ':digest-inapp:' . ($inApp['error'] ?? 'failed');
+            }
+
+            if ($digestOk || $inApp['ok']) {
                 $summary['digests']++;
                 SupabaseRest::restPatchAsService(
                     $config,

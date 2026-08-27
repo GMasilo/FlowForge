@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus, Trash2, X, Mail } from 'lucide-react'
+import { Copy, Pencil, Plus, Trash2, X, Mail } from 'lucide-react'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canAdmin } from '@/shared/types/database'
-import type { InstanceInvite, InstanceRole } from '@/shared/types/database'
+import type { InstanceRole } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import {
+  inviteOrganisationMember,
   isFlowForgeApiConfigured,
-  sendOrganisationInviteEmail,
+  resendOrganisationInvite,
 } from '@/shared/lib/flowforgeApi'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
@@ -30,19 +31,25 @@ import {
   toggleId,
 } from '@/shared/ui/list-controls'
 
-type MemberRow = {
-  user_id: string
-  role: InstanceRole
+type OrgUserRow = {
+  kind: 'member' | 'invite'
+  status: 'active' | 'pending'
+  id: string
+  user_id: string | null
+  invite_id: string | null
+  email: string | null
   display_name: string | null
+  role: InstanceRole
   job_title: string | null
   phone: string | null
   department: string | null
   notes: string | null
-  profiles: {
-    email: string | null
-    display_name: string | null
-    is_superuser: boolean | null
-  } | null
+  is_superuser: boolean
+  email_sent_at: string | null
+  email_last_error: string | null
+  token: string | null
+  last_sign_in_at: string | null
+  created_at: string
 }
 
 type MemberForm = {
@@ -65,18 +72,17 @@ const emptyForm = (): MemberForm => ({
   role: 'editor',
 })
 
-function inviteEmailLabel(inv: InstanceInvite): { label: string; tone: 'ok' | 'error' | 'pending' } {
-  if (inv.email_sent_at) {
-    return { label: 'Email sent', tone: 'ok' }
-  }
-  if (inv.email_last_error) {
-    return { label: 'Email failed', tone: 'error' }
-  }
-  return { label: 'Not sent', tone: 'pending' }
+function inviteSignupUrl(token: string): string {
+  const basename = (import.meta.env.BASE_URL as string).replace(/\/$/, '')
+  return `${window.location.origin}${basename}/signup?invite=${encodeURIComponent(token)}`
 }
 
-function memberSelectable(m: MemberRow, selfId?: string | null): boolean {
-  return m.role !== 'owner' && m.user_id !== selfId
+function rowKey(row: OrgUserRow): string {
+  return `${row.kind}:${row.id}`
+}
+
+function memberSelectable(row: OrgUserRow, selfId?: string | null): boolean {
+  return row.kind === 'member' && row.role !== 'owner' && row.user_id !== selfId
 }
 
 export function MembersPage() {
@@ -89,99 +95,76 @@ export function MembersPage() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<{ message: string; tone: 'ok' | 'error' | 'info' } | null>(null)
   const [search, setSearch] = useState('')
-  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(() => new Set())
-  const [selectedInvites, setSelectedInvites] = useState<Set<string>>(() => new Set())
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [bulkRole, setBulkRole] = useState<InstanceRole>('editor')
+  const apiConfigured = isFlowForgeApiConfigured()
   const isAdmin = canAdmin(role)
 
-  const members = useQuery({
-    queryKey: ['members', instance.id],
+  const users = useQuery({
+    queryKey: ['organisation-users', instance.id],
     queryFn: async () => {
-      const { data, error: qError } = await supabase
-        .from('instance_members')
-        .select(
-          'user_id, role, display_name, job_title, phone, department, notes, profiles(email, display_name, is_superuser)',
-        )
-        .eq('instance_id', instance.id)
-        .order('created_at', { ascending: true })
+      const { data, error: qError } = await supabase.rpc('list_organisation_users', {
+        p_instance_id: instance.id,
+      })
       if (qError) throw qError
-      return ((data ?? []) as unknown as MemberRow[]).filter(
-        (m) => !(m.profiles?.is_superuser && m.role === 'owner'),
-      )
+      const rows = (Array.isArray(data) ? data : []) as OrgUserRow[]
+      return rows
     },
   })
 
-  const invites = useQuery({
-    queryKey: ['member-invites', instance.id],
-    enabled: isAdmin,
-    queryFn: async () => {
-      const { data, error: qError } = await supabase
-        .from('instance_invites')
-        .select('*')
-        .eq('instance_id', instance.id)
-        .order('created_at', { ascending: false })
-      if (qError) throw qError
-      return data as InstanceInvite[]
-    },
-  })
-
-  const filteredMembers = useMemo(() => {
-    return (members.data ?? []).filter((m) =>
+  const filteredUsers = useMemo(() => {
+    return (users.data ?? []).filter((row) =>
       matchesQuery(search, [
-        m.display_name,
-        m.profiles?.display_name,
-        m.profiles?.email,
-        m.job_title,
-        m.department,
-        m.phone,
-        m.notes,
-        m.role,
+        row.display_name,
+        row.email,
+        row.job_title,
+        row.department,
+        row.phone,
+        row.notes,
+        row.role,
+        row.status,
       ]),
     )
-  }, [members.data, search])
+  }, [users.data, search])
 
-  const filteredInvites = useMemo(() => {
-    return (invites.data ?? []).filter((inv) =>
-      matchesQuery(search, [
-        inv.display_name,
-        inv.email,
-        inv.job_title,
-        inv.department,
-        inv.phone,
-        inv.notes,
-        inv.role,
-      ]),
-    )
-  }, [invites.data, search])
-
-  const selectableMemberIds = useMemo(
-    () => filteredMembers.filter((m) => memberSelectable(m, user?.id)).map((m) => m.user_id),
-    [filteredMembers, user?.id],
+  const selectableKeys = useMemo(
+    () =>
+      filteredUsers
+        .filter((row) => {
+          if (row.kind === 'invite') return isAdmin
+          return memberSelectable(row, user?.id)
+        })
+        .map(rowKey),
+    [filteredUsers, isAdmin, user?.id],
   )
-  const filteredInviteIds = useMemo(() => filteredInvites.map((i) => i.id), [filteredInvites])
 
-  const allMembersSelected =
-    selectableMemberIds.length > 0 && selectableMemberIds.every((id) => selectedMembers.has(id))
-  const allInvitesSelected =
-    filteredInviteIds.length > 0 && filteredInviteIds.every((id) => selectedInvites.has(id))
+  const allSelected =
+    selectableKeys.length > 0 && selectableKeys.every((key) => selected.has(key))
 
   useEffect(() => {
-    const validMembers = new Set((members.data ?? []).map((m) => m.user_id))
-    setSelectedMembers((prev) => {
+    const valid = new Set((users.data ?? []).map(rowKey))
+    setSelected((prev) => {
       const next = new Set<string>()
-      for (const id of prev) if (validMembers.has(id)) next.add(id)
+      for (const id of prev) if (valid.has(id)) next.add(id)
       return next
     })
-  }, [members.data])
+  }, [users.data])
 
-  useEffect(() => {
-    const validInvites = new Set((invites.data ?? []).map((i) => i.id))
-    setSelectedInvites((prev) => {
-      const next = new Set<string>()
-      for (const id of prev) if (validInvites.has(id)) next.add(id)
-      return next
-    })
-  }, [invites.data])
+  const selectedActiveUserIds = useMemo(() => {
+    const ids: string[] = []
+    for (const row of users.data ?? []) {
+      if (row.kind === 'member' && selected.has(rowKey(row)) && row.user_id) {
+        ids.push(row.user_id)
+      }
+    }
+    return ids
+  }, [selected, users.data])
+
+  const selectedPending = useMemo(() => {
+    return (users.data ?? []).filter(
+      (row) => row.status === 'pending' && selected.has(rowKey(row)),
+    )
+  }, [selected, users.data])
 
   const saveMember = useMutation({
     mutationFn: async () => {
@@ -200,87 +183,93 @@ export function MembersPage() {
         return { status: 'updated' as const }
       }
 
-      const { data, error: rpcError } = await supabase.rpc('add_organisation_member', {
-        p_instance_id: instance.id,
-        p_email: form.email.trim().toLowerCase(),
-        p_role: form.role,
-        p_display_name: form.display_name.trim() || null,
-        p_job_title: form.job_title.trim() || null,
-        p_phone: form.phone.trim() || null,
-        p_department: form.department.trim() || null,
-        p_notes: form.notes.trim() || null,
-      })
-      if (rpcError) throw rpcError
-
-      const result = data as { status?: string; invite_id?: string; email?: string }
-      if (result?.status === 'invited' && result.invite_id) {
-        if (!isFlowForgeApiConfigured()) {
-          return {
-            ...result,
-            emailSent: false as const,
-            emailError: 'API URL not configured',
-          }
-        }
-        try {
-          await sendOrganisationInviteEmail({ inviteId: result.invite_id })
-          return { ...result, emailSent: true as const }
-        } catch (err) {
-          const emailError = err instanceof Error ? err.message : 'Failed to send invite email'
-          return {
-            ...result,
-            emailSent: false as const,
-            emailError,
-          }
-        }
+      if (!apiConfigured) {
+        throw new Error(
+          'VITE_FLOWFORGE_API_URL is not configured. Invitation emails are sent through the FlowForge API.',
+        )
       }
+
+      const result = await inviteOrganisationMember({
+        instanceId: instance.id,
+        email: form.email.trim().toLowerCase(),
+        role: form.role,
+        displayName: form.display_name.trim() || null,
+        jobTitle: form.job_title.trim() || null,
+        phone: form.phone.trim() || null,
+        department: form.department.trim() || null,
+        notes: form.notes.trim() || null,
+        sendEmail: true,
+      })
+
+      if (!result.ok && result.error) {
+        throw new Error(result.error)
+      }
+
       return result
     },
     onSuccess: async (result) => {
       const status =
         result && typeof result === 'object' && 'status' in result ? result.status : null
       if (status === 'invited') {
-        const emailSent = 'emailSent' in result && result.emailSent
-        const emailError = 'emailError' in result ? String(result.emailError ?? '') : ''
+        const emailSent = 'email_sent' in result && result.email_sent
+        const emailSkipped = 'email_skipped' in result && result.email_skipped
+        const emailError =
+          'email_error' in result && result.email_error ? String(result.email_error) : ''
         setInfo(
           emailSent
             ? {
                 tone: 'ok',
-                message: 'Invite created and email sent. They can create their account from the link.',
+                message:
+                  'User added as Pending and invitation email sent. They become Active after signing in.',
               }
-            : {
-                tone: 'error',
-                message: `Invite saved, but email was not sent${emailError ? `: ${emailError}` : ''}. Use Resend on the pending invite to try again.`,
-              },
+            : emailSkipped
+              ? {
+                  tone: 'info',
+                  message: 'User saved as Pending without sending email.',
+                }
+              : {
+                  tone: 'error',
+                  message: `User saved as Pending, but the invitation email was not sent${
+                    emailError ? `: ${emailError}` : ''
+                  }. Use Resend invite to try again.`,
+                },
         )
       } else if (status === 'updated') {
         setInfo({ tone: 'ok', message: 'User updated.' })
+      } else if (status === 'added') {
+        setInfo({
+          tone: 'ok',
+          message: 'Existing account added to the organisation (Active).',
+        })
       } else {
-        setInfo({ tone: 'ok', message: 'User added to the organisation.' })
+        setInfo({ tone: 'ok', message: 'User saved.' })
       }
       resetForm()
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['members', instance.id] }),
-        qc.invalidateQueries({ queryKey: ['member-invites', instance.id] }),
-      ])
+      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
     },
     onError: (err: Error) => setError(err.message),
   })
 
   const resendInvite = useMutation({
-    mutationFn: async (inviteId: string) => {
-      if (!isFlowForgeApiConfigured()) {
+    mutationFn: async (row: OrgUserRow) => {
+      if (!apiConfigured) {
         throw new Error('VITE_FLOWFORGE_API_URL is not configured')
       }
-      await sendOrganisationInviteEmail({ inviteId })
+      await resendOrganisationInvite({
+        inviteId: row.invite_id ?? undefined,
+        instanceId: instance.id,
+        userId: row.user_id ?? undefined,
+        email: row.email ?? undefined,
+      })
     },
     onSuccess: async () => {
-      setInfo({ tone: 'ok', message: 'Invite email sent successfully.' })
-      await qc.invalidateQueries({ queryKey: ['member-invites', instance.id] })
+      setInfo({ tone: 'ok', message: 'Invitation email resent.' })
+      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
     },
     onError: async (err: Error) => {
       setInfo({ tone: 'error', message: `Invite email failed: ${err.message}` })
       setError(err.message)
-      await qc.invalidateQueries({ queryKey: ['member-invites', instance.id] })
+      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
     },
   })
 
@@ -290,7 +279,8 @@ export function MembersPage() {
       if (delError) throw delError
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['member-invites', instance.id] })
+      setInfo({ tone: 'ok', message: 'Pending invite cancelled.' })
+      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
     },
   })
 
@@ -305,7 +295,7 @@ export function MembersPage() {
     onSuccess: async () => {
       setInfo({ tone: 'ok', message: 'User removed from the organisation.' })
       if (editingUserId) resetForm()
-      await qc.invalidateQueries({ queryKey: ['members', instance.id] })
+      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
     },
     onError: (err: Error) => {
       setInfo({ tone: 'error', message: err.message })
@@ -326,12 +316,12 @@ export function MembersPage() {
       if (errors.length) throw new Error(errors[0] ?? 'Failed to remove some users')
     },
     onSuccess: async (_, userIds) => {
-      setSelectedMembers(new Set())
+      setSelected(new Set())
       setInfo({
         tone: 'ok',
-        message: `Removed ${userIds.length} user${userIds.length === 1 ? '' : 's'} from the organisation.`,
+        message: `Removed ${userIds.length} user${userIds.length === 1 ? '' : 's'}.`,
       })
-      await qc.invalidateQueries({ queryKey: ['members', instance.id] })
+      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
     },
     onError: (err: Error) => setInfo({ tone: 'error', message: err.message }),
   })
@@ -351,12 +341,12 @@ export function MembersPage() {
       if (errors.length) throw new Error(errors[0] ?? 'Failed to update some roles')
     },
     onSuccess: async (_, { userIds, nextRole }) => {
-      setSelectedMembers(new Set())
+      setSelected(new Set())
       setInfo({
         tone: 'ok',
         message: `Updated ${userIds.length} user${userIds.length === 1 ? '' : 's'} to ${nextRole}.`,
       })
-      await qc.invalidateQueries({ queryKey: ['members', instance.id] })
+      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
     },
     onError: (err: Error) => setInfo({ tone: 'error', message: err.message }),
   })
@@ -367,59 +357,84 @@ export function MembersPage() {
       if (delError) throw delError
     },
     onSuccess: async (_, ids) => {
-      setSelectedInvites(new Set())
+      setSelected(new Set())
       setInfo({
         tone: 'ok',
-        message: `Cancelled ${ids.length} invite${ids.length === 1 ? '' : 's'}.`,
+        message: `Cancelled ${ids.length} pending invite${ids.length === 1 ? '' : 's'}.`,
       })
-      await qc.invalidateQueries({ queryKey: ['member-invites', instance.id] })
+      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
     },
     onError: (err: Error) => setInfo({ tone: 'error', message: err.message }),
   })
 
   const bulkResendInvites = useMutation({
-    mutationFn: async (ids: string[]) => {
-      if (!isFlowForgeApiConfigured()) {
+    mutationFn: async (rows: OrgUserRow[]) => {
+      if (!apiConfigured) {
         throw new Error('VITE_FLOWFORGE_API_URL is not configured')
       }
       let sent = 0
       const errors: string[] = []
-      for (const inviteId of ids) {
+      for (const row of rows) {
         try {
-          await sendOrganisationInviteEmail({ inviteId })
+          await resendOrganisationInvite({
+            inviteId: row.invite_id ?? undefined,
+            instanceId: instance.id,
+            userId: row.user_id ?? undefined,
+            email: row.email ?? undefined,
+          })
           sent += 1
         } catch (err) {
-          const message = err instanceof Error ? err.message : 'Failed to send invite email'
-          errors.push(message)
+          errors.push(err instanceof Error ? err.message : 'Failed to send invite email')
         }
       }
       if (!sent && errors.length) throw new Error(errors[0] ?? 'Failed to resend invites')
       return { sent, failed: errors.length }
     },
     onSuccess: async (result) => {
-      setSelectedInvites(new Set())
+      setSelected(new Set())
       setInfo({
         tone: result.failed ? 'error' : 'ok',
         message: result.failed
           ? `Resent ${result.sent}, failed ${result.failed}.`
           : `Resent ${result.sent} invite email${result.sent === 1 ? '' : 's'}.`,
       })
-      await qc.invalidateQueries({ queryKey: ['member-invites', instance.id] })
+      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
     },
     onError: (err: Error) => setInfo({ tone: 'error', message: err.message }),
   })
 
-  function confirmRemoveMember(m: MemberRow) {
-    if (!memberSelectable(m, user?.id)) return
-    const name = m.display_name ?? m.profiles?.display_name ?? m.profiles?.email ?? 'this user'
+  async function copyInviteLink(row: OrgUserRow) {
+    if (!row.token) {
+      setInfo({
+        tone: 'info',
+        message: 'No signup link available for this user. Use Resend invite instead.',
+      })
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(inviteSignupUrl(row.token))
+      setInfo({ tone: 'ok', message: `Invite link copied for ${row.email}.` })
+    } catch {
+      setInfo({ tone: 'error', message: 'Could not copy invite link to the clipboard.' })
+    }
+  }
+
+  function confirmRemove(row: OrgUserRow) {
+    if (row.kind === 'invite' && row.invite_id) {
+      if (!window.confirm(`Cancel pending invite for ${row.email}?`)) return
+      removeInvite.mutate(row.invite_id)
+      return
+    }
+    if (!memberSelectable(row, user?.id) || !row.user_id) return
+    const name = row.display_name ?? row.email ?? 'this user'
     if (!window.confirm(`Remove ${name} from ${instance.name}? They will lose access immediately.`)) {
       return
     }
-    removeMember.mutate(m.user_id)
+    removeMember.mutate(row.user_id)
   }
 
   function confirmBulkRemoveMembers() {
-    const ids = [...selectedMembers]
+    const ids = selectedActiveUserIds
     if (!ids.length) return
     if (
       !window.confirm(
@@ -432,7 +447,9 @@ export function MembersPage() {
   }
 
   function confirmBulkCancelInvites() {
-    const ids = [...selectedInvites]
+    const ids = selectedPending
+      .map((row) => row.invite_id)
+      .filter((id): id is string => !!id)
     if (!ids.length) return
     if (!window.confirm(`Cancel ${ids.length} pending invite${ids.length === 1 ? '' : 's'}?`)) {
       return
@@ -455,18 +472,18 @@ export function MembersPage() {
     setOpen(true)
   }
 
-  function startEdit(m: MemberRow) {
-    if (m.role === 'owner') return
+  function startEdit(row: OrgUserRow) {
+    if (row.kind !== 'member' || row.role === 'owner' || !row.user_id) return
     setForm({
-      email: m.profiles?.email ?? '',
-      display_name: m.display_name ?? m.profiles?.display_name ?? '',
-      job_title: m.job_title ?? '',
-      phone: m.phone ?? '',
-      department: m.department ?? '',
-      notes: m.notes ?? '',
-      role: m.role,
+      email: row.email ?? '',
+      display_name: row.display_name ?? '',
+      job_title: row.job_title ?? '',
+      phone: row.phone ?? '',
+      department: row.department ?? '',
+      notes: row.notes ?? '',
+      role: row.role,
     })
-    setEditingUserId(m.user_id)
+    setEditingUserId(row.user_id)
     setInfo(null)
     setError(null)
     setOpen(true)
@@ -483,7 +500,7 @@ export function MembersPage() {
     saveMember.mutate()
   }
 
-  const memberColSpan = isAdmin ? 6 : 4
+  const colSpan = isAdmin ? 7 : 5
   const bulkBusy =
     bulkRemoveMembers.isPending ||
     bulkSetRole.isPending ||
@@ -547,7 +564,8 @@ export function MembersPage() {
                 />
                 {!editingUserId ? (
                   <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
-                    If they do not have an account yet, a pending invite is saved until they sign up.
+                    New emails are added as Pending and receive an invitation link automatically.
+                    Existing accounts are added as Active.
                   </p>
                 ) : null}
               </div>
@@ -569,6 +587,7 @@ export function MembersPage() {
                 >
                   <option value="admin">admin</option>
                   <option value="editor">editor</option>
+                  <option value="agent">agent</option>
                   <option value="viewer">viewer</option>
                 </Select>
               </div>
@@ -610,6 +629,11 @@ export function MembersPage() {
                   rows={3}
                 />
               </div>
+              {!editingUserId && !apiConfigured ? (
+                <p className="sm:col-span-2 text-xs text-amber-800">
+                  Set `VITE_FLOWFORGE_API_URL` so invitation emails can be sent when you add a user.
+                </p>
+              ) : null}
             </div>
 
             {error ? <FieldError>{error}</FieldError> : null}
@@ -620,10 +644,12 @@ export function MembersPage() {
               </Button>
               <Button type="submit" disabled={saveMember.isPending}>
                 {saveMember.isPending
-                  ? 'Saving…'
+                  ? editingUserId
+                    ? 'Saving…'
+                    : 'Adding & sending invite…'
                   : editingUserId
                     ? 'Save changes'
-                    : 'Add user'}
+                    : 'Add user & send invite'}
               </Button>
             </div>
           </form>
@@ -634,52 +660,83 @@ export function MembersPage() {
         id="users-search"
         value={search}
         onChange={setSearch}
-        placeholder="Search users and invites…"
+        placeholder="Search users…"
       />
 
-      {isAdmin && selectedMembers.size > 0 ? (
-        <BulkActionBar count={selectedMembers.size} onClear={() => setSelectedMembers(new Set())}>
+      {isAdmin && selected.size > 0 ? (
+        <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
           <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={bulkRole}
-              onChange={(e) => setBulkRole(e.target.value as InstanceRole)}
-              className="h-8 w-auto min-w-[7rem]"
-              aria-label="Bulk role"
-            >
-              <option value="admin">admin</option>
-              <option value="editor">editor</option>
-              <option value="viewer">viewer</option>
-            </Select>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              disabled={bulkBusy}
-              onClick={() =>
-                bulkSetRole.mutate({ userIds: [...selectedMembers], nextRole: bulkRole })
-              }
-            >
-              Set role
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="danger"
-              disabled={bulkBusy}
-              onClick={confirmBulkRemoveMembers}
-            >
-              <Trash2 className="h-4 w-4" />
-              Remove
-            </Button>
+            {selectedActiveUserIds.length > 0 ? (
+              <>
+                <Select
+                  value={bulkRole}
+                  onChange={(e) => setBulkRole(e.target.value as InstanceRole)}
+                  className="h-8 w-auto min-w-[7rem]"
+                  aria-label="Bulk role"
+                >
+                  <option value="admin">admin</option>
+                  <option value="editor">editor</option>
+                  <option value="agent">agent</option>
+                  <option value="viewer">viewer</option>
+                </Select>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={bulkBusy}
+                  onClick={() =>
+                    bulkSetRole.mutate({ userIds: selectedActiveUserIds, nextRole: bulkRole })
+                  }
+                >
+                  Set role
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="danger"
+                  disabled={bulkBusy}
+                  onClick={confirmBulkRemoveMembers}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Remove
+                </Button>
+              </>
+            ) : null}
+            {selectedPending.length > 0 ? (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={bulkBusy || !apiConfigured}
+                  onClick={() => bulkResendInvites.mutate(selectedPending)}
+                >
+                  <Mail className="h-4 w-4" />
+                  Resend invite
+                </Button>
+                {selectedPending.some((row) => row.invite_id) ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    disabled={bulkBusy}
+                    onClick={confirmBulkCancelInvites}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Cancel invites
+                  </Button>
+                ) : null}
+              </>
+            ) : null}
           </div>
         </BulkActionBar>
       ) : null}
 
       <Card className="overflow-x-auto p-0">
-        {members.isError ? (
+        {users.isError ? (
           <p className="px-5 py-4 text-sm text-rose-700">
             Could not load users:{' '}
-            {members.error instanceof Error ? members.error.message : 'Unknown error'}
+            {users.error instanceof Error ? users.error.message : 'Unknown error'}
           </p>
         ) : null}
         <table className="w-full text-left text-sm">
@@ -688,9 +745,9 @@ export function MembersPage() {
               {isAdmin ? (
                 <th className="px-5 py-3 font-medium">
                   <RowCheckbox
-                    checked={allMembersSelected}
-                    onChange={(on) => setSelectedMembers(setAllIds(selectableMemberIds, on))}
-                    label="Select all removable users"
+                    checked={allSelected}
+                    onChange={(on) => setSelected(setAllIds(selectableKeys, on))}
+                    label="Select all users"
                     className="mt-0"
                   />
                 </th>
@@ -699,32 +756,32 @@ export function MembersPage() {
               <th className="px-5 py-3 font-medium">Job</th>
               <th className="px-5 py-3 font-medium">Contact</th>
               <th className="px-5 py-3 font-medium">Role</th>
+              <th className="px-5 py-3 font-medium">Status</th>
               {isAdmin ? <th className="px-5 py-3 font-medium" /> : null}
             </tr>
           </thead>
           <tbody>
-            {members.isLoading ? (
+            {users.isLoading ? (
               <tr>
-                <td colSpan={memberColSpan} className="px-5 py-8 text-center text-[var(--color-ink-muted)]">
+                <td colSpan={colSpan} className="px-5 py-8 text-center text-[var(--color-ink-muted)]">
                   Loading users…
                 </td>
               </tr>
             ) : null}
-            {filteredMembers.map((m) => {
-              const name = m.display_name ?? m.profiles?.display_name ?? 'User'
-              const email = m.profiles?.email
-              const isPlatformSuperuser = !!m.profiles?.is_superuser
-              const canSelect = memberSelectable(m, user?.id)
+            {filteredUsers.map((row) => {
+              const name = row.display_name ?? row.email ?? 'User'
+              const email = row.email
+              const canSelect =
+                row.kind === 'invite' ? isAdmin : memberSelectable(row, user?.id)
+              const key = rowKey(row)
               return (
-                <tr key={m.user_id} className="border-b border-[var(--color-border)] last:border-0">
+                <tr key={key} className="border-b border-[var(--color-border)] last:border-0">
                   {isAdmin ? (
                     <td className="px-5 py-3 align-top">
                       {canSelect ? (
                         <RowCheckbox
-                          checked={selectedMembers.has(m.user_id)}
-                          onChange={(on) =>
-                            setSelectedMembers((prev) => toggleId(prev, m.user_id, on))
-                          }
+                          checked={selected.has(key)}
+                          onChange={(on) => setSelected((prev) => toggleId(prev, key, on))}
                           label={`Select ${name}`}
                         />
                       ) : null}
@@ -735,234 +792,124 @@ export function MembersPage() {
                       <InitialsAvatar
                         name={name}
                         email={email}
-                        seed={m.user_id}
+                        seed={row.id}
                         size="md"
                         title={name}
                       />
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="font-medium">{name}</div>
-                          {isPlatformSuperuser ? <SuperuserBadge /> : null}
+                          {row.is_superuser ? <SuperuserBadge /> : null}
                         </div>
                         <div className="text-xs text-[var(--color-ink-muted)]">{email}</div>
-                        {m.notes ? (
+                        {row.notes ? (
                           <p className="mt-1 max-w-xs text-xs text-[var(--color-ink-muted)] line-clamp-2">
-                            {m.notes}
+                            {row.notes}
+                          </p>
+                        ) : null}
+                        {row.status === 'pending' && row.email_last_error && !row.email_sent_at ? (
+                          <p className="mt-1 max-w-xs text-[11px] text-rose-700/90 line-clamp-2">
+                            {row.email_last_error}
                           </p>
                         ) : null}
                       </div>
                     </div>
                   </td>
                   <td className="px-5 py-3 align-top text-[var(--color-ink-muted)]">
-                    <div>{m.job_title ?? '—'}</div>
-                    {m.department ? <div className="text-xs">{m.department}</div> : null}
+                    <div>{row.job_title ?? '—'}</div>
+                    {row.department ? <div className="text-xs">{row.department}</div> : null}
                   </td>
                   <td className="px-5 py-3 align-top text-[var(--color-ink-muted)]">
-                    {m.phone ?? '—'}
+                    {row.phone ?? '—'}
                   </td>
                   <td className="px-5 py-3 align-top">
-                    <Badge>{m.role}</Badge>
+                    <Badge>{row.role}</Badge>
+                  </td>
+                  <td className="px-5 py-3 align-top">
+                    <Badge
+                      className={
+                        row.status === 'active'
+                          ? undefined
+                          : 'from-amber-500/15 to-amber-500/10 text-amber-900 ring-amber-600/15'
+                      }
+                    >
+                      {row.status === 'active' ? 'Active' : 'Pending'}
+                    </Badge>
                   </td>
                   {isAdmin ? (
                     <td className="px-5 py-3 align-top">
-                      {canSelect ? (
-                        <div className="flex items-center gap-1">
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        {row.status === 'pending' ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            aria-label={`Resend invite to ${email}`}
+                            disabled={resendInvite.isPending || !apiConfigured}
+                            title={
+                              !apiConfigured
+                                ? 'Invite email API is not configured'
+                                : `Resend invitation email to ${email}`
+                            }
+                            onClick={() => resendInvite.mutate(row)}
+                          >
+                            <Mail className="h-4 w-4" />
+                            Resend invite
+                          </Button>
+                        ) : null}
+                        {row.kind === 'invite' && row.token ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Copy invite link for ${email}`}
+                            title="Copy signup link"
+                            onClick={() => void copyInviteLink(row)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                        {row.kind === 'member' && memberSelectable(row, user?.id) ? (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             aria-label={`Edit ${name}`}
-                            onClick={() => startEdit(m)}
+                            onClick={() => startEdit(row)}
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
+                        ) : null}
+                        {(row.kind === 'invite' || memberSelectable(row, user?.id)) ? (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            aria-label={`Remove ${name}`}
-                            disabled={removeMember.isPending}
-                            onClick={() => confirmRemoveMember(m)}
+                            aria-label={
+                              row.kind === 'invite' ? `Cancel invite for ${email}` : `Remove ${name}`
+                            }
+                            disabled={removeMember.isPending || removeInvite.isPending}
+                            onClick={() => confirmRemove(row)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        </div>
-                      ) : null}
+                        ) : null}
+                      </div>
                     </td>
                   ) : null}
                 </tr>
               )
             })}
-            {!members.isLoading && !filteredMembers.length ? (
+            {!users.isLoading && !filteredUsers.length ? (
               <tr>
-                <td colSpan={memberColSpan} className="px-5 py-8 text-center text-[var(--color-ink-muted)]">
-                  {members.data?.length ? 'No users match your search.' : 'No users yet.'}
+                <td colSpan={colSpan} className="px-5 py-8 text-center text-[var(--color-ink-muted)]">
+                  {users.data?.length ? 'No users match your search.' : 'No users yet.'}
                 </td>
               </tr>
             ) : null}
           </tbody>
         </table>
       </Card>
-
-      {isAdmin && (invites.data?.length || search) ? (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-semibold">Pending invites</h2>
-            {filteredInviteIds.length ? (
-              <label className="inline-flex items-center gap-2 text-sm text-[var(--color-ink-muted)]">
-                <RowCheckbox
-                  checked={allInvitesSelected}
-                  onChange={(on) => setSelectedInvites(setAllIds(filteredInviteIds, on))}
-                  label="Select all visible invites"
-                  className="mt-0"
-                />
-                Select all
-              </label>
-            ) : null}
-          </div>
-
-          {selectedInvites.size > 0 ? (
-            <BulkActionBar count={selectedInvites.size} onClear={() => setSelectedInvites(new Set())}>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={bulkBusy}
-                onClick={() => bulkResendInvites.mutate([...selectedInvites])}
-              >
-                <Mail className="h-4 w-4" />
-                Resend
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="danger"
-                disabled={bulkBusy}
-                onClick={confirmBulkCancelInvites}
-              >
-                <Trash2 className="h-4 w-4" />
-                Cancel invites
-              </Button>
-            </BulkActionBar>
-          ) : null}
-
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-[var(--color-border)] text-xs uppercase text-[var(--color-ink-muted)]">
-                <tr>
-                  <th className="px-5 py-3 font-medium" />
-                  <th className="px-5 py-3 font-medium">Invite</th>
-                  <th className="px-5 py-3 font-medium">Job</th>
-                  <th className="px-5 py-3 font-medium">Role</th>
-                  <th className="px-5 py-3 font-medium">Email</th>
-                  <th className="px-5 py-3 font-medium" />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredInvites.map((inv) => {
-                  const emailStatus = inviteEmailLabel(inv)
-                  return (
-                    <tr key={inv.id} className="border-b border-[var(--color-border)] last:border-0">
-                      <td className="px-5 py-3 align-top">
-                        <RowCheckbox
-                          checked={selectedInvites.has(inv.id)}
-                          onChange={(on) =>
-                            setSelectedInvites((prev) => toggleId(prev, inv.id, on))
-                          }
-                          label={`Select invite ${inv.email}`}
-                        />
-                      </td>
-                      <td className="px-5 py-3 align-top">
-                        <div className="flex items-start gap-3">
-                          <InitialsAvatar
-                            name={inv.display_name}
-                            email={inv.email}
-                            seed={inv.id}
-                            size="md"
-                            title={inv.display_name ?? inv.email}
-                          />
-                          <div className="min-w-0">
-                            <div className="font-medium">{inv.display_name ?? inv.email}</div>
-                            <div className="text-xs text-[var(--color-ink-muted)]">{inv.email}</div>
-                            {inv.phone ? (
-                              <div className="mt-1 text-xs text-[var(--color-ink-muted)]">
-                                {inv.phone}
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3 align-top text-[var(--color-ink-muted)]">
-                        <div>{inv.job_title ?? '—'}</div>
-                        {inv.department ? <div className="text-xs">{inv.department}</div> : null}
-                      </td>
-                      <td className="px-5 py-3 align-top">
-                        <Badge>{inv.role}</Badge>
-                      </td>
-                      <td className="px-5 py-3 align-top">
-                        <Badge
-                          className={
-                            emailStatus.tone === 'ok'
-                              ? undefined
-                              : emailStatus.tone === 'error'
-                                ? 'from-rose-500/15 to-rose-500/10 text-rose-800 ring-rose-600/15'
-                                : 'from-amber-500/15 to-amber-500/10 text-amber-900 ring-amber-600/15'
-                          }
-                          title={
-                            inv.email_sent_at
-                              ? `Sent ${new Date(inv.email_sent_at).toLocaleString()}`
-                              : (inv.email_last_error ?? undefined)
-                          }
-                        >
-                          {emailStatus.label}
-                        </Badge>
-                        {inv.email_last_error && !inv.email_sent_at ? (
-                          <p className="mt-1 max-w-[14rem] text-[11px] text-rose-700/90 line-clamp-2">
-                            {inv.email_last_error}
-                          </p>
-                        ) : null}
-                      </td>
-                      <td className="px-5 py-3 align-top">
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Resend invite to ${inv.email}`}
-                            disabled={resendInvite.isPending}
-                            onClick={() => resendInvite.mutate(inv.id)}
-                          >
-                            <Mail className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Cancel invite for ${inv.email}`}
-                            disabled={removeInvite.isPending}
-                            onClick={() => removeInvite.mutate(inv.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {!filteredInvites.length ? (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-8 text-center text-[var(--color-ink-muted)]">
-                      {invites.data?.length
-                        ? 'No invites match your search.'
-                        : 'No pending invites.'}
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </Card>
-        </div>
-      ) : null}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import type { TemplateSuggestion } from '@/features/designer/inspector/TemplateF
 import { TemplateField } from '@/features/designer/inspector/TemplateField'
 import {
   DIVIDER_MIN_MM,
+  a4SizeMm,
   clampBlock,
   cssFontFamily,
   emptyDocumentBlock,
@@ -19,6 +20,7 @@ import type {
   DocumentBlockType,
   DocumentContent,
   DocumentFont,
+  DocumentOrientation,
 } from '@/features/templates/templateModel'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
@@ -60,18 +62,20 @@ export function DocumentPageEditor({
   const [snapGrid, setSnapGrid] = useState(true)
   const [guides, setGuides] = useState<SnapGuide[]>([])
   const selected = content.blocks.find((b) => b.id === selectedId) ?? null
+  const orientation: DocumentOrientation = content.orientation === 'landscape' ? 'landscape' : 'portrait'
+  const pageMm = a4SizeMm(orientation)
 
   function patchBlocks(blocks: DocumentBlock[]) {
     onChange({ ...content, layout: 'page', blocks })
   }
 
   function patchBlock(id: string, patch: Partial<DocumentBlock>) {
-    patchBlocks(content.blocks.map((b) => (b.id === id ? clampBlock({ ...b, ...patch }) : b)))
+    patchBlocks(content.blocks.map((b) => (b.id === id ? clampBlock({ ...b, ...patch }, orientation) : b)))
   }
 
   function addBlock(type: DocumentBlockType) {
     const y = content.blocks.reduce((max, b) => Math.max(max, b.y + b.h), 6) + 1.5
-    const block = emptyDocumentBlock(type, Math.min(88, y))
+    const block = emptyDocumentBlock(type, Math.min(88, y), orientation)
     patchBlocks([...content.blocks, block])
     setSelectedId(block.id)
   }
@@ -159,8 +163,14 @@ export function DocumentPageEditor({
         </div>
         <div
           ref={pageRef}
-          className="relative mx-auto w-full max-w-[420px] overflow-hidden rounded-sm bg-white shadow-[0_8px_30px_rgba(15,23,42,0.12)] ring-1 ring-slate-200"
-          style={{ aspectRatio: '210 / 297', containerType: 'size' }}
+          className={cn(
+            'relative mx-auto w-full overflow-hidden rounded-sm bg-white shadow-[0_8px_30px_rgba(15,23,42,0.12)] ring-1 ring-slate-200',
+            orientation === 'landscape' ? 'max-w-[560px]' : 'max-w-[420px]',
+          )}
+          style={{
+            aspectRatio: `${pageMm.width} / ${pageMm.height}`,
+            containerType: 'size',
+          }}
           onPointerMove={onPagePointerMove}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
@@ -251,9 +261,9 @@ export function DocumentPageEditor({
           ) : null}
         </div>
         <p className="text-center text-[11px] text-[var(--color-ink-muted)]">
-          A4 page. Type millimetres in the sidebar, or drag on the page. Pull the teal corner to resize. Blocks snap to
-          the grid and to each other; hold Alt to move freely. PDF keeps these positions; Word and Excel follow the same
-          order.
+          A4 {orientation} page. Type millimetres in the sidebar, or drag on the page. Pull the teal corner to resize.
+          Blocks snap to the grid and to each other; hold Alt to move freely. PDF keeps these positions; Word and Excel
+          follow the same order.
         </p>
       </div>
       <div className="space-y-3 rounded-xl border border-[var(--color-border)] bg-white/70 p-3">
@@ -308,37 +318,39 @@ export function DocumentPageEditor({
               <MmField
                 label="Left"
                 disabled={readOnly}
-                value={pctToMm(selected.x, 'x')}
+                value={pctToMm(selected.x, 'x', orientation)}
                 min={0}
-                max={210}
-                onChange={(mm) => patchBlock(selected.id, { x: mmToPct(mm, 'x') })}
+                max={pageMm.width}
+                onChange={(mm) => patchBlock(selected.id, { x: mmToPct(mm, 'x', orientation) })}
               />
               <MmField
                 label="Top"
                 disabled={readOnly}
-                value={pctToMm(selected.y, 'y')}
+                value={pctToMm(selected.y, 'y', orientation)}
                 min={0}
-                max={297}
-                onChange={(mm) => patchBlock(selected.id, { y: mmToPct(mm, 'y') })}
+                max={pageMm.height}
+                onChange={(mm) => patchBlock(selected.id, { y: mmToPct(mm, 'y', orientation) })}
               />
               <MmField
                 label="Width"
                 disabled={readOnly}
-                value={pctToMm(selected.w, 'x')}
+                value={pctToMm(selected.w, 'x', orientation)}
                 min={4}
-                max={210}
-                onChange={(mm) => patchBlock(selected.id, { w: mmToPct(mm, 'x') })}
+                max={pageMm.width}
+                onChange={(mm) => patchBlock(selected.id, { w: mmToPct(mm, 'x', orientation) })}
               />
               <MmField
                 label={selected.type === 'divider' ? 'Thickness' : 'Height'}
                 disabled={readOnly}
-                value={pctToMm(selected.h, 'y')}
+                value={pctToMm(selected.h, 'y', orientation)}
                 min={selected.type === 'divider' ? DIVIDER_MIN_MM : 4}
-                max={297}
-                onChange={(mm) => patchBlock(selected.id, { h: mmToPct(mm, 'y') })}
+                max={pageMm.height}
+                onChange={(mm) => patchBlock(selected.id, { h: mmToPct(mm, 'y', orientation) })}
               />
             </div>
-            <p className="-mt-1 text-[11px] text-[var(--color-ink-muted)]">A4 millimetres. You can still drag on the page.</p>
+            <p className="-mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              A4 {orientation} millimetres. You can still drag on the page.
+            </p>
             {showTextStyle ? (
               <>
                 <div>

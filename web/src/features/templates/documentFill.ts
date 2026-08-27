@@ -12,6 +12,7 @@ import {
   type DocumentFont,
   type DocumentFormat,
   type DocumentLayout,
+  type DocumentOrientation,
   type ShopCartValue,
 } from '@/features/templates/templateModel'
 
@@ -59,6 +60,7 @@ export type FilledDocument = {
     fees: Array<{ name: string; value: string }>
   } | null
   layout: DocumentLayout
+  orientation: DocumentOrientation
   blocks: FilledDocumentBlock[]
 }
 
@@ -160,6 +162,7 @@ export function fillDocumentSnapshot(
     fields,
     cart: content.includeCart || content.blocks.some((b) => b.type === 'cart') ? cartSnapshot(findCartInVars(vars)) : null,
     layout: content.layout === 'page' ? 'page' : 'flow',
+    orientation: content.orientation === 'landscape' ? 'landscape' : 'portrait',
     blocks: content.blocks.map((block) => {
       if (block.type === 'image') {
         const raw = block.value.trim() ? evalValue(block.value) : null
@@ -304,6 +307,7 @@ export function parseFilledDocument(raw: unknown): FilledDocument | null {
     footer: typeof rec.footer === 'string' ? rec.footer : '',
     fields,
     layout: rec.layout === 'page' ? 'page' : ('flow' as DocumentLayout),
+    orientation: (rec.orientation === 'landscape' ? 'landscape' : 'portrait') as DocumentOrientation,
     blocks,
     cart: cartRaw
       ? {

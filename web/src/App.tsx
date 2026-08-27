@@ -8,6 +8,7 @@ import { SignupPage } from '@/features/auth/SignupPage'
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { HomeRedirect } from '@/features/auth/HomeRedirect'
+import { AgentScopeGuard } from '@/features/auth/AgentScopeGuard'
 import { ProfilePage } from '@/features/auth/ProfilePage'
 import { AppShell } from '@/app/AppShell'
 import { InstancesPage } from '@/features/instances/InstancesPage'
@@ -28,8 +29,11 @@ import {
 import { AdminOverviewPage } from '@/features/admin/AdminOverviewPage'
 import { AdminChatbotsPage } from '@/features/admin/AdminChatbotsPage'
 import { InstanceSettingsPage } from '@/features/admin/InstanceSettingsPage'
+import { CompliancePage } from '@/features/admin/CompliancePage'
+import { SecurityPage } from '@/features/admin/SecurityPage'
 import { RecycleBinPage } from '@/features/chatbots/RecycleBinPage'
 import { InboxPage } from '@/features/instances/InboxPage'
+import { MarketplacePage } from '@/features/marketplace/MarketplacePage'
 import { ChatbotsPage } from '@/features/chatbots/ChatbotsPage'
 import { ChatbotSettingsPage } from '@/features/chatbots/ChatbotSettingsPage'
 import { ChatbotDataPage } from '@/features/chatbots/ChatbotDataPage'
@@ -78,32 +82,37 @@ export function App() {
                 </Route>
                 <Route path="/instances/:instanceId" element={<InstanceProvider />}>
                   <Route element={<AppShell />}>
-                    <Route index element={<ChatbotsPage />} />
-                    <Route path="connections" element={<ConnectionsPage />} />
-                    <Route path="integrations" element={<IntegrationsPage />} />
-                    <Route path="members" element={<MembersRoute />} />
-                    <Route path="audit" element={<LegacyAdminRedirect page="audit" />} />
-                    <Route path="webhooks" element={<LegacyAdminRedirect page="webhooks" />} />
-                    <Route path="usage" element={<LegacyAdminRedirect page="usage" />} />
-                    <Route path="alerts" element={<AlertsPage />} />
-                    <Route path="inbox" element={<InboxPage />} />
-                    <Route path="conversations" element={<ConversationsPage />} />
-                    <Route path="conversations/:sessionId" element={<ConversationDetailPage />} />
-                    <Route path="analytics" element={<AnalyticsPage />} />
-                    <Route path="admin" element={<AdminLayout />}>
-                      <Route index element={<AdminOverviewPage />} />
-                      <Route path="chatbots" element={<AdminChatbotsPage />} />
-                      <Route path="users" element={<MembersPage />} />
-                      <Route path="recycle-bin" element={<RecycleBinPage />} />
-                      <Route path="settings" element={<InstanceSettingsPage />} />
-                      <Route path="usage" element={<UsagePage />} />
-                      <Route path="webhooks" element={<WebhooksPage />} />
-                      <Route path="audit" element={<AuditLogPage />} />
+                    <Route element={<AgentScopeGuard />}>
+                      <Route index element={<ChatbotsPage />} />
+                      <Route path="connections" element={<ConnectionsPage />} />
+                      <Route path="integrations" element={<IntegrationsPage />} />
+                      <Route path="members" element={<MembersRoute />} />
+                      <Route path="audit" element={<LegacyAdminRedirect page="audit" />} />
+                      <Route path="webhooks" element={<LegacyAdminRedirect page="webhooks" />} />
+                      <Route path="usage" element={<LegacyAdminRedirect page="usage" />} />
+                      <Route path="alerts" element={<AlertsPage />} />
+                      <Route path="inbox" element={<InboxPage />} />
+                      <Route path="conversations" element={<ConversationsPage />} />
+                      <Route path="conversations/:sessionId" element={<ConversationDetailPage />} />
+                      <Route path="analytics" element={<AnalyticsPage />} />
+                      <Route path="marketplace" element={<MarketplacePage />} />
+                      <Route path="admin" element={<AdminLayout />}>
+                        <Route index element={<AdminOverviewPage />} />
+                        <Route path="chatbots" element={<AdminChatbotsPage />} />
+                        <Route path="users" element={<MembersPage />} />
+                        <Route path="recycle-bin" element={<RecycleBinPage />} />
+                        <Route path="settings" element={<InstanceSettingsPage />} />
+                        <Route path="compliance" element={<CompliancePage />} />
+                        <Route path="security" element={<SecurityPage />} />
+                        <Route path="usage" element={<UsagePage />} />
+                        <Route path="webhooks" element={<WebhooksPage />} />
+                        <Route path="audit" element={<AuditLogPage />} />
+                      </Route>
+                      <Route path="chatbots/:chatbotId" element={<ChatbotSettingsPage />} />
+                      <Route path="chatbots/:chatbotId/design" element={<DesignerPage />} />
+                      <Route path="chatbots/:chatbotId/templates" element={<TemplatesPage />} />
+                      <Route path="chatbots/:chatbotId/data" element={<ChatbotDataPage />} />
                     </Route>
-                    <Route path="chatbots/:chatbotId" element={<ChatbotSettingsPage />} />
-                    <Route path="chatbots/:chatbotId/design" element={<DesignerPage />} />
-                    <Route path="chatbots/:chatbotId/templates" element={<TemplatesPage />} />
-                    <Route path="chatbots/:chatbotId/data" element={<ChatbotDataPage />} />
                   </Route>
                 </Route>
               </Route>

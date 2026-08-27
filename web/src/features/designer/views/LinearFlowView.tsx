@@ -18,9 +18,11 @@ import {
   Calculator,
   Flag,
   ImageIcon,
+  Lock,
   Plus,
   Plug,
   Headphones,
+  ArrowRightLeft,
   Repeat,
   Database,
   Sparkles,
@@ -53,6 +55,7 @@ const icons: Record<FlowNodeType, typeof MessageSquare> = {
   email: Mail,
   integration: Plug,
   handoff: Headphones,
+  transfer: ArrowRightLeft,
   condition: GitBranch,
   loop: Repeat,
   set_variable: Variable,
@@ -68,6 +71,7 @@ const typeColor: Record<FlowNodeType, string> = {
   email: 'var(--color-node-email)',
   integration: 'var(--color-node-http)',
   handoff: 'var(--color-node-question)',
+  transfer: 'var(--color-node-http)',
   condition: 'var(--color-node-condition)',
   loop: 'var(--color-node-loop)',
   set_variable: 'var(--color-node-set)',
@@ -83,6 +87,7 @@ const STEP_TYPES: FlowNodeType[] = [
   'email',
   'integration',
   'handoff',
+  'transfer',
   'condition',
   'loop',
   'set_variable',
@@ -125,6 +130,7 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
   const moveNode = useDesignerStore((s) => s.moveNode)
   const moveNodeToIndex = useDesignerStore((s) => s.moveNodeToIndex)
   const canMoveNode = useDesignerStore((s) => s.canMoveNode)
+  const peerLocks = useDesignerStore((s) => s.peerLocks)
 
   const items = useMemo(() => buildLinearItems(nodes, edges), [nodes, edges])
   const tree = useMemo(() => toScopeTree(items), [items])
@@ -398,6 +404,7 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
                   selected={selectedNodeId === id}
                   errCount={issueCounts.get(id) ?? 0}
                   readOnly={!!readOnly}
+                  lockedBy={peerLocks[node.item.node.key]?.name}
                   canMoveUp={moves.up}
                   canMoveDown={moves.down}
                   canPaste={!!clipboard}
@@ -471,6 +478,7 @@ function StepCard({
   selected,
   errCount,
   readOnly,
+  lockedBy,
   canMoveUp,
   canMoveDown,
   canPaste,
@@ -488,6 +496,7 @@ function StepCard({
   selected: boolean
   errCount: number
   readOnly: boolean
+  lockedBy?: string
   canMoveUp: boolean
   canMoveDown: boolean
   canPaste: boolean
@@ -508,7 +517,7 @@ function StepCard({
   const [menuOpen, setMenuOpen] = useState(false)
   const menuBtnRef = useRef<HTMLButtonElement>(null)
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
-  const reorderable = isReorderableNode(node)
+  const reorderable = isReorderableNode(node) && !lockedBy
   const mediaCount = readMediaFiles(node.config).length
 
   useLayoutEffect(() => {
@@ -597,6 +606,15 @@ function StepCard({
             After
           </span>
         ) : null}
+        {lockedBy ? (
+          <span
+            title={`${lockedBy} is editing`}
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-200/80"
+          >
+            <Lock className="h-3 w-3" />
+            {lockedBy}
+          </span>
+        ) : null}
         {errCount ? (
           <span className="rounded-md bg-[var(--color-danger-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--color-danger)]">
             {errCount}
@@ -604,7 +622,7 @@ function StepCard({
         ) : null}
       </button>
 
-      {!readOnly && node.type !== 'end' ? (
+      {!readOnly && !lockedBy && node.type !== 'end' ? (
         <div className="flex shrink-0 items-center gap-0.5 pr-2">
           {reorderable ? (
             <>

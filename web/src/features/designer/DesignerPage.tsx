@@ -19,7 +19,6 @@ import { nodeTypeLabel, type DesignerEdge, type DesignerNode } from '@/features/
 import { suggestNextSteps } from '@/features/designer/model/flowSuggestions'
 import { buildConnectionsMap } from '@/features/connections/connectionValidation'
 import { listChatbotConnections } from '@/features/connections/connectionApi'
-import { listIntegrations } from '@/features/integrations/integrationApi'
 import { LinearFlowView } from '@/features/designer/views/LinearFlowView'
 import { CanvasFlowView } from '@/features/designer/views/CanvasFlowView'
 import { StepInspector } from '@/features/designer/inspector/StepInspector'
@@ -27,7 +26,7 @@ import { ProblemsPanel } from '@/features/designer/ProblemsPanel'
 import { PreviewChat } from '@/features/designer/preview/PreviewChat'
 import type { PreviewStepRun } from '@/features/designer/preview/previewRuntime'
 import type { ScenarioResult } from '@/features/designer/preview/scenarioEval'
-import { buildPublishedGraph, getPublishStatus, publishedGraphAsJson } from '@/features/designer/utils/flowPublish'
+import { buildPublishedGraph, getPublishStatus, getStagingPublishStatus, publishedGraphAsJson } from '@/features/designer/utils/flowPublish'
 import { ChatbotSubNav } from '@/features/chatbots/ChatbotSubNav'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
@@ -37,6 +36,16 @@ import { cn } from '@/shared/lib/utils'
 import { MediaLibraryPanel, useChatbotMedia } from '@/features/designer/MediaLibraryPanel'
 import { mediaKeyFromFilename } from '@/features/designer/model/chatbotMedia'
 import { chatbotTemplatesQueryKey, fetchChatbotTemplates, publishedTemplatesFromRows } from '@/features/templates/templateApi'
+import { DesignerCollabPanel } from '@/features/designer/DesignerCollabPanel'
+import { instanceFeatureEnabled } from '@/shared/types/database'
+import {
+  dbRowsToDesignerEdges,
+  dbRowsToDesignerNodes,
+  mergeFlowDraft,
+} from '@/features/designer/collab/mergeDraft'
+import type { PeerStepLock } from '@/features/designer/collab/stepLocks'
+import { queuePosition } from '@/features/designer/collab/stepLocks'
+import { useAuth } from '@/features/auth/AuthProvider'
 
 const AUTOSAVE_DELAY_MS = 1200
 /** AppShell header is py-2.5 + h-9 ≈ 3.5rem; toolbar sticks just below it. */
@@ -117,6 +126,7 @@ export function DesignerPage() {
   const { chatbotId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const { instance, role } = useRequiredInstance()
+  const { user } = useAuth()
   const qc = useQueryClient()
   const editable = canEdit(role)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -133,6 +143,16 @@ export function DesignerPage() {
   const rehydrateFromServerRef = useRef(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [asideTopPx, setAsideTopPx] = useState(APP_HEADER_PX + 168)
+  const [draftUpdatedAt, setDraftUpdatedAt] = useState<string | null>(null)
+  const setPeerLocks = useDesignerStore((s) => s.setPeerLocks)
+  const mergeServerDraft = useDesignerStore((s) => s.mergeServerDraft)
+  const peerLocks = useDesignerStore((s) => s.peerLocks)
+  const onPeerLocksChange = useCallback(
+    (locks: Record<string, PeerStepLock>) => {
+      setPeerLocks(locks)
+    },
+    [setPeerLocks],
+  )
 
   const setFlow = useDesignerStore((s) => s.setFlow)
   const viewMode = useDesignerStore((s) => s.viewMode)
@@ -197,12 +217,6 @@ export function DesignerPage() {
     queryFn: () => listChatbotConnections(chatbotId!),
   })
 
-  const integrations = useQuery({
-    queryKey: ['instance-integrations', instance.id],
-    enabled: !!instance.id,
-    queryFn: () => listIntegrations(instance.id),
-  })
-
   const mediaQuery = useChatbotMedia(instance.id, chatbotId)
   const templatesQuery = useQuery({
     queryKey: chatbotId ? chatbotTemplatesQueryKey(chatbotId) : ['chatbot-templates', 'none'],
@@ -246,6 +260,7 @@ export function DesignerPage() {
     // the undo stack. Rollback sets rehydrateFromServerRef to apply server state.
     if (hydrated && sameFlow && !rehydrateFromServerRef.current) {
       setLastSavedAt(new Date(flowBundle.data.flow.updated_at))
+      setDraftUpdatedAt(flowBundle.data.flow.updated_at)
       return
     }
     rehydrateFromServerRef.current = false
@@ -260,6 +275,7 @@ export function DesignerPage() {
       useDesignerStore.getState().setConnections(buildConnectionsMap(connections.data))
     }
     setLastSavedAt(new Date(flowBundle.data.flow.updated_at))
+    setDraftUpdatedAt(flowBundle.data.flow.updated_at)
     setHydrated(true)
   }, [flowBundle.data, setFlow, hydrated, connections.data])
 
@@ -275,7 +291,42 @@ export function DesignerPage() {
   }, [hydrated, nodes, searchParams, selectNode, setSearchParams])
 
   const selected = useMemo(() => nodes.find((n) => n.id === selectedNodeId) ?? null, [nodes, selectedNodeId])
+  const selectedLock = selected?.key ? peerLocks[selected.key] : undefined
+  const selectedQueuePlace = user && selectedLock ? queuePosition(selectedLock, user.id) : null
   const errorCount = issues.filter((i) => i.severity === 'error').length
+
+  // Pull peer draft saves into non-dirty local keys
+  useEffect(() => {
+    if (!flowId || !instanceFeatureEnabled(instance, 'collaborative_editing')) return
+    const channel = supabase
+      .channel(`flow-draft:${flowId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'chatbot_flows', filter: `id=eq.${flowId}` },
+        () => {
+          void (async () => {
+            const [{ data: nodeRows }, { data: edgeRows }, { data: flowRow }] = await Promise.all([
+              supabase.from('flow_nodes').select('*').eq('flow_id', flowId),
+              supabase.from('flow_edges').select('*').eq('flow_id', flowId),
+              supabase.from('chatbot_flows').select('updated_at').eq('id', flowId).single(),
+            ])
+            if (!nodeRows || !edgeRows) return
+            mergeServerDraft(
+              dbRowsToDesignerNodes(nodeRows as never),
+              dbRowsToDesignerEdges(edgeRows as never),
+            )
+            if (flowRow?.updated_at) {
+              setDraftUpdatedAt(flowRow.updated_at)
+              setLastSavedAt(new Date(flowRow.updated_at))
+            }
+          })()
+        },
+      )
+      .subscribe()
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [flowId, instance, mergeServerDraft])
 
   useEffect(() => {
     if (viewMode !== 'canvas') setCanvasFullscreen(false)
@@ -324,72 +375,105 @@ export function DesignerPage() {
     const state = useDesignerStore.getState()
     if (!state.flowId || !chatbotId) throw new Error('Flow not loaded')
 
-    const { error: delEdgesError } = await supabase.from('flow_edges').delete().eq('flow_id', state.flowId)
-    if (delEdgesError) throw delEdgesError
-    const { error: delNodesError } = await supabase.from('flow_nodes').delete().eq('flow_id', state.flowId)
-    if (delNodesError) throw delNodesError
+    async function loadServerDraft(flowId: string) {
+      const [{ data: nodeRows, error: nErr }, { data: edgeRows, error: eErr }, { data: flowRow, error: fErr }] =
+        await Promise.all([
+          supabase.from('flow_nodes').select('*').eq('flow_id', flowId),
+          supabase.from('flow_edges').select('*').eq('flow_id', flowId),
+          supabase.from('chatbot_flows').select('updated_at').eq('id', flowId).single(),
+        ])
+      if (nErr) throw nErr
+      if (eErr) throw eErr
+      if (fErr) throw fErr
+      return {
+        nodes: dbRowsToDesignerNodes((nodeRows ?? []) as never),
+        edges: dbRowsToDesignerEdges((edgeRows ?? []) as never),
+        updatedAt: flowRow?.updated_at as string,
+      }
+    }
 
-    const nodeRows = state.nodes.map((n) => ({
-      id: n.id,
-      flow_id: state.flowId!,
-      key: n.key,
-      type: n.type,
-      label: n.label,
-      config: n.config as Json,
-      position_x: n.position.x,
-      position_y: n.position.y,
-    }))
-    const { error: insertNodesError } = await supabase.from('flow_nodes').insert(nodeRows)
-    if (insertNodesError) throw insertNodesError
+    async function writeMerged(expectedUpdatedAt: string | null) {
+      const latest = useDesignerStore.getState()
+      const server = await loadServerDraft(latest.flowId!)
+      const dirtyKeys = new Set(
+        latest.dirtyNodeKeys.length ? latest.dirtyNodeKeys : latest.nodes.map((n) => n.key),
+      )
+      const deletedKeys = new Set(latest.deletedNodeKeys)
+      const lockedKeys = new Set(Object.keys(latest.peerLocks))
+      const merged = mergeFlowDraft({
+        serverNodes: server.nodes,
+        serverEdges: server.edges,
+        localNodes: latest.nodes,
+        localEdges: latest.edges,
+        dirtyNodeKeys: dirtyKeys,
+        deletedNodeKeys: deletedKeys,
+        peerLockedKeys: lockedKeys,
+      })
 
-    if (state.edges.length) {
-      const edgeRows = state.edges.map((e) => ({
+      // Apply merge into local store so publish builds from merged graph
+      useDesignerStore.setState({
+        nodes: merged.nodes,
+        edges: merged.edges,
+      })
+
+      const nodePayload = merged.nodes.map((n) => ({
+        id: n.id,
+        key: n.key,
+        type: n.type,
+        label: n.label,
+        config: n.config,
+        position_x: n.position.x,
+        position_y: n.position.y,
+      }))
+      const edgePayload = merged.edges.map((e) => ({
         id: e.id,
-        flow_id: state.flowId!,
         source_node_id: e.source,
         target_node_id: e.target,
         source_handle: e.sourceHandle ?? null,
         label: e.label ?? null,
       }))
-      const { error: insertEdgesError } = await supabase.from('flow_edges').insert(edgeRows)
-      if (insertEdgesError) throw insertEdgesError
-    }
+      const stepVars = merged.nodes
+        .map((n) => {
+          const key =
+            typeof n.config.outputVariable === 'string'
+              ? n.config.outputVariable
+              : typeof n.config.variableKey === 'string'
+                ? n.config.variableKey
+                : ''
+          if (!key.trim()) return null
+          if (!['question', 'http', 'operation', 'set_variable', 'entity'].includes(n.type)) return null
+          return {
+            key: key.trim(),
+            value_type: 'string',
+            source_node_key: n.key,
+          }
+        })
+        .filter(Boolean)
 
-    const stepVars = state.nodes
-      .map((n) => {
-        const key =
-          typeof n.config.outputVariable === 'string'
-            ? n.config.outputVariable
-            : typeof n.config.variableKey === 'string'
-              ? n.config.variableKey
-              : ''
-        if (!key.trim()) return null
-        if (!['question', 'http', 'operation', 'set_variable', 'entity'].includes(n.type)) return null
-        return {
-          chatbot_id: chatbotId,
-          key: key.trim(),
-          value_type: 'string' as const,
-          scope: 'step' as const,
-          source_node_key: n.key,
-        }
+      const expected = expectedUpdatedAt ?? server.updatedAt
+      const { data: savedAt, error } = await supabase.rpc('save_flow_draft', {
+        p_flow_id: latest.flowId!,
+        p_nodes: nodePayload as unknown as Json,
+        p_edges: edgePayload as unknown as Json,
+        p_step_vars: stepVars as unknown as Json,
+        p_expected_updated_at: expected,
       })
-      .filter(Boolean)
-
-    await supabase.from('chatbot_variables').delete().eq('chatbot_id', chatbotId).eq('scope', 'step')
-    if (stepVars.length) {
-      const { error: stepVarError } = await supabase.from('chatbot_variables').insert(stepVars as never)
-      if (stepVarError) throw stepVarError
+      if (error) throw error
+      const at = typeof savedAt === 'string' ? savedAt : new Date().toISOString()
+      setDraftUpdatedAt(at)
+      return new Date(at)
     }
 
-    const savedAt = new Date().toISOString()
-    await supabase
-      .from('chatbot_flows')
-      .update({ updated_at: savedAt, has_draft_changes: true })
-      .eq('id', state.flowId)
-    await supabase.from('chatbots').update({ updated_at: savedAt }).eq('id', chatbotId)
-
-    return new Date(savedAt)
-  }, [chatbotId])
+    try {
+      return await writeMerged(draftUpdatedAt)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (/conflict/i.test(message)) {
+        return await writeMerged(null)
+      }
+      throw err
+    }
+  }, [chatbotId, draftUpdatedAt])
 
   const publishHistory = useQuery({
     queryKey: ['flow-publish-versions', chatbotId],
@@ -505,6 +589,18 @@ export function DesignerPage() {
       markClean()
       setLastSavedAt(savedAt)
       void flowBundle.refetch()
+      const flowId = useDesignerStore.getState().flowId
+      if (flowId && instanceFeatureEnabled(instance, 'collaborative_editing')) {
+        void supabase.rpc('append_flow_change_log', {
+          p_flow_id: flowId,
+          p_summary: 'Autosave',
+          p_patch: {},
+          p_snapshot: {
+            nodes: useDesignerStore.getState().nodes,
+            edges: useDesignerStore.getState().edges,
+          } as unknown as Json,
+        })
+      }
     },
     onError: (err: Error) => setSaveError(err.message),
     onSettled: () => {
@@ -517,6 +613,73 @@ export function DesignerPage() {
     onSuccess: async (result) => {
       setSaveError(null)
       setLastSavedAt(result.publishedAt)
+      await flowBundle.refetch()
+      await qc.invalidateQueries({ queryKey: ['flow-publish-versions', chatbotId] })
+    },
+    onError: (err: Error) => setSaveError(err.message),
+  })
+
+  const publishStaging = useMutation({
+    mutationFn: async () => {
+      const state = useDesignerStore.getState()
+      if (!state.flowId || !chatbotId) throw new Error('Flow not loaded')
+      if (state.dirty) {
+        await persistFlow()
+        markClean()
+      }
+      const { data: globals, error: globalsError } = await supabase
+        .from('chatbot_variables')
+        .select('key, value_type, default_value, description')
+        .eq('chatbot_id', chatbotId)
+        .eq('scope', 'global')
+      if (globalsError) throw globalsError
+      const templateRows = await fetchChatbotTemplates(chatbotId)
+      const nextStaging = (flowBundle.data?.flow.staging_version ?? 0) + 1
+      const publishedAt = new Date().toISOString()
+      const graph = buildPublishedGraph({
+        nodes: state.nodes,
+        edges: state.edges,
+        globals: (globals ?? []).map((g) => ({
+          key: g.key,
+          value_type: g.value_type,
+          default_value: g.default_value,
+          description: g.description,
+        })),
+        publishVersion: nextStaging,
+        publishedAt,
+        templates: publishedTemplatesFromRows(templateRows),
+      })
+      const { data, error } = await supabase.rpc('publish_flow_staging', {
+        p_flow_id: state.flowId,
+        p_published_graph: publishedGraphAsJson(graph),
+        p_note: null,
+      })
+      if (error) throw error
+      return {
+        publishedAt: new Date(data?.staging_published_at ?? publishedAt),
+        version: data?.staging_version ?? nextStaging,
+      }
+    },
+    onSuccess: async () => {
+      setSaveError(null)
+      await flowBundle.refetch()
+    },
+    onError: (err: Error) => setSaveError(err.message),
+  })
+
+  const promoteStaging = useMutation({
+    mutationFn: async () => {
+      const state = useDesignerStore.getState()
+      if (!state.flowId) throw new Error('Flow not loaded')
+      const { data, error } = await supabase.rpc('promote_staging_to_production', {
+        p_flow_id: state.flowId,
+        p_note: 'Promoted from staging',
+      })
+      if (error) throw error
+      return data
+    },
+    onSuccess: async () => {
+      setSaveError(null)
       await flowBundle.refetch()
       await qc.invalidateQueries({ queryKey: ['flow-publish-versions', chatbotId] })
     },
@@ -597,12 +760,31 @@ export function DesignerPage() {
     return getPublishStatus(flowBundle.data.flow)
   }, [flowBundle.data?.flow])
 
+  const stagingStatus = useMemo(() => {
+    if (!flowBundle.data?.flow) return null
+    return getStagingPublishStatus(flowBundle.data.flow)
+  }, [flowBundle.data?.flow])
+
+  const stagingPublicUrl = useMemo(() => {
+    const slug = (chatbot.data?.public_slug ?? '').trim()
+    if (!slug || stagingStatus?.kind !== 'live') return null
+    const basename = (import.meta.env.BASE_URL as string).replace(/\/$/, '')
+    return `${window.location.origin}${basename}/c/${slug}?env=staging`
+  }, [chatbot.data?.public_slug, stagingStatus?.kind])
+
   const canPublish =
     editable &&
     !!flowBundle.data?.flow &&
     !publish.isPending &&
     !save.isPending &&
     (dirty || flowBundle.data.flow.has_draft_changes || !flowBundle.data.flow.published_at)
+
+  const canPublishStaging =
+    editable &&
+    instanceFeatureEnabled(instance, 'staging') &&
+    !!flowBundle.data?.flow &&
+    !publishStaging.isPending &&
+    !save.isPending
 
   const canvasSuggestions = useMemo(
     () => (viewMode === 'canvas' ? suggestNextSteps({ nodes, edges, afterNodeId: selectedNodeId, limit: 3 }) : []),
@@ -633,7 +815,7 @@ export function DesignerPage() {
           </div>
         ) : null}
         <div className="flex flex-wrap gap-1.5">
-          {(['message', 'question', 'http', 'email', 'integration', 'handoff', 'condition', 'loop', 'set_variable', 'operation', 'entity'] as FlowNodeType[]).map(
+          {(['message', 'question', 'http', 'email', 'integration', 'handoff', 'transfer', 'condition', 'loop', 'set_variable', 'operation', 'entity'] as FlowNodeType[]).map(
             (t) => (
               <Button key={t} size="sm" variant="secondary" onClick={() => addNode(t, selectedNodeId)}>
                 + {nodeTypeLabel(t)}
@@ -658,9 +840,21 @@ export function DesignerPage() {
           node={selected}
           connections={connections.data ?? []}
           connectionsReady={connections.isSuccess}
-          integrations={integrations.data ?? []}
-          integrationsReady={integrations.isSuccess}
           readOnly={!editable}
+          lockedBy={
+            selectedLock
+              ? {
+                  name: selectedLock.name,
+                  color: selectedLock.color,
+                  waitingHint:
+                    selectedQueuePlace != null
+                      ? `You are #${selectedQueuePlace + 1} in line — edit unlocks when earlier editors leave this step.`
+                      : selectedLock.queue.length
+                        ? `Waiting: ${selectedLock.queue.map((q) => q.name).join(' → ')}`
+                        : undefined,
+                }
+              : null
+          }
         />
       ) : (
         <p className="text-sm text-[var(--color-ink-muted)]">Select a step to configure it.</p>
@@ -759,6 +953,22 @@ export function DesignerPage() {
                 {publishStatus.label}
               </div>
             ) : null}
+            {instanceFeatureEnabled(instance, 'staging') && stagingStatus ? (
+              <div
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium',
+                  stagingStatus.kind === 'live' && 'bg-sky-50 text-sky-800',
+                  stagingStatus.kind === 'never' && 'bg-slate-100 text-slate-600',
+                )}
+                title={
+                  stagingStatus.kind === 'never'
+                    ? 'Publish to staging to test without changing production'
+                    : `Staging published ${new Date(stagingStatus.publishedAt).toLocaleString()}`
+                }
+              >
+                {stagingStatus.label}
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -822,6 +1032,57 @@ export function DesignerPage() {
                 <Rocket className="h-4 w-4" />
                 {publish.isPending ? 'Publishing…' : 'Publish'}
               </Button>
+              {instanceFeatureEnabled(instance, 'staging') ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={!canPublishStaging}
+                    onClick={() => {
+                      if (errorCount > 0) {
+                        const ok = window.confirm(
+                          `This flow has ${errorCount} validation issue${errorCount === 1 ? '' : 's'}. Publish to staging anyway?`,
+                        )
+                        if (!ok) return
+                      } else {
+                        const ok = window.confirm(
+                          'Publish current draft to staging?\n\nProduction stays unchanged. Open the staging link from Settings or after publish.',
+                        )
+                        if (!ok) return
+                      }
+                      publishStaging.mutate()
+                    }}
+                  >
+                    {publishStaging.isPending ? 'Staging…' : 'Publish staging'}
+                  </Button>
+                  {stagingStatus?.kind === 'live' ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={promoteStaging.isPending || publish.isPending}
+                      onClick={() => {
+                        const ok = window.confirm(
+                          `Promote staging v${stagingStatus.version} to production?\n\nThis creates a new production publish from the staging snapshot.`,
+                        )
+                        if (!ok) return
+                        promoteStaging.mutate()
+                      }}
+                    >
+                      {promoteStaging.isPending ? 'Promoting…' : 'Promote staging'}
+                    </Button>
+                  ) : null}
+                  {stagingPublicUrl ? (
+                    <a
+                      href={stagingPublicUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center rounded-xl px-2.5 py-1.5 text-xs font-medium text-sky-800 underline-offset-2 hover:underline"
+                    >
+                      Open staging
+                    </a>
+                  ) : null}
+                </>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -882,7 +1143,14 @@ export function DesignerPage() {
 
       {!canvasFullscreen ? canvasPalette : null}
 
-      <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)_320px]">
+      <div
+        className={cn(
+          'grid gap-4',
+          instanceFeatureEnabled(instance, 'collaborative_editing')
+            ? 'lg:grid-cols-[280px_minmax(0,1fr)_320px_minmax(240px,280px)]'
+            : 'lg:grid-cols-[280px_minmax(0,1fr)_320px]',
+        )}
+      >
         <ProblemsPanel
           previewOpen={previewOpen}
           runs={previewRuns}
@@ -893,6 +1161,16 @@ export function DesignerPage() {
           {viewMode === 'linear' ? <LinearFlowView readOnly={!editable} /> : !canvasFullscreen ? canvasView : null}
         </div>
         {!canvasFullscreen ? inspectorCard : null}
+        {instanceFeatureEnabled(instance, 'collaborative_editing') && flowBundle.data?.flow.id ? (
+          <DesignerCollabPanel
+            flowId={flowBundle.data.flow.id}
+            instanceId={instance.id}
+            chatbotId={chatbotId!}
+            role={role}
+            selectedNodeKey={selected?.key ?? null}
+            onPeerLocksChange={onPeerLocksChange}
+          />
+        ) : null}
       </div>
 
       {canvasFullscreen && viewMode === 'canvas'

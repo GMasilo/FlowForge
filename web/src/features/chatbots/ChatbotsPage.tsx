@@ -2,7 +2,23 @@ import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
-import { AlertTriangle, Bot, Plus, RotateCcw, Trash2, Upload } from 'lucide-react'
+import {
+  AlertTriangle,
+  Bot,
+  CalendarClock,
+  ClipboardList,
+  Headphones,
+  LayoutTemplate,
+  Plus,
+  Recycle,
+  ShoppingBag,
+  SquareDashed,
+  Star,
+  Trash2,
+  Upload,
+  UserPlus,
+  type LucideIcon,
+} from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { canAdmin, canEdit } from '@/shared/types/database'
@@ -15,16 +31,42 @@ import { Label } from '@/shared/ui/label'
 import { Textarea } from '@/shared/ui/textarea'
 import { FieldError } from '@/shared/ui/field-error'
 import { PageHeader } from '@/shared/ui/page-header'
+import { Badge } from '@/shared/ui/badge'
+import { InitialsAvatar } from '@/shared/ui/initials-avatar'
 import { getPublishStatus } from '@/features/designer/utils/flowPublish'
 import { parseFlowExport } from '@/features/designer/utils/flowTransfer'
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
-import type { FlowGlobalExport } from '@/features/designer/utils/flowTransfer'
+import type { FlowEntityDefExport, FlowGlobalExport, FlowTemplateExport, FlowTestScenarioExport } from '@/features/designer/utils/flowTransfer'
 import {
   loadFlowBundle,
   replaceFlowInDb,
+  applyImportedBundleData,
   versionCompareHint,
 } from '@/features/chatbots/chatbotFlowTransfer'
+import {
+  CHATBOT_STARTER_PACKS,
+  getChatbotStarterPack,
+  type ChatbotStarterPackId,
+} from '@/features/chatbots/starterPacks'
+import { fetchDeletedChatbots, recycleBinQueryKey } from '@/features/chatbots/RecycleBinPage'
 import { cn } from '@/shared/lib/utils'
+
+const STARTER_PACK_ICONS: Record<ChatbotStarterPackId, LucideIcon> = {
+  blank: SquareDashed,
+  essentials: LayoutTemplate,
+  customer_support: Headphones,
+  lead_capture: UserPlus,
+  appointment: CalendarClock,
+  shop: ShoppingBag,
+  feedback: Star,
+  contact_form: ClipboardList,
+}
+
+type AccessProfile = {
+  id: string
+  display_name: string | null
+  email: string | null
+}
 
 type BotRow = {
   id: string
@@ -32,10 +74,12 @@ type BotRow = {
   description: string | null
   updated_at: string
   deleted_at: string | null
+  created_by: string | null
   chatbot_flows:
     | { version: number | null; published_at: string | null; has_draft_changes: boolean | null; published_graph: unknown }
     | { version: number | null; published_at: string | null; has_draft_changes: boolean | null; published_graph: unknown }[]
     | null
+  chatbot_shares: { user_id: string }[] | null
 }
 
 type ParsedImport = {
@@ -43,6 +87,9 @@ type ParsedImport = {
   edges: DesignerEdge[]
   globals: FlowGlobalExport[]
   entities?: { id: string; key: string }[]
+  entityDefs?: FlowEntityDefExport[]
+  templates?: FlowTemplateExport[]
+  testScenarios?: FlowTestScenarioExport[]
   meta: {
     chatbotId?: string
     chatbotName?: string
@@ -74,32 +121,62 @@ export function ChatbotsPage() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [starterPackId, setStarterPackId] = useState<ChatbotStarterPackId>('essentials')
   const [error, setError] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [importBusy, setImportBusy] = useState(false)
   const [importDialog, setImportDialog] = useState<ImportDialog | null>(null)
-  const [showDeleted, setShowDeleted] = useState(false)
   const importBusyRef = useRef(false)
   const editable = canEdit(role)
   const isAdmin = canAdmin(role)
+  const selectedPack = getChatbotStarterPack(starterPackId)
 
   const chatbots = useQuery({
-    queryKey: ['chatbots', instance.id, showDeleted],
+    queryKey: ['chatbots', instance.id],
     queryFn: async () => {
-      let q = supabase
+      const { data, error: qError } = await supabase
         .from('chatbots')
-        .select('*, chatbot_flows(version, published_at, has_draft_changes, published_graph)')
+        .select(
+          'id, name, description, updated_at, deleted_at, created_by, chatbot_flows(version, published_at, has_draft_changes, published_graph), chatbot_shares(user_id)',
+        )
         .eq('instance_id', instance.id)
+        .is('deleted_at', null)
         .order('updated_at', { ascending: false })
-      if (showDeleted) {
-        q = q.not('deleted_at', 'is', null)
-      } else {
-        q = q.is('deleted_at', null)
-      }
-      const { data, error: qError } = await q
       if (qError) throw qError
-      return data as BotRow[]
+      return (data ?? []) as BotRow[]
     },
+  })
+
+  const accessProfiles = useQuery({
+    queryKey: ['chatbot-access-profiles', instance.id, chatbots.data?.map((b) => b.id).join(',') ?? ''],
+    enabled: !!chatbots.data?.length,
+    queryFn: async () => {
+      const ids = new Set<string>()
+      for (const bot of chatbots.data ?? []) {
+        if (bot.created_by) ids.add(bot.created_by)
+        for (const share of bot.chatbot_shares ?? []) {
+          if (share.user_id) ids.add(share.user_id)
+        }
+      }
+      if (!ids.size) return {} as Record<string, AccessProfile>
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .in('id', [...ids])
+      if (error) throw error
+      const map: Record<string, AccessProfile> = {}
+      for (const row of data ?? []) {
+        map[row.id] = row as AccessProfile
+      }
+      return map
+    },
+  })
+
+  const recycleCount = useQuery({
+    queryKey: recycleBinQueryKey(instance.id),
+    enabled: isAdmin,
+    queryFn: () => fetchDeletedChatbots(instance.id),
+    select: (rows) => rows.length,
   })
 
   const softDelete = useMutation({
@@ -109,40 +186,68 @@ export function ChatbotsPage() {
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['chatbots', instance.id] })
-    },
-  })
-
-  const restore = useMutation({
-    mutationFn: async (chatbotId: string) => {
-      const { error } = await supabase.rpc('restore_chatbot', { p_chatbot_id: chatbotId })
-      if (error) throw error
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['chatbots', instance.id] })
+      await qc.invalidateQueries({ queryKey: ['chatbots-recycle-bin', instance.id] })
     },
   })
 
   const create = useMutation({
     mutationFn: async () => {
+      const pack = getChatbotStarterPack(starterPackId)
+      const finalName =
+        name.trim() || pack.suggestedName.trim() || 'Untitled chatbot'
+      const finalDescription =
+        description.trim() || pack.suggestedDescription.trim() || null
+
       const { data, error: insertError } = await supabase
         .from('chatbots')
         .insert({
           instance_id: instance.id,
-          name: name.trim(),
-          description: description.trim() || null,
+          name: finalName,
+          description: finalDescription,
           created_by: user!.id,
         })
         .select('*')
         .single()
       if (insertError) throw insertError
-      return data
+
+      if (!pack.keepDefaultFlow) {
+        const bundleData = pack.build()
+        const flowBundle = await loadFlowBundle(data.id)
+        await applyImportedBundleData({
+          chatbotId: data.id,
+          templates: bundleData.templates,
+          entityDefs: bundleData.entityDefs,
+          testScenarios: bundleData.testScenarios,
+          createdBy: user!.id,
+        })
+        const entitiesExport = bundleData.entityDefs.length
+          ? bundleData.entityDefs.map((e) => ({ id: e.id, key: e.key }))
+          : bundleData.entities
+        await replaceFlowInDb({
+          chatbotId: data.id,
+          flowId: flowBundle.flow.id,
+          nodes: bundleData.nodes,
+          edges: bundleData.edges,
+          globals: bundleData.globals,
+          entitiesExport,
+        })
+      }
+
+      return { chatbot: data, packId: pack.id }
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       setName('')
       setDescription('')
+      setStarterPackId('essentials')
       setOpen(false)
       setError(null)
       await qc.invalidateQueries({ queryKey: ['chatbots', instance.id] })
+      await qc.invalidateQueries({ queryKey: ['flow-bundle', result.chatbot.id] })
+      await qc.invalidateQueries({ queryKey: ['chatbot', result.chatbot.id] })
+      await qc.invalidateQueries({ queryKey: ['chatbot-templates', result.chatbot.id] })
+      await qc.invalidateQueries({ queryKey: ['chatbot-entities', result.chatbot.id] })
+      await qc.invalidateQueries({ queryKey: ['chatbot-test-scenarios', result.chatbot.id] })
+      navigate(`/instances/${instance.id}/chatbots/${result.chatbot.id}/design`)
     },
     onError: (err: Error) => setError(err.message),
   })
@@ -150,7 +255,23 @@ export function ChatbotsPage() {
   function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (!editable) return
+    if (!name.trim() && !selectedPack.suggestedName.trim()) {
+      setError('Enter a name for the chatbot')
+      return
+    }
     create.mutate()
+  }
+
+  function selectStarterPack(id: ChatbotStarterPackId) {
+    const pack = getChatbotStarterPack(id)
+    const previous = getChatbotStarterPack(starterPackId)
+    setStarterPackId(id)
+    setError(null)
+    const nameBlankOrFromPrev = !name.trim() || name.trim() === previous.suggestedName
+    const descBlankOrFromPrev =
+      !description.trim() || description.trim() === previous.suggestedDescription
+    if (nameBlankOrFromPrev) setName(pack.suggestedName)
+    if (descBlankOrFromPrev) setDescription(pack.suggestedDescription)
   }
 
   const versionHint = useMemo(() => {
@@ -221,13 +342,22 @@ export function ChatbotsPage() {
       }
 
       const bundle = await loadFlowBundle(chatbotId)
+      await applyImportedBundleData({
+        chatbotId,
+        templates: parsed.templates,
+        entityDefs: parsed.entityDefs,
+        testScenarios: parsed.testScenarios,
+        createdBy: user.id,
+      })
+      const entitiesExport =
+        parsed.entityDefs?.map((e) => ({ id: e.id, key: e.key })) ?? parsed.entities
       await replaceFlowInDb({
         chatbotId,
         flowId: bundle.flow.id,
         nodes: parsed.nodes,
         edges: parsed.edges,
         globals: parsed.globals,
-        entitiesExport: parsed.entities,
+        entitiesExport,
         chatbotMeta:
           choice === 'new'
             ? undefined
@@ -241,6 +371,9 @@ export function ChatbotsPage() {
       await qc.invalidateQueries({ queryKey: ['chatbots', instance.id] })
       await qc.invalidateQueries({ queryKey: ['flow-bundle', chatbotId] })
       await qc.invalidateQueries({ queryKey: ['chatbot', chatbotId] })
+      await qc.invalidateQueries({ queryKey: ['chatbot-templates', chatbotId] })
+      await qc.invalidateQueries({ queryKey: ['chatbot-entities', chatbotId] })
+      await qc.invalidateQueries({ queryKey: ['chatbot-test-scenarios', chatbotId] })
       navigate(`/instances/${instance.id}/chatbots/${chatbotId}/design`)
     } catch (e) {
       setImportError(e instanceof Error ? e.message : 'Import failed')
@@ -258,20 +391,36 @@ export function ChatbotsPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             {isAdmin ? (
-              <Button
-                variant="secondary"
-                onClick={() => setShowDeleted((v) => !v)}
-              >
-                {showDeleted ? 'Show active' : 'Show deleted'}
-              </Button>
+              <Link to={`/instances/${instance.id}/recycle-bin`}>
+                <Button variant="secondary">
+                  <Recycle className="h-4 w-4" />
+                  Recycle bin
+                  {recycleCount.data ? (
+                    <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                      {recycleCount.data}
+                    </span>
+                  ) : null}
+                </Button>
+              </Link>
             ) : null}
-            {editable && !showDeleted ? (
+            {editable ? (
               <>
                 <Button variant="secondary" onClick={() => void startImport()} disabled={importBusy}>
                   <Upload className="h-4 w-4" />
                   Import
                 </Button>
-                <Button onClick={() => setOpen((v) => !v)}>
+                <Button
+                  onClick={() => {
+                    setOpen((v) => !v)
+                    setError(null)
+                    if (!open) {
+                      setStarterPackId('essentials')
+                      const pack = getChatbotStarterPack('essentials')
+                      if (!name.trim()) setName(pack.suggestedName)
+                      if (!description.trim()) setDescription(pack.suggestedDescription)
+                    }
+                  }}
+                >
                   <Plus className="h-4 w-4" />
                   New chatbot
                 </Button>
@@ -428,19 +577,115 @@ export function ChatbotsPage() {
 
       {open ? (
         <Card className="ff-page-enter border-teal-200/60">
-          <form className="space-y-3" onSubmit={onSubmit}>
+          <form className="space-y-4" onSubmit={onSubmit}>
+            <div>
+              <h2 className="text-base font-semibold text-slate-800">New chatbot</h2>
+              <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+                Start blank or from a template with flows and content organisations commonly need.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Start from</Label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {CHATBOT_STARTER_PACKS.map((pack) => {
+                  const selected = starterPackId === pack.id
+                  const Icon = STARTER_PACK_ICONS[pack.id]
+                  return (
+                    <button
+                      key={pack.id}
+                      type="button"
+                      onClick={() => selectStarterPack(pack.id)}
+                      aria-pressed={selected}
+                      aria-label={`${pack.name}. ${pack.summary}`}
+                      className={cn(
+                        'relative flex w-full flex-col items-center gap-2 rounded-xl border px-2 py-3 text-center transition',
+                        selected
+                          ? 'border-teal-400 bg-teal-50/80 ring-1 ring-teal-500/30'
+                          : 'border-slate-200 bg-white hover:border-teal-200 hover:bg-slate-50/80',
+                      )}
+                    >
+                      {pack.id === 'essentials' ? (
+                        <span className="absolute right-1 top-1">
+                          <Badge className="px-1.5 py-0 text-[9px] normal-case tracking-normal">
+                            Recommended
+                          </Badge>
+                        </span>
+                      ) : null}
+                      <span
+                        className={cn(
+                          'flex h-10 w-10 items-center justify-center rounded-xl ring-1',
+                          selected
+                            ? 'bg-gradient-to-br from-teal-500/20 to-cyan-500/20 text-teal-700 ring-teal-600/20'
+                            : 'bg-slate-50 text-slate-600 ring-slate-200',
+                        )}
+                      >
+                        <Icon className="h-5 w-5" aria-hidden />
+                      </span>
+                      <span className="text-xs font-semibold leading-tight text-slate-800">
+                        {pack.name}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              <div
+                key={selectedPack.id}
+                className="ff-page-enter rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5"
+              >
+                <p className="text-sm font-semibold text-slate-800">{selectedPack.name}</p>
+                <p className="mt-0.5 text-sm text-[var(--color-ink-muted)]">{selectedPack.summary}</p>
+                {selectedPack.includes.length ? (
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {selectedPack.includes.map((item) => (
+                      <li
+                        key={item}
+                        className="rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200/80"
+                      >
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </div>
+
             <div>
               <Label htmlFor="bot-name">Name</Label>
-              <Input id="bot-name" value={name} onChange={(e) => setName(e.target.value)} required />
+              <Input
+                id="bot-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={selectedPack.suggestedName || 'My chatbot'}
+                required={!selectedPack.suggestedName}
+              />
             </div>
             <div>
               <Label htmlFor="bot-desc">Description</Label>
-              <Textarea id="bot-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
+              <Textarea
+                id="bot-desc"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={selectedPack.suggestedDescription || 'Optional'}
+              />
             </div>
             {error ? <FieldError>{error}</FieldError> : null}
-            <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? 'Creating…' : 'Create chatbot'}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" disabled={create.isPending}>
+                {create.isPending ? 'Creating…' : 'Create chatbot'}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={create.isPending}
+                onClick={() => {
+                  setOpen(false)
+                  setError(null)
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
           </form>
         </Card>
       ) : null}
@@ -492,50 +737,91 @@ export function ChatbotsPage() {
                   <p className="mt-2 text-[11px] font-medium text-slate-400">
                     Edited {formatDistanceToNow(new Date(bot.updated_at), { addSuffix: true })}
                   </p>
+                  {(() => {
+                    const profiles = accessProfiles.data ?? {}
+                    const owner = bot.created_by ? profiles[bot.created_by] : null
+                    const sharedIds = (bot.chatbot_shares ?? [])
+                      .map((s) => s.user_id)
+                      .filter((id) => id && id !== bot.created_by)
+                    const shared = sharedIds
+                      .map((id) => profiles[id])
+                      .filter(Boolean) as AccessProfile[]
+                    if (!owner && !shared.length) return null
+                    return (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {owner ? (
+                          <div className="flex items-center gap-1.5 rounded-full bg-[var(--color-surface-2)]/80 py-0.5 pl-0.5 pr-2">
+                            <InitialsAvatar
+                              size="sm"
+                              className="h-6 w-6 text-[9px]"
+                              name={owner.display_name}
+                              email={owner.email}
+                              seed={owner.id}
+                              title={`${owner.display_name || owner.email || 'Owner'} (owner)`}
+                            />
+                            <span className="max-w-[7rem] truncate text-[11px] font-medium text-[var(--color-ink)]">
+                              {owner.display_name || owner.email || 'Owner'}
+                            </span>
+                            <Badge className="px-1.5 py-0 text-[9px]">Owner</Badge>
+                          </div>
+                        ) : null}
+                        {shared.length ? (
+                          <div className="flex items-center gap-1">
+                            <div className="flex -space-x-1.5">
+                              {shared.slice(0, 5).map((p) => (
+                                <InitialsAvatar
+                                  key={p.id}
+                                  size="sm"
+                                  className="h-6 w-6 text-[9px]"
+                                  name={p.display_name}
+                                  email={p.email}
+                                  seed={p.id}
+                                  title={p.display_name || p.email || 'Shared'}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-[11px] text-[var(--color-ink-muted)]">
+                              {shared.length === 1
+                                ? '1 shared'
+                                : `${shared.length} shared`}
+                              {shared.length > 5 ? ` (+${shared.length - 5})` : ''}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {showDeleted ? (
-                  isAdmin ? (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={restore.isPending}
-                      onClick={() => {
-                        if (!window.confirm(`Restore “${bot.name}”?`)) return
-                        restore.mutate(bot.id)
-                      }}
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                      Restore
-                    </Button>
-                  ) : null
-                ) : (
-                  <>
-                    <Link to={`/instances/${instance.id}/chatbots/${bot.id}/design`}>
-                      <Button size="sm">Open designer</Button>
-                    </Link>
-                    <Link to={`/instances/${instance.id}/chatbots/${bot.id}`}>
-                      <Button size="sm" variant="secondary">
-                        Settings
-                      </Button>
-                    </Link>
-                    {isAdmin ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={softDelete.isPending}
-                        onClick={() => {
-                          if (!window.confirm(`Delete “${bot.name}”? You can restore it later.`)) return
-                          softDelete.mutate(bot.id)
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </Button>
-                    ) : null}
-                  </>
-                )}
+                <Link to={`/instances/${instance.id}/chatbots/${bot.id}/design`}>
+                  <Button size="sm">Open designer</Button>
+                </Link>
+                <Link to={`/instances/${instance.id}/chatbots/${bot.id}`}>
+                  <Button size="sm" variant="secondary">
+                    Settings
+                  </Button>
+                </Link>
+                {isAdmin ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={softDelete.isPending}
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          `Move “${bot.name}” to the recycle bin? You can restore it later, or delete it forever from the recycle bin.`,
+                        )
+                      ) {
+                        return
+                      }
+                      softDelete.mutate(bot.id)
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </Button>
+                ) : null}
               </div>
             </Card>
             )
@@ -544,7 +830,7 @@ export function ChatbotsPage() {
       ) : (
         <Card className="border-dashed border-teal-300/50 bg-teal-50/30 text-center">
           <p className="text-sm text-[var(--color-ink-muted)]">
-            {showDeleted ? 'No deleted chatbots.' : 'No chatbots yet.'}
+            No chatbots yet.
           </p>
         </Card>
       )}

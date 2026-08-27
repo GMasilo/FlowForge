@@ -65,7 +65,7 @@ return [
     'alerts_cron_secret' => 'aubibcnueoeirejf9c8a340etyujgwmvrwi0jgv940grv8hneiv430v3miorepvm',
 
     /*
-     * Invite email SMTP is NOT stored here — use Apache SetEnv:
+     * Invite email SMTP — prefer Apache SetEnv DEFAULT_SYSTEM_*:
      *   SetEnv DEFAULT_SYSTEM_SMTP_SERVER smtp.example.com
      *   SetEnv DEFAULT_SYSTEM_SMTP_PORT 465
      *   SetEnv DEFAULT_SYSTEM_SMTP_USERNAME noreply@example.com
@@ -75,5 +75,17 @@ return [
      *   SetEnv DEFAULT_SYSTEM_APP_URL https://gkjtt.co.za/flowforge
      *
      * SECURE values: ssl (port 465), tls/starttls (port 587), none
+     *
+     * Optional fallbacks when SetEnv is unavailable:
      */
+    'app_url' => 'https://gkjtt.co.za/flowforge',
+    'platform_smtp' => [
+        // 'smtpHost' => 'smtp.example.com',
+        // 'smtpPort' => 465,
+        // 'username' => 'noreply@example.com',
+        // 'password' => '...',
+        // 'fromEmail' => 'noreply@example.com',
+        // 'fromName' => 'FlowForge',
+        // 'encryption' => 'ssl',
+    ],
 ];

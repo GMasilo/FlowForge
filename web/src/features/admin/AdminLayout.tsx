@@ -4,13 +4,14 @@ import {
   Building2,
   Gauge,
   LayoutDashboard,
+  Lock,
   Recycle,
+  Scale,
   ScrollText,
   Users,
   Webhook,
 } from 'lucide-react'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
-import { MembersPage } from '@/features/instances/MembersPage'
 import { canAdmin } from '@/shared/types/database'
 import { cn } from '@/shared/lib/utils'
 import { instanceAdminPath } from '@/features/admin/adminPaths'
@@ -21,6 +22,8 @@ const tabs = [
   { to: '/users', label: 'Users', icon: Users, end: false },
   { to: '/recycle-bin', label: 'Recycle bin', icon: Recycle, end: false },
   { to: '/settings', label: 'Organisation', icon: Building2, end: false },
+  { to: '/compliance', label: 'Compliance', icon: Scale, end: false },
+  { to: '/security', label: 'Security', icon: Lock, end: false },
   { to: '/usage', label: 'Usage', icon: Gauge, end: false },
   { to: '/webhooks', label: 'Webhooks', icon: Webhook, end: false },
   { to: '/audit', label: 'Audit', icon: ScrollText, end: false },
@@ -64,13 +67,13 @@ export function AdminLayout() {
   )
 }
 
-/** Owners/admins land in the admin section; other roles keep the read-only roster. */
+/** Owners/admins land in the admin Users section; other roles are redirected away. */
 export function MembersRoute() {
   const { instance, role } = useRequiredInstance()
   if (canAdmin(role)) {
     return <Navigate to={instanceAdminPath(instance.id, 'users')} replace />
   }
-  return <MembersPage />
+  return <Navigate to={`/instances/${instance.id}`} replace />
 }
 
 export function LegacyAdminRedirect({ page }: { page: string }) {

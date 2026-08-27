@@ -5,8 +5,9 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/lib/SupabaseRest.php';
 require_once dirname(__DIR__) . '/lib/PlatformMail.php';
+require_once dirname(__DIR__) . '/lib/InviteMail.php';
 
-use FlowForge\Api\Mailer;
+use FlowForge\Api\InviteMail;
 use FlowForge\Api\PlatformMail;
 use FlowForge\Api\Response;
 use FlowForge\Api\Security;
@@ -20,18 +21,12 @@ if ($inviteId === '' || !preg_match('/^[0-9a-f-]{36}$/i', $inviteId)) {
     Response::error('invite_id is required', 400);
 }
 
-$appUrl = PlatformMail::appUrl();
-if ($appUrl === '') {
-    Response::error('DEFAULT_SYSTEM_APP_URL is not configured on the server', 500);
-}
-
-$smtp = PlatformMail::smtpConfigFromEnv();
-if (trim((string) ($smtp['smtpHost'] ?? '')) === '' || trim((string) ($smtp['fromEmail'] ?? '')) === '') {
-    Response::error('SMTP env vars (DEFAULT_SYSTEM_*) are not configured on the server', 500);
-}
-
 $jwt = SupabaseRest::bearerFromRequest();
-$rpc = SupabaseRest::rpcAsUser($boot['config'], $jwt, 'get_invite_for_sending', [
+$config = $boot['config'];
+$appUrl = PlatformMail::appUrl($config);
+$redirectTo = $appUrl !== '' ? $appUrl . '/' : '';
+
+$rpc = SupabaseRest::rpcAsUser($config, $jwt, 'get_invite_for_sending', [
     'p_invite_id' => $inviteId,
 ]);
 
@@ -48,49 +43,46 @@ if (!$invite || empty($invite['email']) || empty($invite['token'])) {
 }
 
 $email = (string) $invite['email'];
-$token = (string) $invite['token'];
-$orgName = trim((string) ($invite['organisation_name'] ?? 'your organisation'));
-$displayName = trim((string) ($invite['display_name'] ?? ''));
-$greeting = $displayName !== '' ? $displayName : 'there';
-$signupUrl = $appUrl . '/signup?invite=' . rawurlencode($token);
 
-$subject = 'You are invited to ' . $orgName . ' on FlowForge';
-$message = implode("\n", [
-    'Hi ' . $greeting . ',',
-    '',
-    'You have been invited to join "' . $orgName . '" on FlowForge.',
-    '',
-    'Create your account using this link (opens the sign-up page with your email filled in):',
-    $signupUrl,
-    '',
-    'If you were not expecting this email, you can ignore it.',
-    '',
-    '— FlowForge',
-]);
-
-$result = Mailer::send($smtp, $email, $subject, $message);
-
-if (!$result['ok']) {
-    $err = (string) ($result['error'] ?? 'Failed to send invite email');
-    SupabaseRest::rpcAsUser($boot['config'], $jwt, 'mark_invite_email_status', [
+$authInvite = InviteMail::sendAuthInvite(
+    $config,
+    $email,
+    $redirectTo,
+    ['display_name' => (string) ($invite['display_name'] ?? '')],
+);
+if ($authInvite['ok']) {
+    SupabaseRest::rpcAsUser($config, $jwt, 'mark_invite_email_status', [
         'p_invite_id' => $inviteId,
-        'p_ok' => false,
-        'p_error' => $err,
+        'p_ok' => true,
+        'p_error' => null,
     ]);
     Response::json([
-        'ok' => false,
-        'error' => $err,
-    ], 502);
+        'ok' => true,
+        'email' => $email,
+        'email_via' => 'supabase',
+    ]);
 }
 
-SupabaseRest::rpcAsUser($boot['config'], $jwt, 'mark_invite_email_status', [
-    'p_invite_id' => $inviteId,
-    'p_ok' => true,
-    'p_error' => null,
-]);
+$smtpSend = InviteMail::sendSignupInvite(
+    $config,
+    $jwt,
+    $inviteId,
+    $email,
+    (string) $invite['token'],
+    trim((string) ($invite['organisation_name'] ?? 'your organisation')) ?: 'your organisation',
+    trim((string) ($invite['display_name'] ?? '')),
+);
+
+if ($smtpSend['ok']) {
+    Response::json([
+        'ok' => true,
+        'message_id' => $smtpSend['message_id'] ?? null,
+        'email' => $email,
+        'email_via' => $smtpSend['via'] ?? 'smtp',
+    ]);
+}
 
 Response::json([
-    'ok' => true,
-    'message_id' => $result['message_id'] ?? null,
-    'email' => $email,
-]);
+    'ok' => false,
+    'error' => $smtpSend['error'] ?? $authInvite['error'] ?? 'Failed to send invite email',
+], 502);

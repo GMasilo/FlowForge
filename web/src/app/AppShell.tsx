@@ -8,9 +8,10 @@ import { Badge } from '@/shared/ui/badge'
 import { SuperuserBadge } from '@/shared/ui/superuser-badge'
 import { InitialsAvatar } from '@/shared/ui/initials-avatar'
 import { ThemeToggle } from '@/shared/ui/theme-toggle'
+import { NotificationsBell } from '@/features/notifications/NotificationsBell'
 import { useInstanceContext } from '@/features/instances/InstanceContext'
 import { brandLogoUrl, brandWorkspaceTitle } from '@/shared/lib/instanceBranding'
-import { canAdmin } from '@/shared/types/database'
+import { canAdmin, isAgentRole } from '@/shared/types/database'
 import { cn } from '@/shared/lib/utils'
 
 export function AppShell() {
@@ -52,6 +53,7 @@ export function AppShell() {
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:ml-0 sm:gap-3">
+            <NotificationsBell />
             <ThemeToggle />
             <Link
               to="/help"
@@ -127,15 +129,22 @@ function InstanceNav() {
   if (!instanceId || !ctx?.instance) return null
 
   const isAdmin = canAdmin(ctx.role)
+  const agentOnly = isAgentRole(ctx.role)
   const base = `/instances/${instanceId}`
 
-  const primaryLinks: NavLinkItem[] = [
-    { to: base, label: 'Chatbots', end: true },
-    { to: `${base}/connections`, label: 'Connections' },
-    { to: `${base}/conversations`, label: 'Conversations' },
-    { to: `${base}/inbox`, label: 'Inbox' },
-    { to: `${base}/analytics`, label: 'Analytics' },
-  ]
+  const primaryLinks: NavLinkItem[] = agentOnly
+    ? [
+        { to: `${base}/inbox`, label: 'Inbox' },
+        { to: `${base}/conversations`, label: 'Conversations' },
+      ]
+    : [
+        { to: base, label: 'Chatbots', end: true },
+        { to: `${base}/connections`, label: 'Connections' },
+        { to: `${base}/conversations`, label: 'Conversations' },
+        { to: `${base}/inbox`, label: 'Inbox' },
+        { to: `${base}/analytics`, label: 'Analytics' },
+        { to: `${base}/marketplace`, label: 'Marketplace' },
+      ]
 
   const adminLinks: NavLinkItem[] = [
     { to: `${base}/admin`, label: 'Overview', end: true },
@@ -143,6 +152,8 @@ function InstanceNav() {
     { to: `${base}/admin/users`, label: 'Users' },
     { to: `${base}/admin/recycle-bin`, label: 'Recycle bin' },
     { to: `${base}/admin/settings`, label: 'Organisation' },
+    { to: `${base}/admin/compliance`, label: 'Compliance' },
+    { to: `${base}/admin/security`, label: 'Security' },
     { to: `${base}/integrations`, label: 'Integrations' },
     { to: `${base}/admin/usage`, label: 'Usage' },
     { to: `${base}/admin/webhooks`, label: 'Webhooks' },
@@ -158,11 +169,9 @@ function InstanceNav() {
         ))}
       </div>
 
-      {isAdmin ? (
+      {agentOnly ? null : isAdmin ? (
         <AdminNavMenu links={adminLinks} pathname={location.pathname} />
-      ) : (
-        <NavPill link={{ to: `${base}/members`, label: 'Users' }} pathname={location.pathname} />
-      )}
+      ) : null}
     </nav>
   )
 }
