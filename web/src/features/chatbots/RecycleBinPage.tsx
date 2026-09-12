@@ -10,6 +10,7 @@ import { isFlowForgeApiConfigured, purgeChatbotFiles } from '@/shared/lib/flowfo
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { FieldError } from '@/shared/ui/field-error'
+import { PAGE_HELP } from '@/shared/help/pageHelp'
 import { PageHeader } from '@/shared/ui/page-header'
 
 export type DeletedBot = {
@@ -109,6 +110,7 @@ export function RecycleBinPage() {
       <PageHeader
         title="Recycle bin"
         description={`Deleted chatbots for ${instance.name}. Restore them, or delete them forever.`}
+        help={PAGE_HELP.recycleBin}
         actions={
           <div className="flex flex-wrap gap-2">
             <Link to={`/instances/${instance.id}/admin/chatbots`}>
@@ -146,7 +148,7 @@ export function RecycleBinPage() {
       ) : rows.length ? (
         <div className="ff-stagger grid gap-4 sm:grid-cols-2">
           {rows.map((bot) => (
-            <Card key={bot.id} className="flex flex-col gap-4">
+            <Card key={bot.id} className="ff-hover-lift flex flex-col gap-4">
               <div className="flex items-start gap-3">
                 <div className="rounded-xl bg-[var(--color-surface-2)] p-2.5 text-[var(--color-ink-muted)] ring-1 ring-[var(--color-border)]">
                   <Bot className="h-5 w-5" />

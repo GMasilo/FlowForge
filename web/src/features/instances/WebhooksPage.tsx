@@ -3,15 +3,17 @@ import { Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { Plus, Trash2 } from 'lucide-react'
+import { PlanLockedState } from '@/features/billing/PlanLockedState'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
-import { canAdmin, type InstanceWebhook, type WebhookDelivery } from '@/shared/types/database'
+import { canAdmin, instanceFeatureEnabled, type InstanceWebhook, type WebhookDelivery } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { FieldError } from '@/shared/ui/field-error'
+import { PAGE_HELP } from '@/shared/help/pageHelp'
 import { PageHeader } from '@/shared/ui/page-header'
 import { Badge } from '@/shared/ui/badge'
 
@@ -23,6 +25,7 @@ const EVENT_OPTIONS = [
 
 export function WebhooksPage() {
   const { instance, role } = useRequiredInstance()
+  const webhooksEnabled = instanceFeatureEnabled(instance, 'webhooks')
   const { user } = useAuth()
   const qc = useQueryClient()
   const isAdmin = canAdmin(role)
@@ -34,7 +37,7 @@ export function WebhooksPage() {
 
   const hooks = useQuery({
     queryKey: ['instance-webhooks', instance.id],
-    enabled: isAdmin,
+    enabled: isAdmin && webhooksEnabled,
     queryFn: async () => {
       const { data, error: qError } = await supabase
         .from('instance_webhooks')
@@ -114,6 +117,10 @@ export function WebhooksPage() {
     },
   })
 
+  if (!webhooksEnabled) {
+    return <PlanLockedState feature="webhooks" title="Webhooks" />
+  }
+
   if (!isAdmin) {
     return <Navigate to={`/instances/${instance.id}`} replace />
   }
@@ -132,6 +139,7 @@ export function WebhooksPage() {
       <PageHeader
         title="Webhooks"
         description={`Notify external systems when things happen in ${instance.name}. Conversation completed and failed payloads include the session’s variables.`}
+        help={PAGE_HELP.webhooks}
         actions={
           <Button onClick={() => setOpen((v) => !v)}>
             <Plus className="h-4 w-4" />

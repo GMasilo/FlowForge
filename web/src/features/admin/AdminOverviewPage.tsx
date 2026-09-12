@@ -17,6 +17,8 @@ import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { supabase } from '@/shared/lib/supabase'
 import type { AuditEvent, InstanceUsageMonthly } from '@/shared/types/database'
 import { Card } from '@/shared/ui/card'
+import { PAGE_HELP } from '@/shared/help/pageHelp'
+import { HelpTooltip } from '@/shared/ui/help-tooltip'
 import { PageHeader } from '@/shared/ui/page-header'
 
 function currentYearMonth(): string {
@@ -156,6 +158,7 @@ export function AdminOverviewPage() {
       <PageHeader
         title="Admin"
         description={`Manage chatbots, users, and organisation settings for ${instance.name}.`}
+        help={PAGE_HELP.adminOverview}
       />
 
       {stats.isError ? (
@@ -218,6 +221,7 @@ export function AdminOverviewPage() {
           <div className="flex items-center gap-2">
             <ScrollText className="h-4 w-4 text-[var(--color-ink-muted)]" />
             <h2 className="text-sm font-semibold text-[var(--color-ink)]">Recent activity</h2>
+            <HelpTooltip content={PAGE_HELP.audit} label="Help: Recent activity" />
           </div>
           <Link
             to={admin('audit')}

@@ -39,6 +39,7 @@ function layoutSequence(seq: ScopeNode[]): LayoutBox {
 
   const parts: LayoutBox[] = seq.map((node) => {
     if (node.kind === 'condition') return layoutCondition(node)
+    if (node.kind === 'switch') return layoutSwitch(node)
     if (node.kind === 'loop') return layoutLoop(node)
     return {
       width: CANVAS_NODE_WIDTH,
@@ -101,6 +102,47 @@ function layoutCondition(node: Extract<ScopeNode, { kind: 'condition' }>): Layou
 
   const height = then.positions.size ? thenTop + then.height : branchBottom
 
+  return { width, height, positions }
+}
+
+function layoutSwitch(node: Extract<ScopeNode, { kind: 'switch' }>): LayoutBox {
+  const lanes = [
+    ...node.cases.map((c) => layoutSequence(c.nodes)),
+    layoutSequence(node.default),
+  ]
+  const then = layoutSequence(node.then)
+
+  const laneWidths = lanes.map((lane) => Math.max(BRANCH_MIN_W, lane.width))
+  const branchesW =
+    laneWidths.reduce((sum, w) => sum + w, 0) + Math.max(0, laneWidths.length - 1) * H_GAP
+  const width = Math.max(CANVAS_NODE_WIDTH, branchesW, then.width)
+
+  const positions = new Map<string, CanvasPoint>()
+  positions.set(node.item.node.id, { x: centerX(width), y: 0 })
+
+  const branchTop = CANVAS_NODE_HEIGHT + V_GAP
+  const branchesLeft = centerX(width, branchesW)
+  let x = branchesLeft
+  let branchHeight = 24
+  for (let i = 0; i < lanes.length; i += 1) {
+    const lane = lanes[i]!
+    const laneW = laneWidths[i]!
+    const dx = x + centerX(laneW, lane.width)
+    for (const [id, p] of lane.positions) {
+      positions.set(id, { x: p.x + dx, y: p.y + branchTop })
+    }
+    branchHeight = Math.max(branchHeight, lane.height)
+    x += laneW + H_GAP
+  }
+
+  const branchBottom = branchTop + branchHeight
+  const thenTop = branchBottom + V_GAP
+  const thenDx = centerX(width, then.width)
+  for (const [id, p] of then.positions) {
+    positions.set(id, { x: p.x + thenDx, y: p.y + thenTop })
+  }
+
+  const height = then.positions.size ? thenTop + then.height : branchBottom
   return { width, height, positions }
 }
 

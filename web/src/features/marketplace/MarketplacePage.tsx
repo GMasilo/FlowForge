@@ -2,8 +2,14 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { PlanLockedState } from '@/features/billing/PlanLockedState'
+import {
+  buildMarketplacePackFromChatbot,
+  installFlowPackToInstance,
+  marketplacePackSummary,
+} from '@/features/chatbots/chatbotFlowTransfer'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
-import { canEdit, type MarketplaceListing } from '@/shared/types/database'
+import { canEdit, instanceFeatureEnabled, type Json, type MarketplaceListing } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import { slugify } from '@/shared/lib/utils'
 import { Button } from '@/shared/ui/button'
@@ -11,6 +17,8 @@ import { Card } from '@/shared/ui/card'
 import { FieldError } from '@/shared/ui/field-error'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
+import { PAGE_HELP, SECTION_HELP } from '@/shared/help/pageHelp'
+import { SectionHeading } from '@/shared/ui/help-tooltip'
 import { PageHeader } from '@/shared/ui/page-header'
 import { Select } from '@/shared/ui/select'
 import { Textarea } from '@/shared/ui/textarea'
@@ -20,7 +28,9 @@ export function MarketplacePage() {
   const { user, isSuperuser } = useAuth()
   const qc = useQueryClient()
   const editable = canEdit(role)
+  const marketplaceEnabled = instanceFeatureEnabled(instance, 'marketplace')
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [form, setForm] = useState({
     title: '',
     slug: '',
@@ -33,6 +43,7 @@ export function MarketplacePage() {
 
   const listings = useQuery({
     queryKey: ['marketplace-listings', instance.id],
+    enabled: marketplaceEnabled,
     queryFn: async () => {
       const { data, error: qError } = await supabase
         .from('marketplace_listings')
@@ -63,42 +74,72 @@ export function MarketplacePage() {
     e.preventDefault()
     if (!user || !editable) return
     setError(null)
+    setNotice(null)
+    if (!form.chatbotId) {
+      setError('Select a source chatbot to serialize into the pack')
+      return
+    }
     const slug = slugify(form.slug || form.title)
-    const { data, error: insertError } = await supabase
-      .from('marketplace_listings')
-      .insert({
-        publisher_instance_id: instance.id,
-        kind: form.kind,
-        visibility: form.visibility,
-        status: 'draft',
-        slug,
-        title: form.title.trim(),
-        summary: form.summary.trim() || null,
-        category: form.category,
-        pack: { note: 'Install clones structure via clone_chatbot_to_instance or flow import' },
-        source_chatbot_id: form.chatbotId || null,
-        created_by: user.id,
+    try {
+      const pack = await buildMarketplacePackFromChatbot(form.chatbotId)
+      const { data, error: insertError } = await supabase
+        .from('marketplace_listings')
+        .insert({
+          publisher_instance_id: instance.id,
+          kind: form.kind,
+          visibility: form.visibility,
+          status: 'draft',
+          slug,
+          title: form.title.trim(),
+          summary: form.summary.trim() || null,
+          category: form.category,
+          pack: pack as unknown as Json,
+          source_chatbot_id: form.chatbotId,
+          created_by: user.id,
+        })
+        .select('id')
+        .single()
+      if (insertError) {
+        setError(insertError.message)
+        return
+      }
+      const { error: submitError } = await supabase.rpc('submit_marketplace_listing', {
+        p_listing_id: data.id,
       })
-      .select('id')
-      .single()
-    if (insertError) {
-      setError(insertError.message)
-      return
+      if (submitError) {
+        setError(submitError.message)
+        return
+      }
+      setForm((f) => ({ ...f, title: '', slug: '', summary: '' }))
+      await qc.invalidateQueries({ queryKey: ['marketplace-listings', instance.id] })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to publish pack')
     }
-    const { error: submitError } = await supabase.rpc('submit_marketplace_listing', {
-      p_listing_id: data.id,
-    })
-    if (submitError) {
-      setError(submitError.message)
-      return
-    }
-    setForm((f) => ({ ...f, title: '', slug: '', summary: '' }))
-    await qc.invalidateQueries({ queryKey: ['marketplace-listings', instance.id] })
   }
 
   const install = useMutation({
     mutationFn: async (listing: MarketplaceListing) => {
-      if (listing.source_chatbot_id) {
+      if (!user) throw new Error('Sign in required')
+      const pack = listing.pack
+      const isFlowPack =
+        pack &&
+        typeof pack === 'object' &&
+        !Array.isArray(pack) &&
+        (pack as { kind?: string }).kind === 'flowforge.chatbotFlow'
+
+      let chatbotId: string | null = null
+      let connectionsNeedRebind = false
+
+      if (isFlowPack) {
+        const result = await installFlowPackToInstance({
+          instanceId: instance.id,
+          name: `${listing.title} (install)`,
+          pack,
+          createdBy: user.id,
+        })
+        chatbotId = result.chatbotId
+        connectionsNeedRebind = result.connectionsNeedRebind
+      } else if (listing.source_chatbot_id) {
         const { data, error: cloneError } = await supabase.rpc('clone_chatbot_to_instance', {
           p_source_chatbot_id: listing.source_chatbot_id,
           p_target_instance_id: instance.id,
@@ -106,27 +147,34 @@ export function MarketplacePage() {
           p_include_published: true,
         })
         if (cloneError) throw cloneError
-        const chatbotId =
+        chatbotId =
           data && typeof data === 'object' && 'chatbot_id' in data
             ? String((data as { chatbot_id: string }).chatbot_id)
             : null
-        const { error: installError } = await supabase.rpc('record_marketplace_install', {
-          p_listing_id: listing.id,
-          p_target_instance_id: instance.id,
-          p_target_chatbot_id: chatbotId,
-        })
-        if (installError) throw installError
-        return
+        connectionsNeedRebind = true
+      } else {
+        throw new Error('This listing has no installable pack')
       }
+
       const { error: installError } = await supabase.rpc('record_marketplace_install', {
         p_listing_id: listing.id,
         p_target_instance_id: instance.id,
-        p_target_chatbot_id: null,
+        p_target_chatbot_id: chatbotId,
       })
       if (installError) throw installError
+      return { connectionsNeedRebind }
     },
-    onError: (e: Error) => setError(e.message),
-    onSuccess: async () => {
+    onError: (e: Error) => {
+      setNotice(null)
+      setError(e.message)
+    },
+    onSuccess: async (result) => {
+      setError(null)
+      setNotice(
+        result.connectionsNeedRebind
+          ? 'Installed. Rebind HTTP/email/payment connections on the new chatbot before publishing.'
+          : 'Installed.',
+      )
       await qc.invalidateQueries({ queryKey: ['chatbots', instance.id] })
       await qc.invalidateQueries({ queryKey: ['marketplace-listings', instance.id] })
     },
@@ -164,27 +212,44 @@ export function MarketplacePage() {
     return editable && listing.publisher_instance_id === instance.id
   }
 
+  if (!marketplaceEnabled) {
+    return <PlanLockedState feature="marketplace" title="Marketplace" />
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Marketplace"
-        description="Share and install flow/template packs across organisations."
+        description="Share and install flow packs (steps, templates, entities) across organisations."
+        help={PAGE_HELP.marketplace}
       />
       {error ? <FieldError>{error}</FieldError> : null}
+      {notice ? <p className="text-sm text-teal-800">{notice}</p> : null}
 
-      <div className="grid gap-3">
+      <div className="ff-stagger grid gap-3">
         {(listings.data ?? []).map((listing) => (
-          <Card key={listing.id} className="flex flex-wrap items-center gap-3 p-4">
+          <Card key={listing.id} className="ff-hover-lift flex flex-wrap items-center gap-3 p-4">
             <div className="min-w-0 flex-1">
               <p className="font-medium">{listing.title}</p>
               <p className="text-xs text-[var(--color-ink-muted)]">
-                {listing.kind} · {listing.visibility} · {listing.status} · {listing.install_count} installs
+                {listing.kind} · {listing.visibility} · {listing.status} · {listing.install_count}{' '}
+                installs
                 {listing.category ? ` · ${listing.category}` : ''}
               </p>
-              {listing.summary ? <p className="mt-1 text-sm text-[var(--color-ink-muted)]">{listing.summary}</p> : null}
+              <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                {marketplacePackSummary(listing.pack)}
+              </p>
+              {listing.summary ? (
+                <p className="mt-1 text-sm text-[var(--color-ink-muted)]">{listing.summary}</p>
+              ) : null}
             </div>
             {editable && listing.status === 'approved' ? (
-              <Button size="sm" variant="secondary" disabled={install.isPending} onClick={() => install.mutate(listing)}>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={install.isPending}
+                onClick={() => install.mutate(listing)}
+              >
                 Install
               </Button>
             ) : null}
@@ -193,7 +258,11 @@ export function MarketplacePage() {
                 <Button size="sm" onClick={() => review.mutate({ id: listing.id, approve: true })}>
                   Approve
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => review.mutate({ id: listing.id, approve: false })}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => review.mutate({ id: listing.id, approve: false })}
+                >
                   Reject
                 </Button>
               </>
@@ -224,16 +293,24 @@ export function MarketplacePage() {
 
       {editable ? (
         <Card className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold">Publish a pack</h2>
+          <SectionHeading title="Publish a pack" help={SECTION_HELP.publishPack} />
           <form className="space-y-3" onSubmit={(e) => void publishListing(e)}>
             <div className="grid gap-2 sm:grid-cols-2">
               <label className="space-y-1 text-xs">
                 <Label>Title</Label>
-                <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} required />
+                <Input
+                  value={form.title}
+                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                  required
+                />
               </label>
               <label className="space-y-1 text-xs">
                 <Label>Slug</Label>
-                <Input value={form.slug} onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))} placeholder="auto from title" />
+                <Input
+                  value={form.slug}
+                  onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
+                  placeholder="auto from title"
+                />
               </label>
               <label className="space-y-1 text-xs">
                 <Label>Kind</Label>
@@ -249,7 +326,9 @@ export function MarketplacePage() {
                 <Label>Visibility</Label>
                 <Select
                   value={form.visibility}
-                  onChange={(e) => setForm((f) => ({ ...f, visibility: e.target.value as typeof form.visibility }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, visibility: e.target.value as typeof form.visibility }))
+                  }
                 >
                   <option value="private">Private</option>
                   <option value="org">Organisation</option>
@@ -257,15 +336,23 @@ export function MarketplacePage() {
                 </Select>
               </label>
               <label className="space-y-1 text-xs sm:col-span-2">
-                <Label>Source chatbot (for install clone)</Label>
-                <Select value={form.chatbotId} onChange={(e) => setForm((f) => ({ ...f, chatbotId: e.target.value }))}>
-                  <option value="">None</option>
+                <Label>Source chatbot</Label>
+                <Select
+                  value={form.chatbotId}
+                  onChange={(e) => setForm((f) => ({ ...f, chatbotId: e.target.value }))}
+                  required
+                >
+                  <option value="">Select chatbot…</option>
                   {(bots.data ?? []).map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name}
                     </option>
                   ))}
                 </Select>
+                <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+                  Serializes flow, globals, templates, entities, and scenarios. Connection IDs are
+                  stripped — rebind after install.
+                </p>
               </label>
             </div>
             <Textarea
@@ -274,7 +361,7 @@ export function MarketplacePage() {
               value={form.summary}
               onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))}
             />
-            <Button type="submit" size="sm" disabled={!form.title.trim()}>
+            <Button type="submit" size="sm" disabled={!form.title.trim() || !form.chatbotId}>
               Submit listing
             </Button>
           </form>

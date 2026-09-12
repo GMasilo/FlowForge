@@ -63,6 +63,12 @@ if (!$hasBearer) {
 }
 
 $parts = explode('.', $token);
+if (Auth::looksLikePlatformApiToken($token)) {
+    $report['token'] = ['kind' => 'platform_api', 'prefix' => substr($token, 0, 14)];
+    $report['error'] = 'This is a Platform API token (ffpat_). Call GET /v1/me with it; this diagnostic endpoint only verifies session JWTs.';
+    Response::json($report, 200);
+}
+
 if (count($parts) !== 3) {
     $report['error'] = 'Token is not a JWT';
     Response::json($report, 200);

@@ -207,7 +207,7 @@ create table if not exists public.instance_webhooks (
   instance_id uuid not null references public.instances (id) on delete cascade,
   name text not null,
   url text not null,
-  secret text not null default encode(gen_random_bytes(24), 'hex'),
+  secret text not null default encode(extensions.gen_random_bytes(24), 'hex'),
   events text[] not null default '{}'::text[],
   enabled boolean not null default true,
   created_by uuid references auth.users (id) on delete set null,

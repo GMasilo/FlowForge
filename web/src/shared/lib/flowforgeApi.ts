@@ -93,6 +93,69 @@ function isPublicSessionPost(sessionId?: string): boolean {
   return !!sessionId
 }
 
+/**
+ * /http/execute returns HTTP 502 with a structured body when the *upstream*
+ * request fails (status/data/error still present). Treat that as a result,
+ * not a transport error — otherwise Preview run history loses diagnostics.
+ */
+async function postHttpExecute(
+  body: unknown,
+  init?: { signal?: AbortSignal; headers?: HeadersInit },
+): Promise<HttpExecuteResult> {
+  if (!API_BASE) {
+    throw new Error('VITE_FLOWFORGE_API_URL is not configured')
+  }
+  const res = await fetch(`${API_BASE}/http/execute`, {
+    method: 'POST',
+    headers: init?.headers ?? (await authHeaders()),
+    body: JSON.stringify(body),
+    credentials: 'omit',
+    signal: init?.signal,
+  })
+
+  let json: unknown = null
+  try {
+    json = await res.json()
+  } catch {
+    throw new Error(`HTTP execute failed (${res.status})`)
+  }
+
+  if (
+    json &&
+    typeof json === 'object' &&
+    'status' in json &&
+    typeof (json as { status: unknown }).status === 'number'
+  ) {
+    const row = json as {
+      ok?: unknown
+      status: number
+      headers?: unknown
+      data?: unknown
+      error?: unknown
+    }
+    return {
+      ok: Boolean(row.ok),
+      status: row.status,
+      headers:
+        row.headers && typeof row.headers === 'object' && !Array.isArray(row.headers)
+          ? (row.headers as Record<string, string>)
+          : {},
+      data: row.data ?? null,
+      error: typeof row.error === 'string' ? row.error : row.error == null ? null : String(row.error),
+    }
+  }
+
+  if (!res.ok) {
+    const message =
+      json && typeof json === 'object' && 'error' in json && typeof (json as { error: unknown }).error === 'string'
+        ? (json as { error: string }).error
+        : `HTTP execute failed (${res.status})`
+    throw new Error(message)
+  }
+
+  throw new Error('Unexpected HTTP execute response')
+}
+
 export async function executeHttpConnection(payload: {
   connection?: Record<string, unknown>
   connectionId?: string
@@ -124,10 +187,10 @@ export async function executeHttpConnection(payload: {
     throw new Error('connection_id or connection is required')
   }
 
-  if (isPublicSessionPost(sessionId)) {
-    return postJsonPublic<HttpExecuteResult>('/http/execute', body, { signal })
-  }
-  return postJson<HttpExecuteResult>('/http/execute', body, { signal })
+  const headers = isPublicSessionPost(sessionId)
+    ? { 'Content-Type': 'application/json' }
+    : await authHeaders()
+  return postHttpExecute(body, { signal, headers })
 }
 
 export async function sendEmailConnection(payload: {
@@ -164,6 +227,48 @@ export async function sendEmailConnection(payload: {
     return postJsonPublic<EmailSendResult>('/email/send', body, { signal })
   }
   return postJson<EmailSendResult>('/email/send', body, { signal })
+}
+
+export type DatabaseExecuteResult = {
+  ok: boolean
+  rows?: Array<Record<string, unknown>>
+  rowCount?: number
+  error?: string
+}
+
+export async function executeDatabaseConnection(payload: {
+  connection?: Record<string, unknown>
+  connectionId?: string
+  chatbotId?: string
+  instanceId?: string
+  sessionId?: string
+  sql: string
+  params?: Record<string, unknown>
+  operation?: 'query' | 'execute'
+  signal?: AbortSignal
+}): Promise<DatabaseExecuteResult> {
+  const { signal, connection, connectionId, chatbotId, instanceId, sessionId, ...rest } = payload
+
+  let body: Record<string, unknown>
+  if (connectionId) {
+    body = {
+      connection_id: connectionId,
+      chatbot_id: chatbotId,
+      ...(instanceId ? { instance_id: instanceId } : {}),
+      ...(sessionId ? { session_id: sessionId } : {}),
+      ...(!sessionId && connection ? { connection } : {}),
+      ...rest,
+    }
+  } else if (connection) {
+    body = { connection, ...rest }
+  } else {
+    throw new Error('connection_id or connection is required')
+  }
+
+  if (isPublicSessionPost(sessionId)) {
+    return postJsonPublic<DatabaseExecuteResult>('/database/execute', body, { signal })
+  }
+  return postJson<DatabaseExecuteResult>('/database/execute', body, { signal })
 }
 
 export type ConnectionTestResult = {
@@ -605,6 +710,9 @@ export async function executeIntegrationAction(payload: {
   fields: Record<string, string>
   signal?: AbortSignal
 }): Promise<IntegrationExecuteResult> {
+  if (!API_BASE) {
+    throw new Error('VITE_FLOWFORGE_API_URL is not configured')
+  }
   const body = {
     integration_id: payload.integrationId,
     instance_id: payload.instanceId,
@@ -613,23 +721,44 @@ export async function executeIntegrationAction(payload: {
     action: payload.action,
     fields: payload.fields,
   }
-  const json = payload.sessionId
-    ? await postJsonPublic<{ ok: boolean; status?: number; data?: unknown; error?: string | null }>(
-        '/integration/execute',
-        body,
-        { signal: payload.signal },
-      )
-    : await postJson<{ ok: boolean; status?: number; data?: unknown; error?: string | null }>(
-        '/integration/execute',
-        body,
-        { signal: payload.signal },
-      )
-  return {
-    ok: !!json.ok,
-    status: json.status ?? (json.ok ? 200 : 500),
-    data: json.data ?? null,
-    error: json.error ?? null,
+  const res = await fetch(`${API_BASE}/integration/execute`, {
+    method: 'POST',
+    headers: payload.sessionId
+      ? { 'Content-Type': 'application/json' }
+      : await authHeaders(),
+    body: JSON.stringify(body),
+    credentials: 'omit',
+    signal: payload.signal,
+  })
+
+  let json: unknown = null
+  try {
+    json = await res.json()
+  } catch {
+    throw new Error(`Integration execute failed (${res.status})`)
   }
+
+  if (json && typeof json === 'object') {
+    const row = json as {
+      ok?: unknown
+      status?: unknown
+      data?: unknown
+      error?: unknown
+    }
+    if ('ok' in row || 'status' in row || 'error' in row) {
+      return {
+        ok: Boolean(row.ok),
+        status: typeof row.status === 'number' ? row.status : res.status,
+        data: row.data ?? null,
+        error: typeof row.error === 'string' ? row.error : row.error == null ? null : String(row.error),
+      }
+    }
+  }
+
+  if (!res.ok) {
+    throw new Error(`Integration execute failed (${res.status})`)
+  }
+  throw new Error('Unexpected integration execute response')
 }
 
 export type { ConnectionApiContext }

@@ -1,15 +1,18 @@
-import type { ConnectionWithConfig, FlowNodeType } from '@/shared/types/database'
+import type { ConnectionWithConfig, FlowNodeType, IntegrationProvider } from '@/shared/types/database'
 import type { DesignerNode } from '@/features/designer/model/flowSchema'
 import {
   CONDITION_OPERATOR_OPTIONS,
   conditionConfigSchema,
-  getStepOutputVariable,
+  getStepOutputVariables,
   extractTemplateRefs,
   httpConfigSchema,
+  databaseConfigSchema,
   messageConfigSchema,
   OPERATION_OPTIONS,
   operationConfigSchema,
   loopConfigSchema,
+  switchConfigSchema,
+  buttonConfigSchema,
   QUESTION_ANSWER_TYPE_OPTIONS,
   DEFAULT_GENDER_CHOICES,
   DEFAULT_LIKERT_CHOICES,
@@ -42,7 +45,8 @@ import {
   readImageChoiceLayout,
   imageChoiceLabelFromFilename,
   type ImageChoiceOption,
-  setVariableConfigSchema,
+  setVariableConfigFromAssignments,
+  readSetVariableAssignments,
   variableTypes,
   ENTITY_OPERATIONS,
   entityConfigSchema,
@@ -67,8 +71,15 @@ import { parsePublishedGraph } from '@/features/designer/utils/flowPublish'
 import { connectionInfoFromRow } from '@/features/connections/connectionValidation'
 import { EntityQueryBuilder } from '@/features/designer/inspector/EntityQueryBuilder'
 import { useDesignerStore } from '@/features/designer/store/designerStore'
-import { confirmNodeDeletionMessage, planNodeDeletion } from '@/features/designer/utils/sequenceEdit'
-import { fetchChatbotEntities } from '@/features/entities/entityApi'
+import {
+  confirmNodeDeletionMessage,
+  planNodeDeletion,
+  removeSwitchCaseBranch,
+} from '@/features/designer/utils/sequenceEdit'
+import {
+  entityAllowsOperation,
+  fetchInstalledEntities,
+} from '@/features/entities/entityApi'
 import { isEntityPrimaryKey } from '@/features/entities/entityPrimaryKey'
 import { coerceEntityValue } from '@/features/entities/entityValueValidation'
 import { TemplateField, type TemplateSuggestion } from '@/features/designer/inspector/TemplateField'
@@ -81,6 +92,7 @@ import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Select } from '@/shared/ui/select'
+import { Textarea } from '@/shared/ui/textarea'
 import { FieldError } from '@/shared/ui/field-error'
 import { Button } from '@/shared/ui/button'
 import { DateTimePicker, dateTimeModeForAnswerType } from '@/shared/ui/date-time-picker'
@@ -94,6 +106,7 @@ import {
 } from '@/features/templates/TemplateInputBindings'
 import { templateKindsForAnswerType } from '@/features/templates/templateKindCompatibility'
 import { chatbotTemplatesQueryKey, fetchChatbotTemplates } from '@/features/templates/templateApi'
+import { parseTemplateContent, renderTemplateText } from '@/features/templates/templateModel'
 import {
   mediaKindOf,
   readMediaFiles,
@@ -110,6 +123,34 @@ import {
   shouldAutoApplyAnswerType,
   suggestAnswerTypes,
 } from '@/features/designer/model/flowSuggestions'
+import {
+  newSwitchCaseId,
+  parseSwitchCases,
+  switchCaseLabel,
+  type SwitchCase,
+} from '@/features/designer/model/switchStep'
+import {
+  emptyButtonListener,
+  emptyButtonOption,
+  parseButtonOptions,
+  BUTTON_LISTENER_ACTION_OPTIONS,
+  BUTTON_LISTENER_EVENT_OPTIONS,
+  type ButtonListener,
+  type ButtonOption,
+} from '@/features/designer/model/buttonStep'
+import {
+  emptyFunctionParams,
+  FLOW_FUNCTION_OPTIONS,
+  getFlowFunction,
+} from '@/features/designer/model/flowFunctions'
+import { findContinueRootIds } from '@/features/designer/utils/conditionGraph'
+import {
+  actionDef,
+  actionsForProvider,
+  defaultActionForProvider,
+} from '@/features/integrations/integrationActions'
+import { listChatbotIntegrations } from '@/features/integrations/integrationApi'
+import { providerLabel } from '@/features/integrations/integrationCatalog'
 
 const MIN_CHOICE_SLOTS = 2
 
@@ -601,31 +642,162 @@ function ChoicesSourceEditor({
   )
 }
 
+function SuggestedResponsesEditor({
+  responses,
+  responsesFrom,
+  suggestionVariable,
+  disabled,
+  suggestions,
+  onResponsesChange,
+  onResponsesFromChange,
+  onSuggestionVariableChange,
+}: {
+  responses: string[]
+  responsesFrom: string
+  suggestionVariable: string
+  disabled?: boolean
+  suggestions: TemplateSuggestion[]
+  onResponsesChange: (next: string[]) => void
+  onResponsesFromChange: (next: string) => void
+  onSuggestionVariableChange: (next: string) => void
+}) {
+  const [mode, setMode] = useState<'list' | 'array'>(() =>
+    responsesFrom.trim() ? 'array' : 'list',
+  )
+  const [slots, setSlots] = useState(() => (responses.length ? responses : ['']))
+
+  function setModeAndPersist(next: 'list' | 'array') {
+    setMode(next)
+    if (next === 'list') {
+      onResponsesFromChange('')
+      const seeded = responses.length ? responses : ['']
+      setSlots(seeded)
+      onResponsesChange(seeded.map((s) => s.trim()).filter(Boolean))
+    }
+  }
+
+  function commitSlots(next: string[]) {
+    setSlots(next)
+    onResponsesChange(next.map((s) => s.trim()).filter(Boolean))
+  }
+
+  return (
+    <div className="mt-4 space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-3">
+      <div>
+        <Label>Suggested responses</Label>
+        <p className="mt-0.5 text-[11px] text-[var(--color-ink-muted)]">
+          Quick-reply chips under this message. Visitors can tap one or type their own reply.
+        </p>
+      </div>
+      <div>
+        <Label>Source</Label>
+        <Select
+          disabled={disabled}
+          value={mode}
+          onChange={(e) => setModeAndPersist(e.target.value as 'list' | 'array')}
+        >
+          <option value="list">Option list</option>
+          <option value="array">Array / variable</option>
+        </Select>
+      </div>
+      {mode === 'list' ? (
+        <div className="space-y-2">
+          {slots.map((value, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <Input
+                disabled={disabled}
+                value={value}
+                placeholder={`Suggestion ${index + 1}`}
+                onChange={(e) => {
+                  const next = slots.map((s, i) => (i === index ? e.target.value : s))
+                  commitSlots(next)
+                }}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={disabled || slots.length <= 1}
+                onClick={() => commitSlots(slots.filter((_, i) => i !== index))}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={disabled}
+            onClick={() => commitSlots([...slots, ''])}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add suggestion
+          </Button>
+        </div>
+      ) : (
+        <div>
+          <Label>Array or variable</Label>
+          <TemplateField
+            disabled={disabled}
+            value={responsesFrom}
+            onChange={onResponsesFromChange}
+            suggestions={suggestions}
+            placeholder='{{vars.options}} or array of strings'
+          />
+        </div>
+      )}
+      <div>
+        <Label>Store reply in variable</Label>
+        <Input
+          disabled={disabled}
+          value={suggestionVariable}
+          placeholder="intent"
+          onChange={(e) => onSuggestionVariableChange(e.target.value.trim())}
+        />
+        <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+          Optional. Use {'{{vars.intent}}'} or {'{{steps.welcome.suggestion}}'} on later steps.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function StepRunSettings({
   config,
   nodeType,
   readOnly,
   isFlowStart,
   patchConfig,
+  stepOptions,
+  suggestions,
 }: {
   config: Record<string, unknown>
   nodeType: FlowNodeType
   readOnly?: boolean
   isFlowStart: boolean
   patchConfig: (partial: Record<string, unknown>) => void
+  stepOptions: Array<{ key: string; label: string }>
+  suggestions: TemplateSuggestion[]
 }) {
   const runAfter = readRunAfter(config)
   const delaySeconds = readDelaySeconds(config)
   const timeoutSeconds = readTimeoutSeconds(config)
+  const runAfterSkipTo = String(config.runAfterSkipTo ?? '').trim()
+  const onRun = String(config.onRun ?? '')
   const answerRequired = isAnswerRequired(config)
   const timeoutApplies =
     nodeType === 'http' ||
     nodeType === 'email' ||
+    nodeType === 'database' ||
+    nodeType === 'integration' ||
     (nodeType === 'question' && !answerRequired)
   const timeoutDisabled = readOnly || !timeoutApplies || (nodeType === 'question' && answerRequired)
   const nonDefault =
     delaySeconds > 0 ||
     timeoutSeconds > 0 ||
+    !!runAfterSkipTo ||
+    !!onRun.trim() ||
     (!isFlowStart &&
       (runAfter.failed || runAfter.skipped || runAfter.timedOut || runAfter.succeeded === false))
   const runAfterDisabled = readOnly || isFlowStart
@@ -643,7 +815,7 @@ function StepRunSettings({
       <div>
         <h3 className="text-sm font-semibold text-slate-800">Settings</h3>
         <p className="text-[11px] text-[var(--color-ink-muted)]">
-          Delay{isFlowStart ? '' : ', run after,'} and timeout for this step.
+          Delay{isFlowStart ? '' : ', run after,'}, silent on-run expressions, and timeout for this step.
           {nonDefault ? (
             <span className="ml-1 font-medium text-teal-800">Customized</span>
           ) : null}
@@ -669,6 +841,22 @@ function StepRunSettings({
         </p>
       </div>
 
+      <div>
+        <Label>On run (expressions)</Label>
+        <TemplateField
+          disabled={readOnly}
+          multiline
+          value={onRun}
+          onChange={(v) => patchConfig({ onRun: v })}
+          suggestions={suggestions}
+          placeholder={'{{setCookie("email", vars.email)}}\n{{setVar("seen_welcome", true)}}'}
+        />
+        <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+          Runs when this step executes. Side effects only — nothing is shown in chat (unlike Message text).
+          Use {'{{setCookie(...)}}'}, {'{{setVar(...)}}'}, or one bare expression per line.
+        </p>
+      </div>
+
       <div className={!timeoutApplies || (nodeType === 'question' && answerRequired) ? 'opacity-60' : undefined}>
         <Label htmlFor="step-timeout">Timeout (seconds)</Label>
         <Input
@@ -684,13 +872,13 @@ function StepRunSettings({
           }}
         />
         <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
-          {nodeType === 'http' || nodeType === 'email'
+          {nodeType === 'http' || nodeType === 'email' || nodeType === 'database' || nodeType === 'integration'
             ? 'Abort the request if it takes longer. On timeout, status is Timed out (default 0 = none).'
             : nodeType === 'question' && answerRequired
               ? 'Available when the answer is Optional — times out while waiting for a reply.'
               : nodeType === 'question'
                 ? 'While waiting for an optional answer. On timeout, status is Timed out (0 = none).'
-                : 'Only applies to HTTP, email, and optional questions.'}
+                : 'Only applies to HTTP, email, database, integration, and optional questions.'}
         </p>
       </div>
 
@@ -726,10 +914,32 @@ function StepRunSettings({
           ))}
         </ul>
         {!isFlowStart ? (
-          <p className="mt-2 text-[10px] leading-snug text-slate-500">
-            If the previous status isn’t checked, this step is skipped and the flow continues (so a later
-            step can run after “is skipped” or “has timed out”).
-          </p>
+          <>
+            <p className="mt-2 text-[10px] leading-snug text-slate-500">
+              If the previous status isn’t checked, this step is skipped and the flow continues (so a later
+              step can run after “is skipped” or “has timed out”).
+            </p>
+            <div className="mt-3">
+              <Label htmlFor="run-after-skip-to">When skipped, go to step</Label>
+              <Select
+                id="run-after-skip-to"
+                disabled={readOnly}
+                value={runAfterSkipTo}
+                onChange={(e) => patchConfig({ runAfterSkipTo: e.target.value })}
+              >
+                <option value="">Next step (default)</option>
+                {stepOptions.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label} ({s.key})
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+                Jump here when the previous outcome is not selected above — e.g. previous failed → recovery
+                step.
+              </p>
+            </div>
+          </>
         ) : null}
       </div>
     </div>
@@ -744,6 +954,646 @@ interface StepInspectorProps {
   readOnly?: boolean
   /** Soft lock held by another collaborator (first click wins) */
   lockedBy?: { name: string; color: string; waitingHint?: string } | null
+}
+
+function findSignInAttributeByAliases(
+  attrs: { key: string; label?: string | null }[],
+  aliases: string[],
+): { key: string; label?: string | null } | undefined {
+  const normalized = aliases.map((a) => a.toLowerCase())
+  return (
+    attrs.find((a) => normalized.includes(a.key.toLowerCase())) ??
+    attrs.find((a) => normalized.includes((a.label ?? '').trim().toLowerCase()))
+  )
+}
+
+function formatSignInAttributeOption(a: { key: string; label?: string | null; value_type?: string }): string {
+  const label = a.label?.trim()
+  const base = !label || label.toLowerCase() === a.key.toLowerCase() ? a.key : `${label} · ${a.key}`
+  return a.value_type === 'password' ? `${base} (hashed)` : base
+}
+
+function SignInStepFields({
+  node,
+  chatbotId,
+  connections,
+  readOnly,
+  patchConfig,
+}: {
+  node: DesignerNode
+  chatbotId?: string
+  connections: ConnectionWithConfig[]
+  readOnly: boolean
+  patchConfig: (partial: Record<string, unknown>) => void
+}) {
+  const { instance } = useRequiredInstance()
+  const mode = String(node.config.mode ?? 'http')
+  const httpConnections = connections.filter((c) => c.kind === 'http')
+  const emailConnections = connections.filter((c) => c.kind === 'email')
+  const entityId = String(node.config.entityId ?? '').trim()
+  const ssoTemplateKey = String(node.config.ssoTemplateKey ?? '').trim()
+
+  const templatesQuery = useQuery({
+    queryKey: chatbotId ? chatbotTemplatesQueryKey(chatbotId) : ['chatbot-templates', 'none'],
+    enabled: !!chatbotId && mode === 'sso',
+    queryFn: () => fetchChatbotTemplates(chatbotId!),
+  })
+  const ssoTemplates = useMemo(
+    () => (templatesQuery.data ?? []).filter((t) => t.kind === 'sso'),
+    [templatesQuery.data],
+  )
+  const selectedSsoSummary = useMemo(() => {
+    const row = ssoTemplates.find((t) => t.key === ssoTemplateKey)
+    if (!row) return null
+    return renderTemplateText('sso', parseTemplateContent('sso', row.content))
+  }, [ssoTemplates, ssoTemplateKey])
+  const instanceIdForLink = instance.id
+
+  const entitiesQuery = useQuery({
+    queryKey: ['chatbot-entities', chatbotId],
+    enabled: !!chatbotId && mode === 'entity',
+    queryFn: () => fetchInstalledEntities(chatbotId!),
+    refetchOnMount: 'always',
+  })
+
+  const ownedEntities = useMemo(
+    () => (entitiesQuery.data ?? []).filter((e) => e.owned),
+    [entitiesQuery.data],
+  )
+  const installedSharedEntities = useMemo(
+    () => (entitiesQuery.data ?? []).filter((e) => !e.owned),
+    [entitiesQuery.data],
+  )
+  const selectedEntity = useMemo(
+    () => (entitiesQuery.data ?? []).find((e) => e.id === entityId),
+    [entitiesQuery.data, entityId],
+  )
+  // Prefer hydrated attributes from chatbot-entities (invalidated when Data tab changes schema).
+  const attributeOptions = useMemo(
+    () =>
+      (selectedEntity?.attributes ?? []).map((a) => ({
+        key: a.key,
+        label: a.label,
+        value_type: a.value_type,
+      })),
+    [selectedEntity?.attributes],
+  )
+  const attributeKeys = useMemo(() => new Set(attributeOptions.map((a) => a.key)), [attributeOptions])
+
+  const emailAttr = String(node.config.entityEmailAttribute ?? 'email').trim() || 'email'
+  const passwordAttr = String(node.config.entityPasswordAttribute ?? 'password').trim() || 'password'
+  const userIdAttr = String(node.config.entityUserIdAttribute ?? 'id').trim() || 'id'
+
+  // Remap defaults / stale keys onto real columns (e.g. Password vs password, label-only matches).
+  useEffect(() => {
+    if (readOnly || mode !== 'entity' || !entityId || !attributeOptions.length) return
+    const patch: Record<string, unknown> = {}
+
+    if (!attributeKeys.has(emailAttr)) {
+      const found =
+        attributeOptions.find((a) => a.key.toLowerCase() === emailAttr.toLowerCase()) ??
+        findSignInAttributeByAliases(attributeOptions, [
+          'email',
+          'e_mail',
+          'mail',
+          'username',
+          'user_name',
+          'login',
+        ])
+      if (found) patch.entityEmailAttribute = found.key
+    }
+
+    if (!attributeKeys.has(passwordAttr)) {
+      const found =
+        attributeOptions.find((a) => a.value_type === 'password') ??
+        attributeOptions.find((a) => a.key.toLowerCase() === passwordAttr.toLowerCase()) ??
+        findSignInAttributeByAliases(attributeOptions, [
+          'password',
+          'pass',
+          'passwd',
+          'pwd',
+          'secret',
+        ])
+      if (found) patch.entityPasswordAttribute = found.key
+    }
+
+    if (userIdAttr !== 'id' && !attributeKeys.has(userIdAttr)) {
+      const found =
+        attributeOptions.find((a) => a.key.toLowerCase() === userIdAttr.toLowerCase()) ??
+        findSignInAttributeByAliases(attributeOptions, ['user_id', 'userid', 'uid'])
+      if (found) patch.entityUserIdAttribute = found.key
+    }
+
+    if (Object.keys(patch).length) patchConfig(patch)
+  }, [
+    attributeKeys,
+    attributeOptions,
+    emailAttr,
+    entityId,
+    mode,
+    passwordAttr,
+    patchConfig,
+    readOnly,
+    userIdAttr,
+  ])
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label>Prompt</Label>
+        <Input
+          disabled={readOnly}
+          value={String(node.config.prompt ?? '')}
+          onChange={(e) => patchConfig({ prompt: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label>Source</Label>
+        <Select
+          disabled={readOnly}
+          value={mode}
+          onChange={(e) => patchConfig({ mode: e.target.value })}
+        >
+          <option value="http">HTTP verify</option>
+          <option value="entity">Entity lookup</option>
+          <option value="password">Password (+ optional HTTP)</option>
+          <option value="otp">OTP email code</option>
+          <option value="sso">SSO (OIDC / SAML template)</option>
+          <option value="sign_out">Sign out</option>
+        </Select>
+        <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+          Choose how visitors sign in: HTTP API, entity records, password, OTP email, SSO, or clear
+          the session (Sign out).
+        </p>
+      </div>
+      {mode !== 'sign_out' ? (
+        <div className="flex items-start gap-2">
+          <input
+            id={`sign-in-skip-${node.id}`}
+            type="checkbox"
+            className="mt-1"
+            disabled={readOnly}
+            checked={node.config.skipIfSignedIn !== false}
+            onChange={(e) => patchConfig({ skipIfSignedIn: e.target.checked })}
+          />
+          <div>
+            <Label htmlFor={`sign-in-skip-${node.id}`}>Skip if already signed in</Label>
+            <p className="mt-0.5 text-[11px] text-[var(--color-ink-muted)]">
+              When <code>{'{{vars._signed_in}}'}</code> is set, continue on Success without showing
+              the form. Uncheck to force re-authentication.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p className="rounded-lg border border-[var(--color-border)]/60 bg-[var(--color-surface-2)]/50 px-3 py-2 text-[11px] text-[var(--color-ink-muted)]">
+          Clears email / user id / token / profile variables and sets{' '}
+          <code>{'{{vars._signed_in}}'}</code> to false, then takes the Success edge.
+        </p>
+      )}
+      {mode === 'sso' ? (
+        <>
+          <div>
+            <Label>SSO template</Label>
+            <Select
+              disabled={readOnly || !chatbotId}
+              value={String(node.config.ssoTemplateKey ?? '')}
+              onChange={(e) => patchConfig({ ssoTemplateKey: e.target.value })}
+            >
+              <option value="">Select…</option>
+              {ssoTemplates.map((t) => (
+                <option key={t.id} value={t.key}>
+                  {t.name} ({t.key})
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              Create an <strong>SSO / IdP</strong> template under Templates, then select it here. IdP
+              URLs, claims, and button label live on that template — not on this step.
+              {!ssoTemplates.length && chatbotId ? (
+                <>
+                  {' '}
+                  <Link
+                    className="text-[var(--color-accent)] underline"
+                    to={`/instances/${instanceIdForLink}/chatbots/${chatbotId}/templates`}
+                  >
+                    Open Templates
+                  </Link>
+                </>
+              ) : null}
+            </p>
+          </div>
+          {selectedSsoSummary ? (
+            <p className="rounded-lg border border-[var(--color-border)]/60 bg-[var(--color-surface-2)]/50 px-3 py-2 text-[11px] text-[var(--color-ink-muted)]">
+              {selectedSsoSummary}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+      {mode === 'entity' ? (
+        <>
+          <div>
+            <Label>Entity</Label>
+            <Select
+              disabled={readOnly || !chatbotId}
+              value={entityId}
+              onChange={(e) =>
+                patchConfig({
+                  entityId: e.target.value,
+                  entityEmailAttribute: 'email',
+                  entityPasswordAttribute: 'password',
+                  entityUserIdAttribute: 'id',
+                })
+              }
+            >
+              <option value="">Select…</option>
+              {ownedEntities.length ? (
+                <optgroup label="This chatbot">
+                  {ownedEntities.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} ({e.kind})
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {installedSharedEntities.length ? (
+                <optgroup label="Installed / shared">
+                  {installedSharedEntities.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} ({e.kind})
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+            </Select>
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              Looks up a record by email attribute and checks the password attribute. Use attribute
+              type <strong>password</strong> so values are hashed at rest. Requires Get access on the
+              entity.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <Label>Email attribute</Label>
+              <Select
+                disabled={readOnly || !entityId}
+                value={emailAttr}
+                onChange={(e) => patchConfig({ entityEmailAttribute: e.target.value })}
+              >
+                {!attributeKeys.has(emailAttr) ? <option value={emailAttr}>{emailAttr}</option> : null}
+                {attributeOptions.map((a) => (
+                  <option key={a.key} value={a.key}>
+                    {formatSignInAttributeOption(a)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label>Password attribute</Label>
+              <Select
+                disabled={readOnly || !entityId}
+                value={passwordAttr}
+                onChange={(e) => patchConfig({ entityPasswordAttribute: e.target.value })}
+              >
+                {!attributeKeys.has(passwordAttr) ? (
+                  <option value={passwordAttr}>{passwordAttr}</option>
+                ) : null}
+                {attributeOptions.map((a) => (
+                  <option key={a.key} value={a.key}>
+                    {formatSignInAttributeOption(a)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          <div>
+            <Label>User id attribute</Label>
+            <Select
+              disabled={readOnly || !entityId}
+              value={userIdAttr}
+              onChange={(e) => patchConfig({ entityUserIdAttribute: e.target.value })}
+            >
+              <option value="id">id (primary key)</option>
+              {attributeOptions
+                .filter((a) => a.key !== 'id')
+                .map((a) => (
+                  <option key={a.key} value={a.key}>
+                    {formatSignInAttributeOption(a)}
+                  </option>
+                ))}
+            </Select>
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              On success, the matched record (without password) is stored in the profile variable.
+            </p>
+          </div>
+          <div>
+            <Label>Max attempts</Label>
+            <Input
+              disabled={readOnly}
+              type="number"
+              min={1}
+              max={20}
+              value={node.config.maxAttempts != null ? String(node.config.maxAttempts) : '5'}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                patchConfig({
+                  maxAttempts: Number.isFinite(n) ? Math.max(1, Math.min(20, Math.round(n))) : 5,
+                })
+              }}
+            />
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              Incorrect logins stay on this step and show attempts left, then take the Fail edge.
+            </p>
+          </div>
+        </>
+      ) : null}
+      {mode === 'http' || mode === 'password' ? (
+        <>
+          <div>
+            <Label>HTTP connection</Label>
+            <Select
+              disabled={readOnly}
+              value={String(node.config.connectionId ?? '')}
+              onChange={(e) => patchConfig({ connectionId: e.target.value })}
+            >
+              <option value="">{mode === 'password' ? 'None (capture only)' : 'Select…'}</option>
+              {httpConnections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>Path</Label>
+            <Input
+              disabled={readOnly}
+              value={String(node.config.path ?? '/')}
+              onChange={(e) => patchConfig({ path: e.target.value })}
+              placeholder="/auth/login"
+            />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <Label>Email field name</Label>
+              <Input
+                disabled={readOnly || !!String(node.config.requestBody ?? '').trim()}
+                value={String(node.config.requestEmailKey ?? 'email')}
+                onChange={(e) => patchConfig({ requestEmailKey: e.target.value })}
+                placeholder="email"
+              />
+            </div>
+            <div>
+              <Label>Password field name</Label>
+              <Input
+                disabled={readOnly || !!String(node.config.requestBody ?? '').trim()}
+                value={String(node.config.requestPasswordKey ?? 'password')}
+                onChange={(e) => patchConfig({ requestPasswordKey: e.target.value })}
+                placeholder="password"
+              />
+            </div>
+          </div>
+          <div>
+            <Label>Request body (optional JSON)</Label>
+            <Textarea
+              disabled={readOnly}
+              rows={3}
+              value={String(node.config.requestBody ?? '')}
+              onChange={(e) => patchConfig({ requestBody: e.target.value })}
+              placeholder={`{"username":"{{email}}","pass":"{{password}}"}`}
+              className="font-mono text-xs"
+            />
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              Leave blank to send{' '}
+              <code>
+                {'{'}
+                {String(node.config.requestEmailKey ?? 'email') || 'email'}: …,{' '}
+                {String(node.config.requestPasswordKey ?? 'password') || 'password'}: …{'}'}
+              </code>
+              . Or map your API with <code>{'{{email}}'}</code> and <code>{'{{password}}'}</code> inside
+              JSON string values.
+            </p>
+          </div>
+          <div>
+            <Label>Max attempts</Label>
+            <Input
+              disabled={readOnly}
+              type="number"
+              min={1}
+              max={20}
+              value={node.config.maxAttempts != null ? String(node.config.maxAttempts) : '5'}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                patchConfig({
+                  maxAttempts: Number.isFinite(n) ? Math.max(1, Math.min(20, Math.round(n))) : 5,
+                })
+              }}
+            />
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              {mode === 'password' && !String(node.config.connectionId ?? '').trim()
+                ? 'Only applies when an HTTP connection is selected for verification.'
+                : 'Incorrect logins stay on this step and show attempts left, then take the Fail edge.'}
+            </p>
+          </div>
+        </>
+      ) : null}
+      {mode === 'otp' ? (
+        <>
+          <div>
+            <Label>Email connection (OTP)</Label>
+            <Select
+              disabled={readOnly}
+              value={String(node.config.connectionId ?? '')}
+              onChange={(e) => patchConfig({ connectionId: e.target.value })}
+            >
+              <option value="">Select…</option>
+              {emailConnections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              Visitor enters email first, then we send a code to that address.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <Label>OTP length</Label>
+              <Input
+                disabled={readOnly}
+                type="number"
+                min={4}
+                max={12}
+                value={node.config.otpLength != null ? String(node.config.otpLength) : '6'}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  patchConfig({
+                    otpLength: Number.isFinite(n) ? Math.max(4, Math.min(12, Math.round(n))) : 6,
+                  })
+                }}
+              />
+            </div>
+            <div>
+              <Label>Max attempts</Label>
+              <Input
+                disabled={readOnly}
+                type="number"
+                min={1}
+                max={20}
+                value={node.config.otpMaxAttempts != null ? String(node.config.otpMaxAttempts) : '5'}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  patchConfig({
+                    otpMaxAttempts: Number.isFinite(n) ? Math.max(1, Math.min(20, Math.round(n))) : 5,
+                  })
+                }}
+              />
+              <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+                Wrong codes stay on this step until attempts run out, then Fail.
+              </p>
+            </div>
+          </div>
+          <div>
+            <Label>Email subject</Label>
+            <Input
+              disabled={readOnly}
+              value={String(node.config.otpSubject ?? 'Your sign-in code')}
+              onChange={(e) => patchConfig({ otpSubject: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Email body</Label>
+            <Textarea
+              disabled={readOnly}
+              rows={3}
+              value={String(node.config.otpBody ?? 'Your verification code is {{otp.code}}.')}
+              onChange={(e) => patchConfig({ otpBody: e.target.value })}
+            />
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              Include <code>{'{{otp.code}}'}</code> in the body.
+            </p>
+          </div>
+        </>
+      ) : null}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div>
+          <Label>User id variable</Label>
+          <Input
+            disabled={readOnly}
+            value={String(node.config.userIdVariable ?? 'user_id')}
+            onChange={(e) => patchConfig({ userIdVariable: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label>Token variable</Label>
+          <Input
+            disabled={readOnly}
+            value={String(node.config.tokenVariable ?? 'auth_token')}
+            onChange={(e) => patchConfig({ tokenVariable: e.target.value })}
+          />
+        </div>
+      </div>
+      {(mode === 'http' || (mode === 'password' && String(node.config.connectionId ?? '').trim())) && (
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div>
+            <Label>User id path</Label>
+            <Input
+              disabled={readOnly}
+              value={String(node.config.userIdPath ?? 'user.id')}
+              onChange={(e) => patchConfig({ userIdPath: e.target.value })}
+              placeholder="user.id"
+            />
+          </div>
+          <div>
+            <Label>Token path</Label>
+            <Input
+              disabled={readOnly}
+              value={String(node.config.tokenPath ?? 'token')}
+              onChange={(e) => patchConfig({ tokenPath: e.target.value })}
+              placeholder="token"
+            />
+          </div>
+          <div>
+            <Label>Profile path</Label>
+            <Input
+              disabled={readOnly}
+              value={String(node.config.profilePath ?? 'user')}
+              onChange={(e) => patchConfig({ profilePath: e.target.value })}
+              placeholder="user"
+            />
+          </div>
+        </div>
+      )}
+      <p className="text-[11px] text-[var(--color-ink-muted)]">
+        Wire Success / Fail edges from this step (handles <code>success</code> and <code>fail</code>
+        ).
+        {mode === 'entity'
+          ? ' Entity mode stores the matched record as the profile (password field omitted).'
+          : mode === 'sso'
+            ? ' SSO maps IdP claims into the email / user id / profile variables.'
+            : ' Response paths map fields from the HTTP JSON into variables.'}
+      </p>
+    </div>
+  )
+}
+
+function HandoffStepFields({
+  node,
+  instanceId,
+  readOnly,
+  patchConfig,
+}: {
+  node: DesignerNode
+  instanceId: string
+  readOnly: boolean
+  patchConfig: (partial: Record<string, unknown>) => void
+}) {
+  const queues = useQuery({
+    queryKey: ['agent-queues', instanceId],
+    enabled: !!instanceId,
+    queryFn: async () => {
+      await supabase.rpc('ensure_default_agent_queue', { p_instance_id: instanceId })
+      const { data, error } = await supabase
+        .from('agent_queues')
+        .select('id, name, is_default')
+        .eq('instance_id', instanceId)
+        .order('name')
+      if (error) throw error
+      return data ?? []
+    },
+  })
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label>Message while waiting</Label>
+        <Input
+          disabled={readOnly}
+          value={String(node.config.message ?? '')}
+          onChange={(e) => patchConfig({ message: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label>Queue</Label>
+        <Select
+          disabled={readOnly || queues.isLoading}
+          value={String(node.config.queueId ?? '')}
+          onChange={(e) => patchConfig({ queueId: e.target.value })}
+        >
+          <option value="">Default queue</option>
+          {(queues.data ?? []).map((q) => (
+            <option key={q.id} value={q.id}>
+              {q.name}
+              {q.is_default ? ' (default)' : ''}
+            </option>
+          ))}
+        </Select>
+        <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+          Configure queues, skills, and auto-assign under Agent console.
+        </p>
+      </div>
+    </div>
+  )
 }
 
 function TransferStepFields({
@@ -900,16 +1750,38 @@ function TransferStepFields({
   }, [targetMeta.data?.globalKeys, targetMeta.data?.steps, mappings, required])
 
   const targetStillValid =
+    cfg.returnToPrevious ||
     !cfg.targetChatbotId ||
     siblings.isLoading ||
     (siblings.data ?? []).some((b) => b.id === cfg.targetChatbotId)
 
   return (
     <div className="space-y-3">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          disabled={readOnly}
+          checked={cfg.returnToPrevious}
+          onChange={(e) =>
+            patchConfig({
+              returnToPrevious: e.target.checked,
+              ...(e.target.checked ? { targetChatbotId: '' } : {}),
+            })
+          }
+        />
+        Return to previous chatbot
+      </label>
+      {cfg.returnToPrevious ? (
+        <p className="text-[11px] text-[var(--color-ink-muted)]">
+          Uses {'{{vars._transferred_from}}'} set by an earlier transfer. Fails if this conversation
+          was not transferred in.
+        </p>
+      ) : null}
+
       <div>
         <Label>Target chatbot</Label>
         <Select
-          disabled={readOnly || siblings.isLoading}
+          disabled={readOnly || siblings.isLoading || cfg.returnToPrevious}
           value={cfg.targetChatbotId}
           onChange={(e) =>
             patchConfig({
@@ -918,7 +1790,7 @@ function TransferStepFields({
             })
           }
         >
-          <option value="">Select chatbot…</option>
+          <option value="">{cfg.returnToPrevious ? 'Previous bot (runtime)' : 'Select chatbot…'}</option>
           {(siblings.data ?? []).map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
@@ -948,15 +1820,23 @@ function TransferStepFields({
         <Label>Start at step</Label>
         <Select
           disabled={readOnly || !cfg.targetChatbotId || targetMeta.isLoading || !targetStillValid}
-          value={cfg.startNodeKey}
+          value={
+            (targetMeta.data?.steps ?? []).some(
+              (s) => s.key === cfg.startNodeKey && s.type !== 'end',
+            )
+              ? cfg.startNodeKey
+              : ''
+          }
           onChange={(e) => patchConfig({ startNodeKey: e.target.value })}
         >
           <option value="">Entry / first step</option>
-          {(targetMeta.data?.steps ?? []).map((s) => (
-            <option key={s.key} value={s.key}>
-              {s.label} ({s.key})
-            </option>
-          ))}
+          {(targetMeta.data?.steps ?? [])
+            .filter((s) => s.type !== 'end')
+            .map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label} ({s.key})
+              </option>
+            ))}
         </Select>
       </div>
 
@@ -1382,6 +2262,165 @@ function HttpStepFields({
   )
 }
 
+function DatabaseStepFields({
+  node,
+  connections,
+  readOnly,
+  patchConfig,
+  suggestions,
+}: {
+  node: DesignerNode
+  connections: ConnectionWithConfig[]
+  readOnly?: boolean
+  patchConfig: (partial: Record<string, unknown>) => void
+  suggestions: TemplateSuggestion[]
+}) {
+  const selectedId = String(node.config.connectionId ?? '')
+  const dbRows = connections.filter((c) => c.kind === 'database')
+  const paramValues = paramValuesOf(node.config)
+  const paramEntries = Object.entries(paramValues)
+  const operation = String(node.config.operation ?? 'query') === 'execute' ? 'execute' : 'query'
+
+  function setParamEntries(next: Array<[string, string]>) {
+    const out: Record<string, string> = {}
+    for (const [key, value] of next) {
+      const trimmed = key.trim().replace(/^:/, '')
+      if (!trimmed) continue
+      out[trimmed] = value
+    }
+    patchConfig({ paramValues: out })
+  }
+
+  return (
+    <>
+      <div>
+        <Label>Connection</Label>
+        <Select
+          disabled={readOnly}
+          value={selectedId}
+          onChange={(e) => patchConfig({ connectionId: e.target.value })}
+        >
+          <option value="">Select…</option>
+          {selectedId && !dbRows.some((c) => c.id === selectedId) ? (
+            <option value={selectedId}>Selected connection (loading…)</option>
+          ) : null}
+          {dbRows.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
+        {!dbRows.length ? (
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Add a Database connection under Connections (PostgreSQL, MySQL, SQL Server, or SQLite).
+          </p>
+        ) : null}
+      </div>
+
+      <div>
+        <Label>Operation</Label>
+        <Select
+          disabled={readOnly}
+          value={operation}
+          onChange={(e) =>
+            patchConfig(databaseConfigSchema.parse({ ...node.config, operation: e.target.value }))
+          }
+        >
+          <option value="query">Query (return rows)</option>
+          <option value="execute">Execute (insert / update / delete)</option>
+        </Select>
+      </div>
+
+      <div>
+        <Label>SQL</Label>
+        <TemplateField
+          disabled={readOnly}
+          multiline
+          value={String(node.config.sql ?? '')}
+          onChange={(v) => patchConfig({ sql: v })}
+          placeholder="SELECT id, name FROM customers WHERE email = :email"
+          suggestions={suggestions}
+        />
+        <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+          Use named placeholders like <code>:email</code>. Bind values below — do not splice {'{{vars}}'} into the SQL text.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <Label>Parameters</Label>
+          {!readOnly ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setParamEntries([...paramEntries, ['', '']])}
+            >
+              Add parameter
+            </Button>
+          ) : null}
+        </div>
+        {paramEntries.length ? (
+          paramEntries.map(([key, value], index) => (
+            <div key={`db-param-${index}`} className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+              <Input
+                disabled={readOnly}
+                value={key}
+                placeholder="email"
+                onChange={(e) => {
+                  const next = [...paramEntries]
+                  next[index] = [e.target.value, value]
+                  setParamEntries(next)
+                }}
+              />
+              <TemplateField
+                disabled={readOnly}
+                value={value}
+                onChange={(v) => {
+                  const next = [...paramEntries]
+                  next[index] = [key, v]
+                  setParamEntries(next)
+                }}
+                placeholder="{{vars.email}}"
+                suggestions={suggestions}
+              />
+              {!readOnly ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setParamEntries(paramEntries.filter((_, i) => i !== index))}
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+          ))
+        ) : (
+          <p className="text-[11px] text-[var(--color-ink-muted)]">No parameters yet.</p>
+        )}
+      </div>
+
+      <VariableAssignField
+        label="Output variable"
+        value={String(node.config.outputVariable ?? '')}
+        onChange={(v) => patchConfig({ outputVariable: v })}
+        nodeId={node.id}
+        readOnly={readOnly}
+        placeholder="dbResult"
+        valueType="object"
+      />
+      <p className="text-[11px] text-[var(--color-ink-muted)]">
+        Result shape: {'{{vars.'}
+        {String(node.config.outputVariable || 'dbResult').trim() || 'dbResult'}
+        {'.rows}}'} and {'{{vars.'}
+        {String(node.config.outputVariable || 'dbResult').trim() || 'dbResult'}
+        {'.rowCount}}'}.
+      </p>
+    </>
+  )
+}
+
 function EmailStepFields({
   node,
   connections,
@@ -1544,6 +2583,205 @@ function EmailStepFields({
   )
 }
 
+function integrationFieldValuesOf(config: Record<string, unknown>): Record<string, string> {
+  const raw =
+    config.fieldValues && typeof config.fieldValues === 'object' && !Array.isArray(config.fieldValues)
+      ? (config.fieldValues as Record<string, unknown>)
+      : config.params && typeof config.params === 'object' && !Array.isArray(config.params)
+        ? (config.params as Record<string, unknown>)
+        : {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw)) {
+    out[k] = String(v ?? '')
+  }
+  return out
+}
+
+function IntegrationStepFields({
+  node,
+  instanceId,
+  chatbotId,
+  readOnly,
+  patchConfig,
+  suggestions,
+}: {
+  node: DesignerNode
+  instanceId: string
+  chatbotId?: string
+  readOnly?: boolean
+  patchConfig: (partial: Record<string, unknown>) => void
+  suggestions: TemplateSuggestion[]
+}) {
+  const integrationsQuery = useQuery({
+    queryKey: ['chatbot-integrations', chatbotId],
+    queryFn: () => listChatbotIntegrations(chatbotId!),
+    enabled: !!chatbotId,
+  })
+  const integrations = integrationsQuery.data ?? []
+  const selectedId = String(node.config.integrationId ?? '')
+  const selected = integrations.find((row) => row.id === selectedId)
+  const provider = (selected?.provider ??
+    (typeof node.config.provider === 'string' ? node.config.provider : '')) as IntegrationProvider | ''
+  const availableActions = actionsForProvider(provider || null)
+  const actionId = String(node.config.action ?? '')
+  const selectedAction = actionDef(actionId) ?? availableActions[0]
+  const fieldValues = integrationFieldValuesOf(node.config)
+  const outputVariable = String(
+    node.config.outputVariable ?? node.config.resultVariable ?? '',
+  )
+
+  function selectIntegration(integrationId: string) {
+    const row = integrations.find((i) => i.id === integrationId)
+    if (!row) {
+      patchConfig({ integrationId })
+      return
+    }
+    const nextAction = defaultActionForProvider(row.provider)
+    const def = actionDef(nextAction)
+    const seeded: Record<string, string> = { ...fieldValues }
+    for (const field of def?.fields ?? []) {
+      if (!(field.key in seeded)) seeded[field.key] = ''
+    }
+    patchConfig({
+      integrationId,
+      provider: row.provider,
+      action: nextAction,
+      fieldValues: seeded,
+      outputVariable,
+    })
+  }
+
+  function selectAction(nextAction: string) {
+    const def = actionDef(nextAction)
+    const seeded: Record<string, string> = { ...fieldValues }
+    for (const field of def?.fields ?? []) {
+      if (!(field.key in seeded)) seeded[field.key] = ''
+    }
+    patchConfig({
+      action: nextAction,
+      fieldValues: seeded,
+    })
+  }
+
+  function setField(key: string, value: string) {
+    patchConfig({
+      fieldValues: { ...fieldValues, [key]: value },
+    })
+  }
+
+  return (
+    <>
+      <div>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <Label>Integration</Label>
+          {chatbotId ? (
+            <Link
+              to={`/instances/${instanceId}/chatbots/${chatbotId}/data`}
+              className="text-[11px] font-medium text-teal-700 hover:underline"
+            >
+              Manage on Data tab
+            </Link>
+          ) : (
+            <Link
+              to={`/instances/${instanceId}/integrations`}
+              className="text-[11px] font-medium text-teal-700 hover:underline"
+            >
+              Manage integrations
+            </Link>
+          )}
+        </div>
+        <Select
+          disabled={readOnly || integrationsQuery.isLoading || !chatbotId}
+          value={selectedId}
+          onChange={(e) => selectIntegration(e.target.value)}
+        >
+          <option value="">
+            {!chatbotId
+              ? 'Open a chatbot…'
+              : integrationsQuery.isLoading
+                ? 'Loading…'
+                : 'Select…'}
+          </option>
+          {selectedId && !integrations.some((row) => row.id === selectedId) ? (
+            <option value={selectedId}>Selected integration (not installed)</option>
+          ) : null}
+          {integrations.map((row) => (
+            <option key={row.id} value={row.id}>
+              {row.name} · {providerLabel(row.provider)}
+              {row.status === 'connected' ? '' : ` (${row.status})`}
+            </option>
+          ))}
+        </Select>
+        {selected ? (
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Provider: {providerLabel(selected.provider)} · Status: {selected.status}
+            {selected.owned ? '' : ' · Installed'}
+          </p>
+        ) : (
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Only integrations installed on this chatbot are listed.
+          </p>
+        )}
+      </div>
+
+      <div>
+        <Label>Action</Label>
+        <Select
+          disabled={readOnly || !selected}
+          value={selectedAction?.id ?? actionId}
+          onChange={(e) => selectAction(e.target.value)}
+        >
+          <option value="">{selected ? 'Select action…' : 'Pick an integration first'}</option>
+          {availableActions.map((action) => (
+            <option key={action.id} value={action.id}>
+              {action.label}
+            </option>
+          ))}
+        </Select>
+        {selectedAction ? (
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">{selectedAction.description}</p>
+        ) : null}
+      </div>
+
+      {selectedAction?.fields.map((field) => (
+        <div key={field.key}>
+          <Label>{field.label}</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline={!!field.multiline}
+            value={fieldValues[field.key] ?? ''}
+            onChange={(v) => setField(field.key, v)}
+            placeholder={field.placeholder}
+            suggestions={suggestions}
+          />
+          {field.hint ? (
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">{field.hint}</p>
+          ) : null}
+        </div>
+      ))}
+
+      <VariableAssignField
+        label="Output variable"
+        value={outputVariable}
+        onChange={(v) => patchConfig({ outputVariable: v, resultVariable: v })}
+        nodeId={node.id}
+        readOnly={readOnly}
+        placeholder="integrationResult"
+        valueType="object"
+      />
+      <p className="text-[11px] text-[var(--color-ink-muted)]">
+        Result shape: {'{{vars.'}
+        {outputVariable.trim() || 'integrationResult'}
+        {'.ok}}'}, {'{{vars.'}
+        {outputVariable.trim() || 'integrationResult'}
+        {'.data}}'}, {'{{vars.'}
+        {outputVariable.trim() || 'integrationResult'}
+        {'.error}}'}.
+      </p>
+    </>
+  )
+}
+
 function VariableAssignField({
   label,
   value,
@@ -1565,7 +2803,7 @@ function VariableAssignField({
   const globals = useDesignerStore((s) => s.globalVariables)
   const trimmed = value.trim()
   const prior = trimmed
-    ? nodes.filter((n) => n.id !== nodeId && getStepOutputVariable(n) === trimmed).map((n) => n.key)
+    ? nodes.filter((n) => n.id !== nodeId && getStepOutputVariables(n).includes(trimmed)).map((n) => n.key)
     : []
   const hitsGlobal = trimmed !== '' && globals.includes(trimmed)
 
@@ -1601,6 +2839,491 @@ function VariableAssignField({
   )
 }
 
+function ButtonStepFields({
+  node,
+  readOnly,
+  patchConfig,
+  suggestions,
+  stepOptions,
+}: {
+  node: DesignerNode
+  readOnly?: boolean
+  patchConfig: (partial: Record<string, unknown>) => void
+  suggestions: TemplateSuggestion[]
+  stepOptions: Array<{ key: string; label: string }>
+}) {
+  const buttons = parseButtonOptions(node.config.buttons, node.config)
+
+  function commitButtons(next: ButtonOption[]) {
+    patchConfig(buttonConfigSchema.parse({ ...node.config, buttons: next }))
+  }
+
+  function updateButton(id: string, partial: Partial<ButtonOption>) {
+    commitButtons(buttons.map((b) => (b.id === id ? { ...b, ...partial } : b)))
+  }
+
+  function updateListener(buttonId: string, listenerId: string, partial: Partial<ButtonListener>) {
+    commitButtons(
+      buttons.map((b) =>
+        b.id !== buttonId
+          ? b
+          : {
+              ...b,
+              listeners: b.listeners.map((l) => (l.id === listenerId ? { ...l, ...partial } : l)),
+            },
+      ),
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label>Message</Label>
+        <TemplateField
+          disabled={readOnly}
+          multiline
+          value={String(node.config.text ?? '')}
+          onChange={(v) => patchConfig({ text: v })}
+          suggestions={suggestions}
+          placeholder="Optional text shown above the buttons"
+        />
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <Label className="mb-0">Buttons</Label>
+          {!readOnly ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => commitButtons([...buttons, emptyButtonOption(`Button ${buttons.length + 1}`)])}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add button
+            </Button>
+          ) : null}
+        </div>
+        {buttons.map((b, index) => (
+          <div
+            key={b.id}
+            className="space-y-3 rounded-xl border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/40 p-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-teal-800">Button {index + 1}</span>
+              {!readOnly && buttons.length > 1 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-rose-700 hover:bg-rose-50 hover:text-rose-900"
+                  onClick={() => commitButtons(buttons.filter((row) => row.id !== b.id))}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+            <div>
+              <Label>Label</Label>
+              <TemplateField
+                disabled={readOnly}
+                value={b.label}
+                onChange={(v) => updateButton(b.id, { label: v })}
+                suggestions={suggestions}
+                placeholder="Continue"
+              />
+            </div>
+            <div>
+              <Label>Value</Label>
+              <TemplateField
+                disabled={readOnly}
+                value={b.value}
+                onChange={(v) => updateButton(b.id, { value: v })}
+                suggestions={suggestions}
+                placeholder="continue"
+              />
+              <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+                Stored in the output variable when the flow continues. Defaults to the label when empty.
+              </p>
+            </div>
+
+            <div className="space-y-2 border-t border-[var(--color-border)]/60 pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="mb-0">Listeners</Label>
+                {!readOnly ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      updateButton(b.id, {
+                        listeners: [...b.listeners, emptyButtonListener({ event: 'click', action: 'continue' })],
+                      })
+                    }
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add listener
+                  </Button>
+                ) : null}
+              </div>
+              <p className="text-[11px] text-[var(--color-ink-muted)]">
+                Each listener is an event (click, hover, …) plus an action (continue, emit, run function, skip to
+                step).
+              </p>
+              {b.listeners.map((lst, li) => (
+                <div
+                  key={lst.id}
+                  className="space-y-2 rounded-lg border border-slate-200/80 bg-white/70 p-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold text-slate-600">Listener {li + 1}</span>
+                    {!readOnly && b.listeners.length > 1 ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-rose-700 hover:bg-rose-50 hover:text-rose-900"
+                        onClick={() =>
+                          updateButton(b.id, {
+                            listeners: b.listeners.filter((row) => row.id !== lst.id),
+                          })
+                        }
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <Label>Event</Label>
+                      <Select
+                        disabled={readOnly}
+                        value={lst.event}
+                        onChange={(e) =>
+                          updateListener(b.id, lst.id, {
+                            event: e.target.value as ButtonListener['event'],
+                          })
+                        }
+                      >
+                        {BUTTON_LISTENER_EVENT_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Action</Label>
+                      <Select
+                        disabled={readOnly}
+                        value={lst.action}
+                        onChange={(e) =>
+                          updateListener(b.id, lst.id, {
+                            action: e.target.value as ButtonListener['action'],
+                          })
+                        }
+                      >
+                        {BUTTON_LISTENER_ACTION_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    {BUTTON_LISTENER_ACTION_OPTIONS.find((o) => o.value === lst.action)?.hint}
+                  </p>
+                  {lst.action === 'emit_event' ? (
+                    <>
+                      <div>
+                        <Label>Event name</Label>
+                        <TemplateField
+                          disabled={readOnly}
+                          value={lst.eventName}
+                          onChange={(v) => updateListener(b.id, lst.id, { eventName: v })}
+                          suggestions={suggestions}
+                          placeholder="button_click"
+                        />
+                      </div>
+                      <div>
+                        <Label>Event payload (optional)</Label>
+                        <TemplateField
+                          disabled={readOnly}
+                          multiline
+                          value={lst.eventPayload}
+                          onChange={(v) => updateListener(b.id, lst.id, { eventPayload: v })}
+                          suggestions={suggestions}
+                          placeholder='{"step":"checkout"}'
+                        />
+                      </div>
+                    </>
+                  ) : null}
+                  {lst.action === 'run_function' ? (
+                    <>
+                      <div>
+                        <Label>Function</Label>
+                        <Select
+                          disabled={readOnly}
+                          value={lst.functionName}
+                          onChange={(e) => {
+                            const name = e.target.value
+                            const def = getFlowFunction(name)
+                            updateListener(b.id, lst.id, {
+                              functionName: name,
+                              functionParams: emptyFunctionParams(def),
+                              functionArgs: '',
+                            })
+                          }}
+                        >
+                          <option value="">Select function…</option>
+                          <optgroup label="Actions">
+                            {FLOW_FUNCTION_OPTIONS.filter((o) => o.kind === 'runtime' || o.kind === 'host').map(
+                              (opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ),
+                            )}
+                          </optgroup>
+                          <optgroup label="Expressions">
+                            {FLOW_FUNCTION_OPTIONS.filter((o) => o.kind === 'expression').map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        </Select>
+                        {lst.functionName ? (
+                          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+                            {getFlowFunction(lst.functionName)?.description}
+                          </p>
+                        ) : null}
+                      </div>
+                      {(getFlowFunction(lst.functionName)?.params ?? []).map((param) => (
+                        <div key={param.key}>
+                          <Label>
+                            {param.label}
+                            {param.required ? (
+                              <span className="text-rose-600" aria-hidden>
+                                {' '}
+                                *
+                              </span>
+                            ) : null}
+                          </Label>
+                          <TemplateField
+                            disabled={readOnly}
+                            multiline={!!param.multiline}
+                            value={lst.functionParams?.[param.key] ?? ''}
+                            onChange={(v) =>
+                              updateListener(b.id, lst.id, {
+                                functionParams: {
+                                  ...(lst.functionParams ?? {}),
+                                  [param.key]: v,
+                                },
+                              })
+                            }
+                            suggestions={suggestions}
+                            placeholder={param.placeholder}
+                          />
+                          {param.hint ? (
+                            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">{param.hint}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  {lst.action === 'skip_to' ? (
+                    <div>
+                      <Label>Skip to step</Label>
+                      <Select
+                        disabled={readOnly}
+                        value={lst.skipToNodeKey}
+                        onChange={(e) => updateListener(b.id, lst.id, { skipToNodeKey: e.target.value })}
+                      >
+                        <option value="">Select a step…</option>
+                        {stepOptions.map((s) => (
+                          <option key={s.key} value={s.key}>
+                            {s.label} ({s.key})
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <VariableAssignField
+        label="Output variable"
+        value={String(node.config.outputVariable ?? '')}
+        onChange={(v) => patchConfig({ outputVariable: v })}
+        nodeId={node.id}
+        readOnly={readOnly}
+        placeholder="button"
+        valueType="string"
+      />
+    </div>
+  )
+}
+
+function SwitchCasesEditor({
+  node,
+  readOnly,
+  suggestions,
+  nodes,
+  edges,
+  patchConfig,
+  setEdges,
+  setNodesAndEdges,
+}: {
+  node: DesignerNode
+  readOnly?: boolean
+  suggestions: TemplateSuggestion[]
+  nodes: DesignerNode[]
+  edges: import('@/features/designer/model/flowSchema').DesignerEdge[]
+  patchConfig: (partial: Record<string, unknown>) => void
+  setEdges: (edges: import('@/features/designer/model/flowSchema').DesignerEdge[]) => void
+  setNodesAndEdges: (
+    nodes: DesignerNode[],
+    edges: import('@/features/designer/model/flowSchema').DesignerEdge[],
+  ) => void
+}) {
+  const cases = parseSwitchCases(node.config.cases)
+
+  function commitCases(nextCases: SwitchCase[]) {
+    patchConfig(switchConfigSchema.parse({ ...node.config, cases: nextCases }))
+  }
+
+  function addCase() {
+    const next: SwitchCase = {
+      id: newSwitchCaseId(),
+      match: '',
+      label: `Case ${cases.length + 1}`,
+    }
+    commitCases([...cases, next])
+    const roots = [...findContinueRootIds(node.id, edges, nodes)]
+    if (!roots.length) return
+    setEdges([
+      ...edges,
+      ...roots.map((target) => ({
+        id: crypto.randomUUID(),
+        source: node.id,
+        target,
+        sourceHandle: next.id,
+        label: 'Then' as const,
+      })),
+    ])
+  }
+
+  function removeCase(caseId: string) {
+    if (cases.length <= 1) return
+    const nextCases = cases.filter((c) => c.id !== caseId)
+    const pruned = removeSwitchCaseBranch({
+      switchId: node.id,
+      caseId,
+      nodes: nodes.map((n) =>
+        n.id === node.id ? { ...n, config: { ...n.config, cases: nextCases } } : n,
+      ),
+      edges,
+    })
+    setNodesAndEdges(
+      pruned.nodes.map((n) =>
+        n.id === node.id ? { ...n, config: { ...n.config, cases: nextCases } } : n,
+      ),
+      pruned.edges,
+    )
+  }
+
+  return (
+    <>
+      <div>
+        <Label>Switch on</Label>
+        <TemplateField
+          disabled={readOnly}
+          value={String(node.config.value ?? '')}
+          onChange={(v) => patchConfig({ value: v })}
+          placeholder="{{vars.topic}} or {{steps.ask_1}}"
+          suggestions={suggestions}
+        />
+        <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+          Evaluated once, then compared to each case with string equality (first match wins).
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <Label className="mb-0">Cases</Label>
+          {!readOnly ? (
+            <Button type="button" size="sm" variant="secondary" onClick={addCase}>
+              <Plus className="h-3.5 w-3.5" />
+              Add case
+            </Button>
+          ) : null}
+        </div>
+
+        {cases.map((c, index) => (
+          <div
+            key={c.id}
+            className="space-y-2 rounded-xl border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/40 p-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-amber-800">{switchCaseLabel(c, index)}</span>
+              {!readOnly && cases.length > 1 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-rose-700 hover:bg-rose-50 hover:text-rose-900"
+                  onClick={() => removeCase(c.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+            <div>
+              <Label>Lane label</Label>
+              <Input
+                disabled={readOnly}
+                value={c.label ?? ''}
+                placeholder={`Case ${index + 1}`}
+                onChange={(e) => {
+                  commitCases(
+                    cases.map((row) => (row.id === c.id ? { ...row, label: e.target.value } : row)),
+                  )
+                }}
+              />
+            </div>
+            <div>
+              <Label>Matches</Label>
+              <TemplateField
+                disabled={readOnly}
+                value={c.match}
+                onChange={(v) => {
+                  commitCases(cases.map((row) => (row.id === c.id ? { ...row, match: v } : row)))
+                }}
+                placeholder="billing, 9, or {{vars.expected}}"
+                suggestions={suggestions}
+                hideHint
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-xs text-[var(--color-ink-muted)]">
+        Case and Default paths are inside this step. Steps after the switch sit below it. Unmatched values take the
+        Default lane.
+      </p>
+    </>
+  )
+}
+
 export function StepInspector({
   node,
   connections,
@@ -1611,6 +3334,8 @@ export function StepInspector({
   const { chatbotId } = useParams()
   const { instance } = useRequiredInstance()
   const updateNode = useDesignerStore((s) => s.updateNode)
+  const setEdges = useDesignerStore((s) => s.setEdges)
+  const setNodesAndEdges = useDesignerStore((s) => s.setNodesAndEdges)
   const removeNode = useDesignerStore((s) => s.removeNode)
   const canDeleteSelected = useDesignerStore((s) => s.canDeleteNode)
   const copyNode = useDesignerStore((s) => s.copyNode)
@@ -1640,6 +3365,16 @@ export function StepInspector({
     media.data,
     templatesQuery.data,
     questionTemplateKinds,
+  )
+  const stepOptions = useMemo(
+    () =>
+      nodes
+        .filter((n) => n.id !== node.id && n.type !== 'end')
+        .map((n) => ({
+          key: n.key,
+          label: (n.label || n.key).trim() || n.key,
+        })),
+    [nodes, node.id],
   )
   const moves = canMoveNode(node.id)
   const allowDelete = canDeleteSelected(node.id)
@@ -1716,7 +3451,7 @@ export function StepInspector({
   const entitiesQuery = useQuery({
     queryKey: ['chatbot-entities', chatbotId],
     enabled: !!chatbotId && node.type === 'entity',
-    queryFn: () => fetchChatbotEntities(chatbotId!),
+    queryFn: () => fetchInstalledEntities(chatbotId!),
   })
   const entityOp = String(node.config.operation ?? 'list')
   const entityOpMeta = ENTITY_OPERATIONS.find((o) => o.value === entityOp) ?? ENTITY_OPERATIONS[0]
@@ -1731,6 +3466,23 @@ export function StepInspector({
   const earliestIssue = dateBoundIssues.find((i) => i.field === 'minDate')
   const latestIssue = dateBoundIssues.find((i) => i.field === 'maxDate')
   const selectedEntity = entitiesQuery.data?.find((e) => e.id === String(node.config.entityId ?? ''))
+  const allowedEntityOps = useMemo(() => {
+    if (!selectedEntity) return ENTITY_OPERATIONS
+    return ENTITY_OPERATIONS.filter((op) => {
+      if (selectedEntity.kind === 'static' && (op.value === 'create' || op.value === 'update' || op.value === 'delete')) {
+        return false
+      }
+      return entityAllowsOperation(selectedEntity, op.value)
+    })
+  }, [selectedEntity])
+  const ownedEntities = useMemo(
+    () => (entitiesQuery.data ?? []).filter((e) => e.owned),
+    [entitiesQuery.data],
+  )
+  const installedSharedEntities = useMemo(
+    () => (entitiesQuery.data ?? []).filter((e) => !e.owned),
+    [entitiesQuery.data],
+  )
   const fieldMap =
     node.config.fieldMap && typeof node.config.fieldMap === 'object' && !Array.isArray(node.config.fieldMap)
       ? (node.config.fieldMap as Record<string, string>)
@@ -1783,9 +3535,8 @@ export function StepInspector({
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-medium">{node.label || node.type}</h2>
         <p className="text-xs text-[var(--color-ink-muted)]">
-          Configure this step. Type {'{{'} for suggestions. References highlight in teal.
+          Type {'{{'} for suggestions. References highlight in teal.
         </p>
         {lockedBy ? (
           <p
@@ -1828,9 +3579,17 @@ export function StepInspector({
             suggestions={suggestions}
             placeholder="Hello {{vars.name}}…"
           />
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Styling: <code>**bold**</code>, <code>*italic*</code>, <code>~~strike~~</code>,{' '}
+            <code>`code`</code>, <code>[label](https://…)</code>,{' '}
+            <code>{'{color:danger}text{/color}'}</code> (or hex like{' '}
+            <code>{'{color:#0f766e}'}</code>). Escape marks with a backslash. Embed YouTube, X,
+            Vimeo, Spotify, or TikTok with{' '}
+            <code>{'{{embed("https://www.youtube.com/watch?v=…")}}'}</code>.
+          </p>
           <InsertTemplateControl
             chatbotId={chatbotId}
-            kinds={['message', 'faq', 'menu', 'hours', 'legal', 'receipt', 'document']}
+            kinds={['message', 'faq', 'menu', 'hours', 'legal', 'receipt', 'document', 'agreement']}
             readOnly={readOnly}
             onInsert={(snippet, key) => {
               const current = String(node.config.text ?? '')
@@ -1849,6 +3608,53 @@ export function StepInspector({
               onChange={(mediaFiles) => patchConfig({ mediaFiles })}
             />
           </div>
+          <SuggestedResponsesEditor
+            responses={Array.isArray(node.config.suggestedResponses) ? (node.config.suggestedResponses as string[]) : []}
+            responsesFrom={String(node.config.suggestedResponsesFrom ?? '')}
+            suggestionVariable={String(node.config.suggestionVariable ?? '')}
+            disabled={readOnly}
+            suggestions={suggestions}
+            onResponsesChange={(suggestedResponses) => patchConfig({ suggestedResponses })}
+            onResponsesFromChange={(suggestedResponsesFrom) =>
+              patchConfig({ suggestedResponsesFrom, suggestedResponses: [] })
+            }
+            onSuggestionVariableChange={(suggestionVariable) => patchConfig({ suggestionVariable })}
+          />
+        </div>
+      ) : null}
+
+      {node.type === 'button' ? (
+        <ButtonStepFields
+          node={node}
+          readOnly={readOnly}
+          patchConfig={patchConfig}
+          suggestions={suggestions}
+          stepOptions={stepOptions}
+        />
+      ) : null}
+
+      {node.type === 'skip_to' ? (
+        <div>
+          <Label htmlFor="skip-to-target">Skip to step</Label>
+          <Select
+            id="skip-to-target"
+            disabled={readOnly}
+            value={String(node.config.targetNodeKey ?? '')}
+            onChange={(e) => patchConfig({ targetNodeKey: e.target.value })}
+          >
+            <option value="">Next step (default)</option>
+            {stepOptions
+              .filter((s) => s.key !== node.key)
+              .map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label} ({s.key})
+                </option>
+              ))}
+          </Select>
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Jump to this step instead of following the next edge. Same behaviour as Button → Skip to
+            step.
+          </p>
         </div>
       ) : null}
 
@@ -1863,6 +3669,10 @@ export function StepInspector({
               onChange={(v) => patchConfig({ prompt: v })}
               suggestions={suggestions}
             />
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              Use <code>{'{{embed("https://…")}}'}</code> for YouTube, X, Vimeo, Spotify, or TikTok
+              players in the prompt.
+            </p>
             <InsertTemplateControl
               chatbotId={chatbotId}
               kinds={questionTemplateKinds}
@@ -2892,10 +4702,31 @@ export function StepInspector({
         />
       ) : null}
 
+      {node.type === 'database' ? (
+        <DatabaseStepFields
+          node={node}
+          connections={connections}
+          readOnly={readOnly}
+          patchConfig={patchConfig}
+          suggestions={suggestions}
+        />
+      ) : null}
+
       {node.type === 'email' ? (
         <EmailStepFields
           node={node}
           connections={connections}
+          readOnly={readOnly}
+          patchConfig={patchConfig}
+          suggestions={suggestions}
+        />
+      ) : null}
+
+      {node.type === 'integration' ? (
+        <IntegrationStepFields
+          node={node}
+          instanceId={instance.id}
+          chatbotId={chatbotId}
           readOnly={readOnly}
           patchConfig={patchConfig}
           suggestions={suggestions}
@@ -2957,6 +4788,19 @@ export function StepInspector({
         </>
       ) : null}
 
+      {node.type === 'switch' ? (
+        <SwitchCasesEditor
+          node={node}
+          readOnly={readOnly}
+          suggestions={suggestions}
+          nodes={nodes}
+          edges={edges}
+          patchConfig={patchConfig}
+          setEdges={setEdges}
+          setNodesAndEdges={setNodesAndEdges}
+        />
+      ) : null}
+
       {node.type === 'loop' ? (
         <>
           <div>
@@ -3013,36 +4857,100 @@ export function StepInspector({
 
       {node.type === 'set_variable' ? (
         <>
-          <VariableAssignField
-            label="Variable key"
-            value={String(node.config.variableKey ?? '')}
-            onChange={(v) => patchConfig({ variableKey: v })}
-            nodeId={node.id}
-            readOnly={readOnly}
-          />
-          <div>
-            <Label>Type</Label>
-            <Select
+          <div className="space-y-2">
+            <Label>Variables</Label>
+            <p className="text-[11px] text-[var(--color-ink-muted)]">
+              Assign one or more keys. Rows run top to bottom, so a later value can use an earlier key
+              from this same step.
+            </p>
+            {readSetVariableAssignments(node.config).map((row, index, rows) => (
+              <div
+                key={index}
+                className="space-y-2 rounded-xl border border-[var(--color-border)]/60 bg-[var(--color-surface-2)]/40 p-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[11px] font-medium text-[var(--color-ink-muted)]">
+                    Assignment {index + 1}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={readOnly || rows.length <= 1}
+                    aria-label={`Remove assignment ${index + 1}`}
+                    onClick={() => {
+                      const next = rows.filter((_, i) => i !== index)
+                      patchConfig(setVariableConfigFromAssignments(next))
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <VariableAssignField
+                  label="Variable key"
+                  value={row.variableKey}
+                  onChange={(v) => {
+                    const next = rows.map((r, i) =>
+                      i === index ? { ...r, variableKey: v } : r,
+                    )
+                    patchConfig(setVariableConfigFromAssignments(next))
+                  }}
+                  nodeId={node.id}
+                  readOnly={readOnly}
+                />
+                <div>
+                  <Label>Type</Label>
+                  <Select
+                    disabled={readOnly}
+                    value={row.valueType}
+                    onChange={(e) => {
+                      const valueType = e.target.value as (typeof variableTypes)[number]
+                      const next = rows.map((r, i) =>
+                        i === index ? { ...r, valueType } : r,
+                      )
+                      patchConfig(setVariableConfigFromAssignments(next))
+                    }}
+                  >
+                    {variableTypes.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Label>Value</Label>
+                  <TemplateField
+                    disabled={readOnly}
+                    multiline
+                    value={row.value}
+                    onChange={(v) => {
+                      const next = rows.map((r, i) => (i === index ? { ...r, value: v } : r))
+                      patchConfig(setVariableConfigFromAssignments(next))
+                    }}
+                    suggestions={suggestions}
+                  />
+                </div>
+              </div>
+            ))}
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
               disabled={readOnly}
-              value={String(node.config.valueType ?? 'string')}
-              onChange={(e) => patchConfig(setVariableConfigSchema.parse({ ...node.config, valueType: e.target.value }))}
+              onClick={() => {
+                const rows = readSetVariableAssignments(node.config)
+                patchConfig(
+                  setVariableConfigFromAssignments([
+                    ...rows,
+                    { variableKey: '', value: '', valueType: 'string' },
+                  ]),
+                )
+              }}
             >
-              {variableTypes.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label>Value</Label>
-            <TemplateField
-              disabled={readOnly}
-              multiline
-              value={String(node.config.value ?? '')}
-              onChange={(v) => patchConfig({ value: v })}
-              suggestions={suggestions}
-            />
+              <Plus className="h-3.5 w-3.5" />
+              Add variable
+            </Button>
           </div>
         </>
       ) : null}
@@ -3123,17 +5031,43 @@ export function StepInspector({
             <Select
               disabled={readOnly}
               value={String(node.config.entityId ?? '')}
-              onChange={(e) => patchConfig({ entityId: e.target.value })}
+              onChange={(e) => {
+                const nextId = e.target.value
+                const nextEntity = (entitiesQuery.data ?? []).find((ent) => ent.id === nextId)
+                const patch: Record<string, unknown> = { entityId: nextId }
+                if (nextEntity && !entityAllowsOperation(nextEntity, entityOp)) {
+                  const fallback = ENTITY_OPERATIONS.find(
+                    (op) =>
+                      !(nextEntity.kind === 'static' && (op.value === 'create' || op.value === 'update' || op.value === 'delete')) &&
+                      entityAllowsOperation(nextEntity, op.value),
+                  )
+                  if (fallback) patch.operation = fallback.value
+                }
+                patchConfig(patch)
+              }}
             >
               <option value="">Select…</option>
-              {(entitiesQuery.data ?? []).map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name} ({e.kind})
-                </option>
-              ))}
+              {ownedEntities.length ? (
+                <optgroup label="This chatbot">
+                  {ownedEntities.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} ({e.kind})
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {installedSharedEntities.length ? (
+                <optgroup label="Installed / shared">
+                  {installedSharedEntities.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} ({e.kind})
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </Select>
             <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
-              Manage entities on the Data tab. Static = catalog (List/Get only); Dynamic = Create/Update/Delete too.
+              Manage and install entities on the Data tab. Actions respect each install’s CRUD grants.
             </p>
           </div>
           <div>
@@ -3143,7 +5077,7 @@ export function StepInspector({
               value={entityOp}
               onChange={(e) => patchConfig(entityConfigSchema.parse({ ...node.config, operation: e.target.value }))}
             >
-              {ENTITY_OPERATIONS.map((op) => (
+              {allowedEntityOps.map((op) => (
                 <option key={op.value} value={op.value}>
                   {op.label}
                 </option>
@@ -3266,6 +5200,25 @@ export function StepInspector({
         </>
       ) : null}
 
+      {node.type === 'sign_in' ? (
+        <SignInStepFields
+          node={node}
+          chatbotId={chatbotId}
+          connections={connections}
+          readOnly={readOnly}
+          patchConfig={patchConfig}
+        />
+      ) : null}
+
+      {node.type === 'handoff' ? (
+        <HandoffStepFields
+          node={node}
+          instanceId={instance.id}
+          readOnly={readOnly}
+          patchConfig={patchConfig}
+        />
+      ) : null}
+
       {node.type === 'transfer' ? (
         <TransferStepFields
           node={node}
@@ -3289,7 +5242,7 @@ export function StepInspector({
           />
           <InsertTemplateControl
             chatbotId={chatbotId}
-            kinds={['message', 'faq', 'menu', 'hours', 'legal', 'receipt', 'document']}
+            kinds={['message', 'faq', 'menu', 'hours', 'legal', 'receipt', 'document', 'agreement']}
             readOnly={readOnly}
             onInsert={(snippet, key) => {
               const current = String(node.config.message ?? '')
@@ -3327,6 +5280,8 @@ export function StepInspector({
         readOnly={readOnly}
         isFlowStart={isFlowStart}
         patchConfig={patchConfig}
+        stepOptions={stepOptions}
+        suggestions={suggestions}
       />
 
       {issues.length ? (

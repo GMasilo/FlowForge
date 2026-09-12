@@ -1,6 +1,7 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -80,6 +81,14 @@ function mergeAdjacentText(segments: Segment[]): Segment[] {
   return merged
 }
 
+/** Accept full `{{…}}`, bare path, or mixed text; empty → remove. */
+function normalizeChipDraft(draft: string): string {
+  const t = draft.trim()
+  if (!t) return ''
+  if (/\{\{[\s\S]*?\}\}/.test(t) || t.includes('{{')) return t
+  return `{{${t}}}`
+}
+
 function filterSuggestions(all: TemplateSuggestion[], query: string): TemplateSuggestion[] {
   const q = query.trim().toLowerCase()
   if (!q) return all.slice(0, 40)
@@ -92,6 +101,75 @@ function filterSuggestions(all: TemplateSuggestion[], query: string): TemplateSu
         (s.detail ?? '').toLowerCase().includes(q),
     )
     .slice(0, 40)
+}
+
+let measureEl: HTMLSpanElement | null = null
+
+/** Exact glyph width for the control's font (avoids ch-unit gaps and scrollWidth undershoot). */
+function measureTextWidth(el: HTMLElement, text: string): number {
+  if (!measureEl) {
+    measureEl = document.createElement('span')
+    measureEl.setAttribute('aria-hidden', 'true')
+    Object.assign(measureEl.style, {
+      position: 'absolute',
+      visibility: 'hidden',
+      whiteSpace: 'pre',
+      height: 'auto',
+      width: 'auto',
+      top: '0',
+      left: '-9999px',
+      pointerEvents: 'none',
+    })
+    document.body.appendChild(measureEl)
+  }
+  const cs = getComputedStyle(el)
+  measureEl.style.font = cs.font
+  measureEl.style.fontSize = cs.fontSize
+  measureEl.style.fontFamily = cs.fontFamily
+  measureEl.style.fontWeight = cs.fontWeight
+  measureEl.style.fontStyle = cs.fontStyle
+  measureEl.style.letterSpacing = cs.letterSpacing
+  measureEl.style.textTransform = cs.textTransform
+  measureEl.textContent = text.length ? text : ''
+  // +1px keeps the caret from clipping without a visible sparse gap.
+  return Math.ceil(measureEl.getBoundingClientRect().width) + (text.length ? 1 : 0)
+}
+
+function fitTextControl(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  opts: { text: string; grow: boolean; caretSlot: boolean; maxWidth?: number; wrap?: boolean },
+) {
+  if (opts.caretSlot) {
+    el.style.width = '0px'
+    el.style.minWidth = '0px'
+    el.style.maxWidth = '0px'
+    el.style.flexGrow = '0'
+    el.style.height = ''
+    return
+  }
+  el.style.flexGrow = '0'
+  const empty = opts.text.length === 0
+  el.style.minWidth = empty ? '8px' : '0px'
+  const measured = Math.max(empty ? 8 : 1, measureTextWidth(el, opts.text))
+  const capped =
+    opts.maxWidth != null && opts.maxWidth > 0 ? Math.min(measured, Math.floor(opts.maxWidth)) : measured
+  el.style.width = `${capped}px`
+  el.style.maxWidth = opts.maxWidth != null && opts.maxWidth > 0 ? `${Math.floor(opts.maxWidth)}px` : ''
+  if (opts.grow) el.style.flexGrow = '1'
+
+  if (opts.wrap && el instanceof HTMLTextAreaElement) {
+    el.style.whiteSpace = 'pre-wrap'
+    el.style.overflowWrap = 'anywhere'
+    el.style.wordBreak = 'break-word'
+    el.style.height = 'auto'
+    // Force layout with the capped width before reading scrollHeight.
+    el.style.height = `${Math.max(20, el.scrollHeight)}px`
+  } else {
+    el.style.whiteSpace = ''
+    el.style.overflowWrap = ''
+    el.style.wordBreak = ''
+    if (el instanceof HTMLTextAreaElement) el.style.height = ''
+  }
 }
 
 export function TemplateField({
@@ -112,11 +190,51 @@ export function TemplateField({
   const [query, setQuery] = useState('')
   const [editSegId, setEditSegId] = useState<string | null>(null)
   const [tokenStart, setTokenStart] = useState<number | null>(null)
+  const [editingChipId, setEditingChipId] = useState<string | null>(null)
+  const [editingChipDraft, setEditingChipDraft] = useState('')
   const inputRefs = useRef<Map<string, HTMLInputElement | HTMLTextAreaElement>>(new Map())
+  const chipEditRef = useRef<HTMLInputElement | null>(null)
+  const editingChipDraftRef = useRef('')
+  const editingChipIdRef = useRef<string | null>(null)
   const skipSync = useRef(false)
+  const chipEditPending = useRef(false)
 
   const filtered = useMemo(() => filterSuggestions(suggestions, query), [suggestions, query])
   const serialized = serializeSegments(segments)
+
+  const shellRef = useRef<HTMLDivElement | null>(null)
+  const rowRef = useRef<HTMLDivElement | null>(null)
+
+  function contentMaxWidth() {
+    return rowRef.current?.clientWidth ?? shellRef.current?.clientWidth
+  }
+
+  useLayoutEffect(() => {
+    const lastTextId = [...segments].reverse().find((s) => s.kind === 'text')?.id
+    const maxWidth = contentMaxWidth()
+    for (const seg of segments) {
+      if (seg.kind !== 'text') continue
+      const el = inputRefs.current.get(seg.id)
+      if (!el) continue
+      const empty = seg.text.length === 0
+      const grow = seg.id === lastTextId
+      fitTextControl(el, {
+        text: seg.text,
+        grow,
+        caretSlot: empty && !grow,
+        maxWidth: multiline ? maxWidth : undefined,
+        wrap: !!multiline,
+      })
+    }
+    if (editingChipId && chipEditRef.current) {
+      fitTextControl(chipEditRef.current, {
+        text: editingChipDraft,
+        grow: false,
+        caretSlot: false,
+        maxWidth,
+      })
+    }
+  }, [segments, multiline, editingChipId, editingChipDraft])
 
   useEffect(() => {
     if (skipSync.current) {
@@ -128,6 +246,9 @@ export function TemplateField({
     setOpen(false)
     setTokenStart(null)
     setEditSegId(null)
+    setEditingChipId(null)
+    editingChipIdRef.current = null
+    editingChipDraftRef.current = ''
   }, [value, serialized])
 
   useEffect(() => {
@@ -143,7 +264,6 @@ export function TemplateField({
     requestAnimationFrame(() => {
       const el = inputRefs.current.get(focus.segId)
       if (!el) {
-        // id may have been merged — focus first text
         const first = cleaned.find((s) => s.kind === 'text')
         if (!first) return
         const fallback = inputRefs.current.get(first.id)
@@ -180,6 +300,17 @@ export function TemplateField({
     setOpen(true)
   }
 
+  function analyzeChipDraft(text: string, caret: number) {
+    const before = text.slice(0, caret)
+    const start = before.lastIndexOf('{{')
+    const inner =
+      start >= 0 ? before.slice(start + 2).replace(/\}\}[\s\S]*$/, '') : chipLabel(text)
+    setQuery(inner.trim())
+    setOpen(true)
+    setEditSegId(null)
+    setTokenStart(null)
+  }
+
   function updateText(segId: string, text: string, caret: number) {
     // Promote any complete {{...}} typed/pasted into chips
     if (/\{\{[\s\S]*?\}\}/.test(text)) {
@@ -203,6 +334,12 @@ export function TemplateField({
   }
 
   function removeChip(chipId: string) {
+    if (editingChipIdRef.current === chipId) {
+      editingChipIdRef.current = null
+      editingChipDraftRef.current = ''
+      setEditingChipId(null)
+      setOpen(false)
+    }
     const idx = segments.findIndex((s) => s.id === chipId)
     if (idx < 0) return
     const next = segments.filter((s) => s.id !== chipId)
@@ -216,6 +353,83 @@ export function TemplateField({
         ? { segId: neighbor.id, caret: neighbor.text.length }
         : undefined,
     )
+  }
+
+  function startEditChip(chipId: string, raw: string) {
+    if (disabled) return
+    chipEditPending.current = true
+    editingChipIdRef.current = chipId
+    editingChipDraftRef.current = raw
+    setEditingChipId(chipId)
+    setEditingChipDraft(raw)
+    setEditSegId(null)
+    setTokenStart(null)
+    analyzeChipDraft(raw, raw.length)
+    requestAnimationFrame(() => {
+      chipEditPending.current = false
+      const el = chipEditRef.current
+      if (!el) return
+      el.focus()
+      // Select inner path so typing replaces the reference quickly; braces stay editable.
+      const inner = chipLabel(raw)
+      const start = raw.indexOf(inner)
+      if (start >= 0 && inner.length) {
+        el.setSelectionRange(start, start + inner.length)
+      } else {
+        el.select()
+      }
+      fitTextControl(el, { text: raw, grow: false, caretSlot: false, maxWidth: contentMaxWidth() })
+    })
+  }
+
+  function cancelChipEdit() {
+    editingChipIdRef.current = null
+    editingChipDraftRef.current = ''
+    setEditingChipId(null)
+    setEditingChipDraft('')
+    setOpen(false)
+    setQuery('')
+  }
+
+  function commitChipEdit(draft?: string) {
+    const chipId = editingChipIdRef.current
+    if (!chipId) return
+    const idx = segments.findIndex((s) => s.id === chipId)
+    const text = draft ?? editingChipDraftRef.current
+    editingChipIdRef.current = null
+    editingChipDraftRef.current = ''
+    setEditingChipId(null)
+    setEditingChipDraft('')
+    setOpen(false)
+    setQuery('')
+    if (idx < 0) return
+
+    const normalized = normalizeChipDraft(text)
+    if (!normalized) {
+      removeChip(chipId)
+      return
+    }
+
+    const parts = parseSegments(normalized)
+    // Single clean reference → keep one chip (preserve id when possible)
+    if (
+      parts.length === 3 &&
+      parts[0]?.kind === 'text' &&
+      parts[0].text === '' &&
+      parts[1]?.kind === 'chip' &&
+      parts[2]?.kind === 'text' &&
+      parts[2].text === ''
+    ) {
+      const raw = parts[1].raw
+      const next = segments.map((s) => (s.id === chipId ? { ...s, kind: 'chip' as const, raw } : s))
+      const after = next[idx + 1]?.kind === 'text' ? next[idx + 1] : null
+      commit(next, after && after.kind === 'text' ? { segId: after.id, caret: 0 } : undefined)
+      return
+    }
+
+    const next = [...segments.slice(0, idx), ...parts, ...segments.slice(idx + 1)]
+    const lastText = [...parts].reverse().find((p) => p.kind === 'text')
+    commit(next, lastText ? { segId: lastText.id, caret: lastText.text.length } : undefined)
   }
 
   function insertChipAt(segId: string, start: number, end: number, raw: string) {
@@ -232,6 +446,15 @@ export function TemplateField({
   }
 
   function insertSuggestion(s: TemplateSuggestion) {
+    if (editingChipId) {
+      chipEditPending.current = true
+      setEditingChipDraft(s.insert)
+      requestAnimationFrame(() => {
+        commitChipEdit(s.insert)
+        chipEditPending.current = false
+      })
+      return
+    }
     if (editSegId && tokenStart != null) {
       const el = inputRefs.current.get(editSegId)
       const caret = el?.selectionStart ?? tokenStart
@@ -275,18 +498,49 @@ export function TemplateField({
     }
   }
 
-  const showPlaceholder = !serialized && !!placeholder
+  function onChipEditKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      cancelChipEdit()
+      return
+    }
+    if (open && filtered.length) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setActive((i) => (i + 1) % filtered.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setActive((i) => (i - 1 + filtered.length) % filtered.length)
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        insertSuggestion(filtered[active]!)
+        return
+      }
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      commitChipEdit()
+    }
+  }
+
+  const showPlaceholder = !serialized && !!placeholder && !editingChipId
 
   return (
-    <div className={cn('relative', className)}>
+    <div className={cn('relative min-w-0', className)}>
       <div
+        ref={shellRef}
         className={cn(
-          'relative rounded-xl border border-[var(--color-border)] bg-white/90 px-2 py-1.5 shadow-sm transition-all duration-200 hover:border-[var(--color-accent)]/35 focus-within:border-[var(--color-accent)] focus-within:ring-4 focus-within:ring-teal-500/15',
+          'relative min-w-0 overflow-x-hidden rounded-xl border border-[var(--color-border)] bg-white/90 px-2 py-1.5 shadow-sm transition-all duration-200 hover:border-[var(--color-accent)]/35 focus-within:border-[var(--color-accent)] focus-within:ring-4 focus-within:ring-teal-500/15',
           multiline ? 'min-h-24' : 'min-h-10',
           disabled && 'pointer-events-none opacity-60',
         )}
         style={multiline ? { minHeight: `${rows * 1.5 + 1}rem` } : undefined}
         onClick={() => {
+          if (editingChipId) return
           const lastText = [...segments].reverse().find((s) => s.kind === 'text')
           if (lastText) inputRefs.current.get(lastText.id)?.focus()
         }}
@@ -298,8 +552,9 @@ export function TemplateField({
         ) : null}
 
         <div
+          ref={rowRef}
           className={cn(
-            'relative z-[1] flex w-full gap-0.5',
+            'relative z-[1] flex min-w-0 w-full gap-0',
             multiline
               ? 'flex-wrap items-start content-start'
               : 'flex-nowrap items-center overflow-x-auto',
@@ -307,16 +562,77 @@ export function TemplateField({
         >
           {segments.map((seg, segIndex) => {
             if (seg.kind === 'chip') {
+              if (editingChipId === seg.id) {
+                return (
+                  <input
+                    key={seg.id}
+                    ref={(el) => {
+                      chipEditRef.current = el
+                      if (el) {
+                        fitTextControl(el, {
+                          text: editingChipDraft,
+                          grow: false,
+                          caretSlot: false,
+                          maxWidth: contentMaxWidth(),
+                        })
+                      }
+                    }}
+                    value={editingChipDraft}
+                    spellCheck={false}
+                    aria-autocomplete="list"
+                    aria-controls={listId}
+                    aria-label="Edit reference"
+                    className="h-5 min-w-0 max-w-full shrink rounded-md border-0 bg-teal-500/15 px-1.5 font-mono text-xs font-semibold leading-5 text-teal-900 caret-teal-950 ring-1 ring-teal-600/40 focus-visible:outline-none"
+                    style={{ width: 0, minWidth: 48, flexGrow: 0, flexShrink: 1 }}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      const el = e.currentTarget
+                      const next = el.value
+                      editingChipDraftRef.current = next
+                      setEditingChipDraft(next)
+                      fitTextControl(el, {
+                        text: next,
+                        grow: false,
+                        caretSlot: false,
+                        maxWidth: contentMaxWidth(),
+                      })
+                      analyzeChipDraft(next, el.selectionStart ?? next.length)
+                    }}
+                    onKeyUp={(e) =>
+                      analyzeChipDraft(
+                        e.currentTarget.value,
+                        e.currentTarget.selectionStart ?? e.currentTarget.value.length,
+                      )
+                    }
+                    onKeyDown={onChipEditKeyDown}
+                    onBlur={() => {
+                      window.setTimeout(() => {
+                        if (chipEditPending.current) return
+                        if (editingChipIdRef.current === seg.id) commitChipEdit()
+                      }, 120)
+                    }}
+                  />
+                )
+              }
               return (
                 <span
                   key={seg.id}
                   contentEditable={false}
-                  className="inline-flex max-w-full shrink-0 items-center gap-0.5 rounded-lg bg-teal-500/15 py-0.5 pl-2 pr-0.5 text-xs font-semibold text-teal-900 ring-1 ring-teal-500/25"
+                  className="inline-flex max-w-full min-w-0 shrink items-center gap-0 rounded-md bg-teal-500/15 py-0 pl-1.5 pr-0 text-xs font-semibold leading-5 text-teal-900 ring-1 ring-teal-500/25"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <span className="truncate font-mono" title={seg.raw}>
+                  <button
+                    type="button"
+                    className="min-w-0 truncate font-mono hover:underline"
+                    title={`${seg.raw} — click to edit`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      startEditChip(seg.id, seg.raw)
+                    }}
+                  >
                     {chipLabel(seg.raw)}
-                  </span>
+                  </button>
                   <button
                     type="button"
                     aria-label={`Remove ${seg.raw}`}
@@ -333,44 +649,79 @@ export function TemplateField({
               )
             }
 
-            // Empty segments exist so the caret can sit before/after chips, but they must not
-            // flex-grow — that was leaving large gaps around reference pills.
             const isEmpty = seg.text.length === 0
-            const isLastText =
-              segments.findLastIndex((s) => s.kind === 'text') === segIndex
-            const widthCh = isEmpty
-              ? isLastText
-                ? 1
-                : 0
-              : Math.max(1, Math.min(64, seg.text.length + (multiline ? 2 : 1)))
-            const textStyle: CSSProperties = {
-              width: isEmpty && !isLastText ? 0 : `${widthCh}ch`,
-              flexGrow: isLastText ? 1 : 0,
-              flexShrink: 0,
-              minWidth: isEmpty && !isLastText ? 0 : undefined,
+            const isLastText = segments.findLastIndex((s) => s.kind === 'text') === segIndex
+            const isCaretSlot = isEmpty && !isLastText
+            const maxWidth = multiline ? contentMaxWidth() : undefined
+            const textStyle: CSSProperties = isCaretSlot
+              ? {
+                  width: 0,
+                  maxWidth: 0,
+                  minWidth: 0,
+                  flexGrow: 0,
+                  flexShrink: 0,
+                  padding: 0,
+                  margin: 0,
+                  border: 0,
+                  overflow: 'hidden',
+                  opacity: 0,
+                }
+              : {
+                  width: 0,
+                  flexGrow: isLastText ? 1 : 0,
+                  flexShrink: multiline ? 1 : 0,
+                  minWidth: isEmpty ? 8 : 0,
+                  maxWidth: multiline ? '100%' : undefined,
+                  ...(multiline
+                    ? {
+                        whiteSpace: 'pre-wrap' as const,
+                        overflowWrap: 'anywhere' as const,
+                        wordBreak: 'break-word' as const,
+                      }
+                    : null),
+                }
+
+            const bindRef = (el: HTMLInputElement | HTMLTextAreaElement | null) => {
+              if (el) {
+                inputRefs.current.set(seg.id, el)
+                fitTextControl(el, {
+                  text: seg.text,
+                  grow: isLastText,
+                  caretSlot: isCaretSlot,
+                  maxWidth,
+                  wrap: !!multiline,
+                })
+              } else {
+                inputRefs.current.delete(seg.id)
+              }
             }
 
             if (multiline) {
               return (
                 <textarea
                   key={seg.id}
-                  ref={(el) => {
-                    if (el) inputRefs.current.set(seg.id, el)
-                    else inputRefs.current.delete(seg.id)
-                  }}
+                  ref={bindRef}
                   disabled={disabled}
                   value={seg.text}
                   rows={1}
                   spellCheck={false}
+                  tabIndex={isCaretSlot ? -1 : undefined}
                   aria-autocomplete="list"
                   aria-controls={listId}
                   className={cn(
-                    'min-h-[1.5rem] resize-none overflow-hidden bg-transparent py-0.5 text-sm text-[var(--color-ink)] caret-[var(--color-ink)] focus-visible:outline-none',
-                    isEmpty && !isLastText ? 'min-w-0 p-0' : 'min-w-[1ch]',
+                    'resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-5 text-[var(--color-ink)] caret-[var(--color-ink)] focus-visible:outline-none',
+                    isCaretSlot ? 'm-0 h-0 min-h-0' : 'min-h-[1.25rem]',
                   )}
                   style={textStyle}
                   onChange={(e) => {
                     const el = e.currentTarget
+                    fitTextControl(el, {
+                      text: el.value,
+                      grow: isLastText,
+                      caretSlot: false,
+                      maxWidth: contentMaxWidth(),
+                      wrap: true,
+                    })
                     updateText(seg.id, el.value, el.selectionStart ?? el.value.length)
                   }}
                   onKeyUp={(e) =>
@@ -381,6 +732,9 @@ export function TemplateField({
                     analyzeCaret(seg.id, e.currentTarget.value, e.currentTarget.selectionStart ?? 0)
                   }}
                   onKeyDown={onKeyDown}
+                  onFocus={() => {
+                    if (editingChipId) commitChipEdit()
+                  }}
                   onBlur={() => setTimeout(() => setOpen(false), 150)}
                 />
               )
@@ -389,22 +743,25 @@ export function TemplateField({
             return (
               <input
                 key={seg.id}
-                ref={(el) => {
-                  if (el) inputRefs.current.set(seg.id, el)
-                  else inputRefs.current.delete(seg.id)
-                }}
+                ref={bindRef}
                 disabled={disabled}
                 value={seg.text}
                 spellCheck={false}
+                tabIndex={isCaretSlot ? -1 : undefined}
                 aria-autocomplete="list"
                 aria-controls={listId}
                 className={cn(
-                  'h-7 bg-transparent text-sm text-[var(--color-ink)] caret-[var(--color-ink)] focus-visible:outline-none',
-                  isEmpty && !isLastText ? 'min-w-0 p-0' : 'min-w-[1ch]',
+                  'border-0 bg-transparent p-0 text-sm leading-5 text-[var(--color-ink)] caret-[var(--color-ink)] focus-visible:outline-none',
+                  isCaretSlot ? 'm-0 h-0' : 'h-5',
                 )}
                 style={textStyle}
                 onChange={(e) => {
                   const el = e.currentTarget
+                  fitTextControl(el, {
+                    text: el.value,
+                    grow: isLastText,
+                    caretSlot: false,
+                  })
                   updateText(seg.id, el.value, el.selectionStart ?? el.value.length)
                 }}
                 onKeyUp={(e) =>
@@ -415,6 +772,9 @@ export function TemplateField({
                   analyzeCaret(seg.id, e.currentTarget.value, e.currentTarget.selectionStart ?? 0)
                 }}
                 onKeyDown={onKeyDown}
+                onFocus={() => {
+                  if (editingChipId) commitChipEdit()
+                }}
                 onBlur={() => setTimeout(() => setOpen(false), 150)}
               />
             )
@@ -440,6 +800,7 @@ export function TemplateField({
                 )}
                 onMouseDown={(e) => {
                   e.preventDefault()
+                  chipEditPending.current = true
                   insertSuggestion(s)
                 }}
               >
@@ -461,7 +822,9 @@ export function TemplateField({
           <code className="rounded bg-slate-100 px-1">parseJson({`{{vars.jsonStr}}`})</code>,{' '}
           <code className="rounded bg-slate-100 px-1">{`{{vars.count + 1}}`}</code>,{' '}
           <code className="rounded bg-slate-100 px-1">{`{{if(empty(vars.x), 'n/a', vars.x)}}`}</code>.
-          Chips are read-only — use × to remove.
+          Click a chip to edit it, or use × to remove. Use{' '}
+          <code className="rounded bg-slate-100 px-1">{`{{embed("https://…")}}`}</code> for YouTube, X,
+          Vimeo, Spotify, or TikTok.
         </p>
       ) : null}
     </div>

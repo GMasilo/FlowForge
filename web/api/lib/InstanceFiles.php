@@ -40,6 +40,11 @@ final class InstanceFiles
         'xls' => 'application/vnd.ms-excel',
         'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'zip' => 'application/zip',
+        'woff2' => 'font/woff2',
+        'woff' => 'font/woff',
+        'ttf' => 'font/ttf',
+        'otf' => 'font/otf',
+        'svg' => 'image/svg+xml',
     ];
 
     public static function root(array $config): string
@@ -489,6 +494,26 @@ final class InstanceFiles
             return true;
         }
         if ($detected === 'application/octet-stream') {
+            return true;
+        }
+        // Fonts often report as application/font-* or x-font-* depending on OS/browser.
+        $fontExpected = in_array($expected, ['font/woff2', 'font/woff', 'font/ttf', 'font/otf'], true);
+        if ($fontExpected && (
+            str_starts_with($detected, 'font/')
+            || str_starts_with($detected, 'application/font-')
+            || str_starts_with($detected, 'application/x-font-')
+            || $detected === 'application/vnd.ms-fontobject'
+        )) {
+            return true;
+        }
+        // SVG may be sniffed as XML/HTML depending on content.
+        if ($expected === 'image/svg+xml' && in_array($detected, [
+            'image/svg+xml',
+            'text/xml',
+            'application/xml',
+            'text/plain',
+            'text/html',
+        ], true)) {
             return true;
         }
         return false;

@@ -6,6 +6,7 @@ import {
   ArrowUpAZ,
   Check,
   CreditCard,
+  Database,
   Globe,
   Lock,
   Mail,
@@ -24,15 +25,23 @@ import {
   defaultEmailConfig,
   defaultHttpConfig,
   defaultPaymentConfig,
+  defaultDatabaseConfig,
   parseEmailConfig,
   parseHttpConfig,
   parsePaymentConfig,
+  parseDatabaseConfig,
   connectionConfigToJson,
   type EmailConnectionConfig,
   type HttpConnectionConfig,
   type PaymentConnectionConfig,
+  type DatabaseConnectionConfig,
 } from '@/features/connections/connectionConfig'
-import { EmailConnectionFields, HttpConnectionFields, PaymentConnectionFields } from '@/features/connections/ConnectionFormFields'
+import {
+  EmailConnectionFields,
+  HttpConnectionFields,
+  PaymentConnectionFields,
+  DatabaseConnectionFields,
+} from '@/features/connections/ConnectionFormFields'
 import { ExpectedResponseEditor, InputParamsEditor } from '@/features/connections/SchemaEditors'
 import {
   addConnectionToChatbot,
@@ -48,6 +57,7 @@ import {
 } from '@/features/connections/connectionApi'
 import {
   canEdit,
+  instanceFeatureEnabled,
   type ConnectionKind,
   type ConnectionVisibility,
   type ConnectionWithConfig,
@@ -60,12 +70,13 @@ import { Label } from '@/shared/ui/label'
 import { Select } from '@/shared/ui/select'
 import { Badge } from '@/shared/ui/badge'
 import { FieldError } from '@/shared/ui/field-error'
+import { PAGE_HELP } from '@/shared/help/pageHelp'
 import { PageHeader } from '@/shared/ui/page-header'
 import { cn } from '@/shared/lib/utils'
 
 type TabId = 'mine' | 'forgehub'
 type KindFilter = 'all' | ConnectionKind
-type ScopeFilter = 'all' | 'global' | 'shared'
+type ScopeFilter = 'all' | 'global' | 'shared' | 'private'
 type SortMode = 'name-asc' | 'name-desc' | 'recent'
 
 type FormState = {
@@ -78,6 +89,7 @@ type FormState = {
   http: HttpConnectionConfig
   email: EmailConnectionConfig
   payment: PaymentConnectionConfig
+  database: DatabaseConnectionConfig
 }
 
 function blankForm(chatbotId = ''): FormState {
@@ -90,23 +102,27 @@ function blankForm(chatbotId = ''): FormState {
     http: defaultHttpConfig(),
     email: defaultEmailConfig(),
     payment: defaultPaymentConfig(),
+    database: defaultDatabaseConfig(),
   }
 }
 
 function kindAccent(kind: ConnectionKind) {
   if (kind === 'http') return 'from-teal-500 via-cyan-500 to-sky-500'
   if (kind === 'payment') return 'from-emerald-500 via-teal-500 to-cyan-500'
+  if (kind === 'database') return 'from-sky-600 via-blue-600 to-indigo-600'
   return 'from-orange-500 via-amber-500 to-yellow-500'
 }
 
 function KindIcon({ kind }: { kind: ConnectionKind }) {
   if (kind === 'http') return <Globe className="h-6 w-6" />
   if (kind === 'payment') return <CreditCard className="h-6 w-6" />
+  if (kind === 'database') return <Database className="h-6 w-6" />
   return <Mail className="h-6 w-6" />
 }
 
 export function ConnectionsPage() {
   const { instance, role } = useRequiredInstance()
+  const advancedConnections = instanceFeatureEnabled(instance, 'advanced_connections')
   const { user } = useAuth()
   const qc = useQueryClient()
   const editable = canEdit(role)
@@ -118,6 +134,7 @@ export function ConnectionsPage() {
       <PageHeader
         title="Connections"
         description={`Manage your integrations for ${instance.name}, or discover shared ones in ForgeHub.`}
+        help={PAGE_HELP.connections}
       />
 
       <div className="flex w-fit rounded-xl border border-[var(--color-border)]/80 bg-slate-50/80 p-1">
@@ -156,6 +173,7 @@ export function ConnectionsPage() {
           editable={editable}
           userId={user?.id}
           instanceId={instance.id}
+          advancedConnections={advancedConnections}
           onError={setError}
           invalidate={() => {
             void qc.invalidateQueries({ queryKey: ['my-created-connections', instance.id] })
@@ -167,6 +185,7 @@ export function ConnectionsPage() {
           editable={editable}
           userId={user?.id}
           instanceId={instance.id}
+          advancedConnections={advancedConnections}
           onError={setError}
         />
       )}
@@ -178,12 +197,14 @@ function MyConnectionsTab({
   editable,
   userId,
   instanceId,
+  advancedConnections,
   onError,
   invalidate,
 }: {
   editable: boolean
   userId?: string
   instanceId: string
+  advancedConnections: boolean
   onError: (msg: string | null) => void
   invalidate: () => void
 }) {
@@ -199,6 +220,7 @@ function MyConnectionsTab({
         .from('chatbots')
         .select('id, name')
         .eq('instance_id', instanceId)
+        .is('deleted_at', null)
         .order('name')
       if (error) throw error
       return data ?? []
@@ -315,6 +337,7 @@ function MyConnectionsTab({
       http: row.kind === 'http' ? parseHttpConfig(row.config) : defaultHttpConfig(),
       email: row.kind === 'email' ? parseEmailConfig(row.config) : defaultEmailConfig(),
       payment: row.kind === 'payment' ? parsePaymentConfig(row.config) : defaultPaymentConfig(),
+      database: row.kind === 'database' ? parseDatabaseConfig(row.config) : defaultDatabaseConfig(),
     })
     setOpen(true)
     onError(null)
@@ -342,7 +365,8 @@ function MyConnectionsTab({
           <option value="all">All kinds</option>
           <option value="http">HTTP</option>
           <option value="email">Email</option>
-          <option value="payment">Payment</option>
+          {advancedConnections ? <option value="payment">Payment</option> : null}
+          {advancedConnections ? <option value="database">Database</option> : null}
         </Select>
         {editable ? (
           <Button
@@ -394,7 +418,8 @@ function MyConnectionsTab({
                 >
                   <option value="http">HTTP</option>
                   <option value="email">Email (SMTP)</option>
-                  <option value="payment">Payment</option>
+                  {advancedConnections ? <option value="payment">Payment</option> : null}
+                  {advancedConnections ? <option value="database">Database</option> : null}
                 </Select>
               </div>
               <div>
@@ -403,7 +428,7 @@ function MyConnectionsTab({
                   value={form.visibility}
                   onChange={(e) => setForm((f) => ({ ...f, visibility: e.target.value as ConnectionVisibility }))}
                 >
-                  <option value="private">Private — owning chatbot only</option>
+                  <option value="private">Private — not listed for others (you can still install elsewhere)</option>
                   <option value="global">Global — listed in ForgeHub</option>
                   <option value="shared">Shared — ForgeHub for selected people</option>
                 </Select>
@@ -456,6 +481,11 @@ function MyConnectionsTab({
                 value={form.payment}
                 onChange={(payment) => setForm((f) => ({ ...f, payment }))}
               />
+            ) : form.kind === 'database' ? (
+              <DatabaseConnectionFields
+                value={form.database}
+                onChange={(database) => setForm((f) => ({ ...f, database }))}
+              />
             ) : (
               <>
                 <EmailConnectionFields value={form.email} onChange={(email) => setForm((f) => ({ ...f, email }))} />
@@ -485,11 +515,11 @@ function MyConnectionsTab({
       {mine.isLoading ? (
         <p className="text-sm text-[var(--color-ink-muted)]">Loading your connections…</p>
       ) : filtered.length ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="ff-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((c) => (
             <article
               key={c.id}
-              className="group flex aspect-square flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[var(--shadow-soft)] transition hover:-translate-y-0.5 hover:border-teal-200"
+              className="ff-hover-lift group flex aspect-square flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[var(--shadow-soft)]"
             >
               <div className={cn('relative h-[38%] bg-gradient-to-br', kindAccent(c.kind))}>
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.35),transparent_50%)]" />
@@ -547,11 +577,13 @@ function ForgeHubTab({
   editable,
   userId,
   instanceId,
+  advancedConnections,
   onError,
 }: {
   editable: boolean
   userId?: string
   instanceId: string
+  advancedConnections: boolean
   onError: (msg: string | null) => void
 }) {
   const qc = useQueryClient()
@@ -569,6 +601,7 @@ function ForgeHubTab({
         .from('chatbots')
         .select('id, name')
         .eq('instance_id', instanceId)
+        .is('deleted_at', null)
         .order('name')
       if (error) throw error
       return data ?? []
@@ -644,6 +677,7 @@ function ForgeHubTab({
       total: rows.length,
       global: rows.filter((r) => r.visibility === 'global').length,
       shared: rows.filter((r) => r.visibility === 'shared').length,
+      private: rows.filter((r) => r.visibility === 'private').length,
       installed: rows.filter((r) => r.linked_to_chatbot).length,
     }
   }, [hub.data])
@@ -660,15 +694,17 @@ function ForgeHubTab({
             </div>
             <h2 className="mt-2 text-xl font-semibold text-slate-900">Discover shared integrations</h2>
             <p className="mt-1 max-w-xl text-sm text-slate-600">
-              Browse connections published in your organisation. Credentials stay locked — install into a chatbot to use
-              them in flows.
+              Browse global and shared connections, plus your private ones. Credentials stay locked — install into a
+              chatbot to use them in flows.
             </p>
             <div className="mt-3 flex flex-wrap gap-3 text-[11px] font-medium text-slate-500">
               <span>{stats.total} listed</span>
               <span>·</span>
               <span>{stats.global} global</span>
               <span>·</span>
-              <span>{stats.shared} shared with you</span>
+              <span>{stats.shared} shared</span>
+              <span>·</span>
+              <span>{stats.private} your private</span>
               {targetChatbotId ? (
                 <>
                   <span>·</span>
@@ -709,12 +745,14 @@ function ForgeHubTab({
           <option value="all">All kinds</option>
           <option value="http">HTTP</option>
           <option value="email">Email</option>
-          <option value="payment">Payment</option>
+          {advancedConnections ? <option value="payment">Payment</option> : null}
+          {advancedConnections ? <option value="database">Database</option> : null}
         </Select>
         <Select value={scopeFilter} onChange={(e) => setScopeFilter(e.target.value as ScopeFilter)}>
-          <option value="all">Global + shared</option>
+          <option value="all">All scopes</option>
           <option value="global">Global only</option>
-          <option value="shared">Shared with me</option>
+          <option value="shared">Shared</option>
+          <option value="private">My private</option>
         </Select>
         <Select value={sortMode} onChange={(e) => setSortMode(e.target.value as SortMode)}>
           <option value="name-asc">Name A–Z</option>
@@ -752,7 +790,7 @@ function ForgeHubTab({
       {hub.isLoading ? (
         <p className="text-sm text-[var(--color-ink-muted)]">Loading ForgeHub…</p>
       ) : filtered.length ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="ff-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((c) => (
             <ForgeHubCard
               key={c.id}
@@ -771,7 +809,7 @@ function ForgeHubTab({
           <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
             {query || kindFilter !== 'all' || scopeFilter !== 'all' || installedOnly
               ? 'No ForgeHub listings match your filters.'
-              : 'ForgeHub is empty. Publish a connection as Global or Shared from My connections.'}
+              : 'ForgeHub is empty. Create a connection, or publish one as Global or Shared from My connections. Your private connections also appear here so you can install them on other chatbots.'}
           </p>
         </Card>
       )}
@@ -795,7 +833,7 @@ function ForgeHubCard({
   onRemove: () => void
 }) {
   return (
-    <article className="group flex aspect-square flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[var(--shadow-soft)] transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md">
+    <article className="ff-hover-lift group flex aspect-square flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[var(--shadow-soft)]">
       <div className={cn('relative h-[40%] bg-gradient-to-br', kindAccent(c.kind))}>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(255,255,255,0.4),transparent_45%)]" />
         <div className="absolute left-3 top-3 flex gap-1">
@@ -803,6 +841,11 @@ function ForgeHubCard({
             <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
               <Globe className="h-3 w-3" />
               Global
+            </span>
+          ) : c.visibility === 'private' ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+              <Lock className="h-3 w-3" />
+              Private
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-sky-800">

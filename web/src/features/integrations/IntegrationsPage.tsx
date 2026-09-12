@@ -15,6 +15,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react'
+import { PlanLockedState } from '@/features/billing/PlanLockedState'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import {
@@ -31,8 +32,10 @@ import {
   updateIntegration,
   setIntegrationStatus,
 } from '@/features/integrations/integrationApi'
+import { supabase } from '@/shared/lib/supabase'
 import {
   canAdmin,
+  instanceFeatureEnabled,
   type Integration,
   type IntegrationProvider,
   type IntegrationStatus,
@@ -43,13 +46,16 @@ import { Card } from '@/shared/ui/card'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Select } from '@/shared/ui/select'
+import { Textarea } from '@/shared/ui/textarea'
 import { Badge } from '@/shared/ui/badge'
 import { FieldError } from '@/shared/ui/field-error'
+import { PAGE_HELP } from '@/shared/help/pageHelp'
 import { PageHeader } from '@/shared/ui/page-header'
 import { cn } from '@/shared/lib/utils'
 
 type FormState = {
   id?: string
+  chatbotId: string
   provider: IntegrationProvider
   name: string
   status: IntegrationStatus
@@ -57,13 +63,14 @@ type FormState = {
   secrets: Record<string, string>
 }
 
-function blankForm(provider: IntegrationProvider = 'google_drive'): FormState {
+function blankForm(provider: IntegrationProvider = 'google_drive', chatbotId = ''): FormState {
   const item = catalogItem(provider)
   const config: Record<string, string> = {}
   const secrets: Record<string, string> = {}
   for (const f of item?.configFields ?? []) config[f.key] = ''
   for (const f of item?.secretFields ?? []) secrets[f.key] = ''
   return {
+    chatbotId,
     provider,
     name: item?.label ?? '',
     status: 'disconnected',
@@ -141,6 +148,7 @@ function recordFromJson(value: Json | null | undefined): Record<string, string> 
 
 export function IntegrationsPage() {
   const { instance, role } = useRequiredInstance()
+  const integrationsEnabled = instanceFeatureEnabled(instance, 'integrations')
   const { user } = useAuth()
   const qc = useQueryClient()
   const isAdmin = canAdmin(role)
@@ -151,11 +159,32 @@ export function IntegrationsPage() {
   const [error, setError] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
 
+  const chatbots = useQuery({
+    queryKey: ['instance-chatbots-for-integrations', instance.id],
+    enabled: isAdmin && integrationsEnabled,
+    queryFn: async () => {
+      const { data, error: qError } = await supabase
+        .from('chatbots')
+        .select('id, name')
+        .eq('instance_id', instance.id)
+        .is('deleted_at', null)
+        .order('name')
+      if (qError) throw qError
+      return data ?? []
+    },
+  })
+
   const integrations = useQuery({
     queryKey: ['integrations', instance.id],
-    enabled: isAdmin,
+    enabled: isAdmin && integrationsEnabled,
     queryFn: () => listIntegrations(instance.id),
   })
+
+  const chatbotNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const b of chatbots.data ?? []) map.set(b.id, b.name)
+    return map
+  }, [chatbots.data])
 
   const filtered = useMemo(() => {
     let rows = integrations.data ?? []
@@ -180,8 +209,15 @@ export function IntegrationsPage() {
       const name = form.name.trim()
       if (!name) throw new Error('Name is required')
       const config = form.config as unknown as Json
-      const secrets = form.secrets as unknown as Json
+      // Leave blank secret fields unchanged on edit (password inputs often look empty).
+      let secrets = form.secrets as unknown as Json
       if (form.id) {
+        const existing = recordFromJson(await getIntegrationSecrets(form.id))
+        const merged: Record<string, string> = { ...existing }
+        for (const [k, v] of Object.entries(form.secrets)) {
+          if (String(v ?? '').trim() !== '') merged[k] = String(v)
+        }
+        secrets = merged as unknown as Json
         await updateIntegration({
           id: form.id,
           name,
@@ -190,8 +226,11 @@ export function IntegrationsPage() {
           status: form.status,
         })
       } else {
+        const chatbotId = form.chatbotId.trim()
+        if (!chatbotId) throw new Error('Choose the owning chatbot')
         await createIntegration({
           instanceId: instance.id,
+          chatbotId,
           provider: form.provider,
           name,
           config,
@@ -232,6 +271,10 @@ export function IntegrationsPage() {
     },
   })
 
+  if (!integrationsEnabled) {
+    return <PlanLockedState feature="integrations" title="Integrations" />
+  }
+
   if (!isAdmin) {
     return <Navigate to={`/instances/${instance.id}`} replace />
   }
@@ -245,6 +288,7 @@ export function IntegrationsPage() {
     for (const f of item?.secretFields ?? []) if (secrets[f.key] === undefined) secrets[f.key] = ''
     setForm({
       id: row.id,
+      chatbotId: row.chatbot_id,
       provider: row.provider,
       name: row.name,
       status: row.status,
@@ -257,7 +301,8 @@ export function IntegrationsPage() {
   }
 
   function startCreate(provider: IntegrationProvider) {
-    setForm(blankForm(provider))
+    const defaultChatbotId = form.chatbotId || chatbots.data?.[0]?.id || ''
+    setForm(blankForm(provider, defaultChatbotId))
     setPicking(false)
     setOpen(true)
     setError(null)
@@ -274,7 +319,8 @@ export function IntegrationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Integrations"
-        description={`Connect cloud storage and productivity tools for ${instance.name}. Configured integrations can be selected on flow steps (file upload, export, notify, and more).`}
+        description={`Organisation integrations for ${instance.name}. Prefer creating them on a chatbot’s Data → Integrations tab so they install on that bot. Slack accounts here can still power Alerts.`}
+        help={PAGE_HELP.integrations}
         actions={
           <Button
             onClick={() => {
@@ -332,6 +378,33 @@ export function IntegrationsPage() {
           </h2>
           {item ? <p className="text-sm text-[var(--color-ink-muted)]">{item.description}</p> : null}
           <form className="space-y-3" onSubmit={onSubmit}>
+            {!form.id ? (
+              <div>
+                <Label>Owning chatbot</Label>
+                <Select
+                  value={form.chatbotId}
+                  onChange={(e) => setForm((f) => ({ ...f, chatbotId: e.target.value }))}
+                  required
+                >
+                  <option value="">Select chatbot…</option>
+                  {(chatbots.data ?? []).map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </Select>
+                <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+                  The integration is owned by this chatbot and auto-installed there. Install it on other chatbots from their Data tab.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--color-ink-muted)]">
+                Owned by{' '}
+                <span className="font-medium text-[var(--color-ink)]">
+                  {chatbotNameById.get(form.chatbotId) ?? form.chatbotId}
+                </span>
+              </p>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label>Display name</Label>
@@ -385,20 +458,36 @@ export function IntegrationsPage() {
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {item!.secretFields.map((f) => (
-                    <div key={f.key}>
+                    <div key={f.key} className={f.multiline ? 'sm:col-span-2' : undefined}>
                       <Label>{f.label}</Label>
-                      <Input
-                        type="password"
-                        autoComplete="off"
-                        value={form.secrets[f.key] ?? ''}
-                        placeholder={f.placeholder ?? (form.id ? '••••••••' : undefined)}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            secrets: { ...prev.secrets, [f.key]: e.target.value },
-                          }))
-                        }
-                      />
+                      {f.multiline ? (
+                        <Textarea
+                          autoComplete="off"
+                          rows={5}
+                          className="font-mono text-xs"
+                          value={form.secrets[f.key] ?? ''}
+                          placeholder={f.placeholder ?? (form.id ? 'Leave blank to keep existing' : undefined)}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              secrets: { ...prev.secrets, [f.key]: e.target.value },
+                            }))
+                          }
+                        />
+                      ) : (
+                        <Input
+                          type="password"
+                          autoComplete="off"
+                          value={form.secrets[f.key] ?? ''}
+                          placeholder={f.placeholder ?? (form.id ? '••••••••' : undefined)}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              secrets: { ...prev.secrets, [f.key]: e.target.value },
+                            }))
+                          }
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -449,11 +538,11 @@ export function IntegrationsPage() {
       {integrations.isLoading ? (
         <p className="text-sm text-[var(--color-ink-muted)]">Loading integrations…</p>
       ) : filtered.length ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="ff-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((row) => (
             <article
               key={row.id}
-              className="group flex aspect-square flex-col overflow-hidden rounded-2xl border border-[var(--color-border)]/90 bg-[var(--color-surface)] shadow-[var(--shadow-soft)] transition hover:-translate-y-0.5 hover:border-[var(--color-accent)]/40"
+              className="ff-hover-lift group flex aspect-square flex-col overflow-hidden rounded-2xl border border-[var(--color-border)]/90 bg-[var(--color-surface)] shadow-[var(--shadow-soft)]"
             >
               <div className={cn('relative h-[38%] bg-gradient-to-br', providerAccent(row.provider))}>
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.35),transparent_50%)]" />
@@ -466,6 +555,9 @@ export function IntegrationsPage() {
                   <h3 className="truncate text-sm font-semibold text-[var(--color-ink)]">{row.name}</h3>
                   <p className="mt-0.5 truncate text-[11px] text-[var(--color-ink-muted)]">
                     {providerLabel(row.provider)}
+                    {row.chatbot_id
+                      ? ` · ${chatbotNameById.get(row.chatbot_id) ?? 'Chatbot'}`
+                      : ''}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-1">{statusBadge(row.status)}</div>

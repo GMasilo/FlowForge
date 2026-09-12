@@ -1,0 +1,15 @@
+RewriteEngine On
+
+# Pass Authorization through to PHP (CGI/FastCGI often strips it otherwise)
+RewriteCond %{HTTP:Authorization} .
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Keep harness / scenario sources private — only the mock upstream is public.
+RewriteRule ^(run\.php|Assert\.php|signInBody\.php|README\.md|scenarios/.*)$ - [F,L]
+
+# Pretty mock routes → mock-upstream.php (e.g. /auth/login, /health)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ mock-upstream.php [L,QSA]
+
+# Disable directory listing
+Options -Indexes

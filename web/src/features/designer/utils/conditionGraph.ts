@@ -1,4 +1,5 @@
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
+import { parseSwitchCases, switchBranchHandles } from '@/features/designer/model/switchStep'
 
 export function outgoingMap(edges: DesignerEdge[]) {
   const map = new Map<string, DesignerEdge[]>()
@@ -67,6 +68,27 @@ export function loopBodyStart(loopId: string, edges: DesignerEdge[]) {
   return edges.find((e) => e.source === loopId && e.sourceHandle === 'body')?.target ?? null
 }
 
+/** Handles that leave a container into branch lanes (not After/Then joins). */
+export function containerBranchHandles(node: DesignerNode | undefined): string[] {
+  if (!node) return []
+  if (node.type === 'condition') return ['true', 'false']
+  if (node.type === 'loop') return ['body']
+  if (node.type === 'switch') return switchBranchHandles(parseSwitchCases(node.config.cases))
+  return []
+}
+
+export function isContainerNodeType(type: DesignerNode['type']): boolean {
+  return type === 'condition' || type === 'loop' || type === 'switch'
+}
+
+function branchEdgeLabel(handle: string): string {
+  if (handle === 'true') return 'Yes'
+  if (handle === 'false') return 'No'
+  if (handle === 'body') return 'Each'
+  if (handle === 'default') return 'Default'
+  return 'Case'
+}
+
 /**
  * Wire a continue/Then node after Yes and No branches of a condition.
  *
@@ -84,32 +106,30 @@ export function edgesForConditionThen(args: {
   const { conditionId, thenNodeId, edges, nodes, newId } = args
   const nodesById = new Map(nodes.map((n) => [n.id, n]))
   const outgoing = outgoingMap(edges)
-  const trueEdge = edges.find((e) => e.source === conditionId && e.sourceHandle === 'true')
-  const falseEdge = edges.find((e) => e.source === conditionId && e.sourceHandle === 'false')
+  const handles = containerBranchHandles(nodesById.get(conditionId))
 
-  const trueStart = trueEdge?.target ?? null
-  const falseStart = falseEdge?.target ?? null
-  const bodyStartEarly = loopBodyStart(conditionId, edges)
-  const trueReach = reachableIds(trueStart, outgoing)
-  const falseReach = reachableIds(falseStart, outgoing)
-  const bodyReachEarly = reachableIds(bodyStartEarly, outgoing)
+  const starts = new Map<string, string | null>()
+  const reaches = new Map<string, Set<string>>()
+  for (const handle of handles) {
+    const start = edges.find((e) => e.source === conditionId && e.sourceHandle === handle)?.target ?? null
+    starts.set(handle, start)
+    const reach = reachableIds(start, outgoing)
+    reach.delete(thenNodeId)
+    reaches.set(handle, reach)
+  }
 
-  trueReach.delete(thenNodeId)
-  falseReach.delete(thenNodeId)
-  bodyReachEarly.delete(thenNodeId)
-
-  const next = edges.filter(
-    (e) =>
-      !(e.target === thenNodeId && e.source === conditionId) &&
-      !(
-        e.target === thenNodeId &&
-        (trueReach.has(e.source) || falseReach.has(e.source) || bodyReachEarly.has(e.source))
-      ),
-  )
+  const next = edges.filter((e) => {
+    if (e.target !== thenNodeId) return true
+    if (e.source === conditionId) return false
+    for (const reach of reaches.values()) {
+      if (reach.has(e.source)) return false
+    }
+    return true
+  })
 
   const add: DesignerEdge[] = []
 
-  function wireBranch(handle: 'true' | 'false' | 'body', start: string | null, reach: Set<string>) {
+  function wireBranch(handle: string, start: string | null, reach: Set<string>) {
     if (!start || start === thenNodeId) {
       add.push({
         id: newId(),
@@ -138,30 +158,25 @@ export function edgesForConditionThen(args: {
     }
   }
 
-  wireBranch('true', trueStart, trueReach)
-  wireBranch('false', falseStart, falseReach)
-
-  const bodyStart = bodyStartEarly
-  if (bodyStart || nodesById.get(conditionId)?.type === 'loop') {
-    wireBranch('body', bodyStart, bodyReachEarly)
+  for (const handle of handles) {
+    wireBranch(handle, starts.get(handle) ?? null, reaches.get(handle) ?? new Set())
   }
 
   return [...next, ...add]
 }
 
 /**
- * Insert first (or splice) step into a Yes/No/Body branch.
- * handle: 'true' | 'false' | 'body'
+ * Insert first (or splice) step into a Yes/No/Body/Case/Default branch.
  */
 export function edgesInsertBranchStep(args: {
   conditionId: string
-  handle: 'true' | 'false' | 'body'
+  handle: string
   newNodeId: string
   edges: DesignerEdge[]
   newId: () => string
 }): DesignerEdge[] {
   const { conditionId, handle, newNodeId, edges, newId } = args
-  const label = handle === 'true' ? 'Yes' : handle === 'false' ? 'No' : 'Each'
+  const label = branchEdgeLabel(handle)
   const existing = edges.filter((e) => e.source === conditionId && e.sourceHandle === handle)
   const continueTargets = existing.map((e) => e.target)
 
@@ -188,8 +203,8 @@ export function edgesInsertBranchStep(args: {
 }
 
 /**
- * Nodes on this condition's Yes/No spines that can emit a Then edge for *this* IF.
- * Nested conditions are skipped; we resume after each nested IF's own After-IF roots.
+ * Nodes on this container's branch spines that can emit a Then edge for *this* IF/switch/loop.
+ * Nested containers are skipped; we resume after each nested container's own After roots.
  */
 function collectBranchSpine(
   conditionId: string,
@@ -198,11 +213,13 @@ function collectBranchSpine(
   continueRoots: Set<string>,
 ): Set<string> {
   const outgoing = outgoingMap(edges)
-  const { trueStart, falseStart } = conditionBranchStarts(conditionId, edges)
+  const handles = containerBranchHandles(nodesById.get(conditionId))
   const spine = new Set<string>()
+  const walkedStarts = new Set<string>()
 
   function walk(start: string | null) {
-    if (!start || continueRoots.has(start)) return
+    if (!start || continueRoots.has(start) || walkedStarts.has(start)) return
+    walkedStarts.add(start)
     const q = [start]
     const seen = new Set<string>()
     while (q.length) {
@@ -211,8 +228,8 @@ function collectBranchSpine(
       seen.add(id)
       const node = nodesById.get(id)
 
-      if (node?.type === 'condition' || node?.type === 'loop') {
-        // Nested IF/loop stays on this branch; its After can Then into *this* container
+      if (node && isContainerNodeType(node.type)) {
+        // Nested IF/loop/switch stays on this branch; its After can Then into *this* container
         const nestedContinues = findContinueRootIds(id, edges, nodesById)
         for (const c of nestedContinues) {
           spine.add(c)
@@ -232,11 +249,9 @@ function collectBranchSpine(
     }
   }
 
-  if (trueStart && !continueRoots.has(trueStart)) walk(trueStart)
-  if (falseStart && !continueRoots.has(falseStart) && falseStart !== trueStart) walk(falseStart)
-  const bodyStart = loopBodyStart(conditionId, edges)
-  if (bodyStart && !continueRoots.has(bodyStart) && bodyStart !== trueStart && bodyStart !== falseStart) {
-    walk(bodyStart)
+  for (const handle of handles) {
+    const start = edges.find((e) => e.source === conditionId && e.sourceHandle === handle)?.target ?? null
+    if (start && !continueRoots.has(start)) walk(start)
   }
 
   return spine
@@ -255,25 +270,23 @@ export function findContinueRootIds(
     nodesOrMap instanceof Map ? nodesOrMap : new Map((nodesOrMap ?? []).map((n) => [n.id, n]))
 
   const roots = new Set<string>()
-  const { trueStart, falseStart } = conditionBranchStarts(conditionId, edges)
-  const trueEdge = edges.find((e) => e.source === conditionId && e.sourceHandle === 'true')
-  const falseEdge = edges.find((e) => e.source === conditionId && e.sourceHandle === 'false')
-  const bodyEdge = edges.find((e) => e.source === conditionId && e.sourceHandle === 'body')
+  const handles = containerBranchHandles(nodesById.get(conditionId))
+  const starts = handles.map(
+    (handle) => edges.find((e) => e.source === conditionId && e.sourceHandle === handle)?.target ?? null,
+  )
+  const uniqueStarts = [...new Set(starts.filter(Boolean))] as string[]
 
-  if (trueStart && falseStart && trueStart === falseStart) {
-    roots.add(trueStart)
+  // All branch handles share the same target (empty container) → that target is After.
+  if (uniqueStarts.length === 1 && starts.filter(Boolean).length === handles.length && handles.length > 1) {
+    roots.add(uniqueStarts[0]!)
   }
 
-  // Empty IF with only one handle left (often after a nested insert stole End into Yes):
-  // treat that shared End/start as After, not as branch content.
-  if (trueStart && !falseStart && !bodyEdge) {
-    if (trueEdge?.label === 'Then' || nodesById.get(trueStart)?.type === 'end') {
-      roots.add(trueStart)
-    }
-  }
-  if (falseStart && !trueStart && !bodyEdge) {
-    if (falseEdge?.label === 'Then' || nodesById.get(falseStart)?.type === 'end') {
-      roots.add(falseStart)
+  // Empty container with only one handle left: treat shared End/start as After.
+  if (uniqueStarts.length === 1 && starts.filter(Boolean).length === 1 && handles.length > 0) {
+    const only = uniqueStarts[0]!
+    const edge = edges.find((e) => e.source === conditionId && e.target === only)
+    if (edge?.label === 'Then' || nodesById.get(only)?.type === 'end') {
+      roots.add(only)
     }
   }
 
@@ -314,10 +327,11 @@ export function edgesInsertBeforeContinueRoot(args: {
   if (!roots.has(continueRootId)) return edges
 
   const spine = collectBranchSpine(conditionId, edges, nodesById, roots)
+  const handles = new Set(containerBranchHandles(nodesById.get(conditionId)))
 
   const next = edges.map((e) => {
     if (e.target !== continueRootId) return e
-    if (e.source === conditionId && (e.sourceHandle === 'true' || e.sourceHandle === 'false' || e.sourceHandle === 'body')) {
+    if (e.source === conditionId && e.sourceHandle && handles.has(e.sourceHandle)) {
       return { ...e, id: newId(), target: newNodeId, label: 'Then' }
     }
     if (e.label === 'Then' && (spine.has(e.source) || e.source === conditionId)) {
@@ -343,13 +357,13 @@ export function findJoinIds(
   return findContinueRootIds(conditionId, edges, nodes)
 }
 
-export type LinearBranch = 'true' | 'false' | 'then' | 'body' | 'default'
+export type LinearBranch = 'true' | 'false' | 'then' | 'body' | 'default' | string
 
 export type LinearItem = {
   node: DesignerNode
   depth: number
   branch?: LinearBranch
-  /** First step of a Yes / No / Body / After section at this depth */
+  /** First step of a Yes / No / Body / Case / After section at this depth */
   branchStart?: boolean
 }
 
@@ -374,7 +388,7 @@ export function buildLinearItems(nodes: DesignerNode[], edges: DesignerEdge[]): 
     visited.add(nodeId)
     const prev = items[items.length - 1]
     const branchStart =
-      !!branch && (branch === 'true' || branch === 'false' || branch === 'then' || branch === 'body')
+      !!branch && branch !== 'default'
         ? !prev || prev.branch !== branch || prev.depth !== depth
         : false
     items.push({ node, depth, branch, branchStart })
@@ -385,7 +399,7 @@ export function buildLinearItems(nodes: DesignerNode[], edges: DesignerEdge[]): 
     const node = byId.get(nodeId)
     if (!node) return
 
-    if (node.type === 'condition' || node.type === 'loop') {
+    if (isContainerNodeType(node.type)) {
       walkFrom(nodeId, depth, branch, stop)
       return
     }
@@ -398,74 +412,50 @@ export function buildLinearItems(nodes: DesignerNode[], edges: DesignerEdge[]): 
     }
   }
 
+  function walkContainer(node: DesignerNode, depth: number, branch: LinearBranch | undefined, stop: Set<string>) {
+    push(node.id, depth, branch)
+    const continueRoots = findContinueRootIds(node.id, edges, byId)
+    const handles = containerBranchHandles(node)
+
+    for (const handle of handles) {
+      const startId = edges.find((e) => e.source === node.id && e.sourceHandle === handle)?.target ?? null
+      if (startId && !continueRoots.has(startId)) {
+        walkSubtree(startId, depth + 1, handle, continueRoots)
+      }
+    }
+
+    const continueList = [...continueRoots].filter(
+      (id) => !visited.has(id) && !stop.has(id) && byId.has(id),
+    )
+    continueList.sort((a, b) => {
+      const ya = byId.get(a)?.position.y ?? 0
+      const yb = byId.get(b)?.position.y ?? 0
+      return ya - yb
+    })
+    for (const continueId of continueList) {
+      walkFrom(continueId, depth, 'then', stop)
+    }
+
+    const handleSet = new Set(handles)
+    for (const e of outgoing.get(node.id) ?? []) {
+      if (e.sourceHandle && handleSet.has(e.sourceHandle)) continue
+      if (!visited.has(e.target) && !continueRoots.has(e.target) && !stop.has(e.target)) {
+        walkFrom(e.target, depth, 'default', stop)
+      }
+    }
+  }
+
   function walkFrom(nodeId: string, depth: number, branch?: LinearBranch, stop: Set<string> = new Set()) {
     if (visited.has(nodeId) || stop.has(nodeId)) return
     const node = byId.get(nodeId)
     if (!node) return
+
+    if (isContainerNodeType(node.type)) {
+      walkContainer(node, depth, branch, stop)
+      return
+    }
+
     push(nodeId, depth, branch)
-
-    if (node.type === 'condition') {
-      const { trueStart, falseStart } = conditionBranchStarts(node.id, edges)
-      const continueRoots = findContinueRootIds(node.id, edges, byId)
-
-      if (trueStart && !continueRoots.has(trueStart)) {
-        walkSubtree(trueStart, depth + 1, 'true', continueRoots)
-      }
-      if (falseStart && !continueRoots.has(falseStart)) {
-        walkSubtree(falseStart, depth + 1, 'false', continueRoots)
-      }
-
-      const continueList = [...continueRoots].filter(
-        (id) => !visited.has(id) && !stop.has(id) && byId.has(id),
-      )
-      continueList.sort((a, b) => {
-        const ya = byId.get(a)?.position.y ?? 0
-        const yb = byId.get(b)?.position.y ?? 0
-        return ya - yb
-      })
-      for (const continueId of continueList) {
-        walkFrom(continueId, depth, 'then', stop)
-      }
-
-      for (const e of outgoing.get(node.id) ?? []) {
-        if (e.sourceHandle === 'true' || e.sourceHandle === 'false') continue
-        if (!visited.has(e.target) && !continueRoots.has(e.target) && !stop.has(e.target)) {
-          walkFrom(e.target, depth, 'default', stop)
-        }
-      }
-
-      return
-    }
-
-    if (node.type === 'loop') {
-      const bodyStart = loopBodyStart(node.id, edges)
-      const continueRoots = findContinueRootIds(node.id, edges, byId)
-
-      if (bodyStart && !continueRoots.has(bodyStart)) {
-        walkSubtree(bodyStart, depth + 1, 'body', continueRoots)
-      }
-
-      const continueList = [...continueRoots].filter(
-        (id) => !visited.has(id) && !stop.has(id) && byId.has(id),
-      )
-      continueList.sort((a, b) => {
-        const ya = byId.get(a)?.position.y ?? 0
-        const yb = byId.get(b)?.position.y ?? 0
-        return ya - yb
-      })
-      for (const continueId of continueList) {
-        walkFrom(continueId, depth, 'then', stop)
-      }
-
-      for (const e of outgoing.get(node.id) ?? []) {
-        if (e.sourceHandle === 'body') continue
-        if (!visited.has(e.target) && !continueRoots.has(e.target) && !stop.has(e.target)) {
-          walkFrom(e.target, depth, 'default', stop)
-        }
-      }
-
-      return
-    }
 
     for (const e of outgoing.get(nodeId) ?? []) {
       if (e.label === 'Then') continue

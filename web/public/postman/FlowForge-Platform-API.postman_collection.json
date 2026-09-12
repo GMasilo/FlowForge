@@ -1,0 +1,923 @@
+{
+    "info": {
+        "_postman_id": "8f0c1a2b-4d3e-4f5a-9b6c-7d8e9f0a1b2c",
+        "name": "FlowForge Platform API",
+        "description": "Read chatbot-rich organisation data: chatbots, published/staging flow JSON, full flow export packs, media, templates, entities, conversations (with transcripts), and analytics.\r\n\r\n**Import into Postman:** File → Import → `openapi.json` (or `postman.json` + environment). Set `baseUrl` and `accessToken`.\r\n\r\n**Where to get a token:** Organisation owners/admins create a long-lived Platform API token on Admin → Security (`ffpat_…`, shown once). Send `Authorization: Bearer <token>`. The PHP API verifies it, then reads the database with the service_role key — never send anon/service_role yourself. Session JWTs from `/docs/api` still work for interactive Postman use but expire. Tokens are scoped to one organisation.\r\n\r\n**Pagination:** `limit` (default 50, max 200) and `offset`. List responses include `total` when available.\r\n\r\n**Errors:** `{ \"ok\": false, \"error\": \"…\" }`.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "version": "1.0.0"
+    },
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{accessToken}}",
+                "type": "string"
+            }
+        ]
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "https://gkjtt.co.za/flowforge/api",
+            "type": "string"
+        },
+        {
+            "key": "accessToken",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "organisationId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "chatbotId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "conversationId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "entityId",
+            "value": "",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "Documentation",
+            "description": "OpenAPI and Postman artifacts",
+            "item": [
+                {
+                    "name": "OpenAPI specification",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/openapi.json",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "openapi.json"
+                            ]
+                        },
+                        "description": "Import this JSON into Postman (File → Import).",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Postman Collection v2.1",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/postman.json",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "postman.json"
+                            ]
+                        },
+                        "description": "Ready-made collection generated from this spec.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Postman Environment",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/postman-environment.json",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "postman-environment.json"
+                            ]
+                        },
+                        "description": "Variables: baseUrl, accessToken, organisationId, chatbotId, conversationId.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Interactive docs (HTML)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/docs",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "docs"
+                            ]
+                        },
+                        "description": "Redoc HTML for this spec.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Account",
+            "description": "Current user and organisation memberships",
+            "item": [
+                {
+                    "name": "API catalog",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1"
+                            ]
+                        },
+                        "description": "Lists v1 resource paths."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Current user",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/me",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "me"
+                            ]
+                        },
+                        "description": "Caller identity plus organisations and roles."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Organisations",
+            "description": "Tenants the caller can access",
+            "item": [
+                {
+                    "name": "List organisations",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/organisations",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "organisations"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "50",
+                                    "description": "Page size (default 50, max 200)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "offset",
+                                    "value": "0",
+                                    "description": "Offset",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Organisations the caller belongs to."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get organisation",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/organisations/{{organisationId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "organisations",
+                                "{{organisationId}}"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "organisationId",
+                                    "value": "{{organisationId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Profile for one organisation."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Chatbots",
+            "description": "Chatbot records, flow JSON, export, media, templates, entities",
+            "item": [
+                {
+                    "name": "List chatbots",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/organisations/{{organisationId}}/chatbots",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "organisations",
+                                "{{organisationId}}",
+                                "chatbots"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "50",
+                                    "description": "Page size (default 50, max 200)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "offset",
+                                    "value": "0",
+                                    "description": "Offset",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "q",
+                                    "value": "support",
+                                    "description": "Name search",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "include_deleted",
+                                    "value": "0",
+                                    "description": "Set 1 to include recycle-bin bots",
+                                    "disabled": true
+                                }
+                            ],
+                            "variable": [
+                                {
+                                    "key": "organisationId",
+                                    "value": "{{organisationId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Chatbots in the organisation (excludes recycle-bin unless include_deleted=1)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get chatbot",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/chatbots/{{chatbotId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "chatbots",
+                                "{{chatbotId}}"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "chatbotId",
+                                    "value": "{{chatbotId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Chatbot record including settings JSON (no staging test token)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Published flow JSON",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/chatbots/{{chatbotId}}/flow",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "chatbots",
+                                "{{chatbotId}}",
+                                "flow"
+                            ],
+                            "query": [
+                                {
+                                    "key": "environment",
+                                    "value": "production",
+                                    "description": "production (default) or staging",
+                                    "disabled": true
+                                }
+                            ],
+                            "variable": [
+                                {
+                                    "key": "chatbotId",
+                                    "value": "{{chatbotId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Published (or staging) graph snapshot used by public chat. Query environment=staging for the staging graph."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Export chatbot pack",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/chatbots/{{chatbotId}}/export",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "chatbots",
+                                "{{chatbotId}}",
+                                "export"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "chatbotId",
+                                    "value": "{{chatbotId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Designer pack: nodes, edges, globals, templates, entity schemas, test scenarios (`flowforge.chatbotFlow`)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List media files",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/chatbots/{{chatbotId}}/media",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "chatbots",
+                                "{{chatbotId}}",
+                                "media"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "chatbotId",
+                                    "value": "{{chatbotId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Media library files for the chatbot. Use runtime GET /file/get to download bytes."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List templates",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/chatbots/{{chatbotId}}/templates",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "chatbots",
+                                "{{chatbotId}}",
+                                "templates"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "chatbotId",
+                                    "value": "{{chatbotId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "FAQ, email, store catalogs, hours, receipts, downloadable files, and other template kinds."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List variables",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/chatbots/{{chatbotId}}/variables",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "chatbots",
+                                "{{chatbotId}}",
+                                "variables"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "chatbotId",
+                                    "value": "{{chatbotId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Global and step-output variable definitions."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List entities",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/chatbots/{{chatbotId}}/entities",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "chatbots",
+                                "{{chatbotId}}",
+                                "entities"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "chatbotId",
+                                    "value": "{{chatbotId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Data tables owned by this chatbot (schema only)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get entity schema",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/chatbots/{{chatbotId}}/entities/{{entityId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "chatbots",
+                                "{{chatbotId}}",
+                                "entities",
+                                "{{entityId}}"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "chatbotId",
+                                    "value": "{{chatbotId}}",
+                                    "description": ""
+                                },
+                                {
+                                    "key": "entityId",
+                                    "value": "{{entityId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Entity plus attributes."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List entity records",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/chatbots/{{chatbotId}}/entities/{{entityId}}/records",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "chatbots",
+                                "{{chatbotId}}",
+                                "entities",
+                                "{{entityId}}",
+                                "records"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "50",
+                                    "description": "Page size (default 50, max 200)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "offset",
+                                    "value": "0",
+                                    "description": "Offset",
+                                    "disabled": true
+                                }
+                            ],
+                            "variable": [
+                                {
+                                    "key": "chatbotId",
+                                    "value": "{{chatbotId}}",
+                                    "description": ""
+                                },
+                                {
+                                    "key": "entityId",
+                                    "value": "{{entityId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Static catalog or dynamic records for the entity."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Conversations",
+            "description": "Sessions, transcripts, conversation files",
+            "item": [
+                {
+                    "name": "List conversations",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/organisations/{{organisationId}}/conversations",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "organisations",
+                                "{{organisationId}}",
+                                "conversations"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "50",
+                                    "description": "Page size (default 50, max 200)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "offset",
+                                    "value": "0",
+                                    "description": "Offset",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "status",
+                                    "value": "completed",
+                                    "description": "active, completed, failed, abandoned, escalated",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "environment",
+                                    "value": "production",
+                                    "description": "production or staging",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "from",
+                                    "value": "2026-09-01",
+                                    "description": "ISO start (created_at >=)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "2026-09-08",
+                                    "description": "ISO end (created_at <=)",
+                                    "disabled": true
+                                }
+                            ],
+                            "variable": [
+                                {
+                                    "key": "organisationId",
+                                    "value": "{{organisationId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Sessions across chatbots. Filter by status, environment, from, to."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List chatbot conversations",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/chatbots/{{chatbotId}}/conversations",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "chatbots",
+                                "{{chatbotId}}",
+                                "conversations"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "50",
+                                    "description": "Page size (default 50, max 200)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "offset",
+                                    "value": "0",
+                                    "description": "Offset",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "status",
+                                    "value": "completed",
+                                    "description": "active, completed, failed, abandoned, escalated",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "environment",
+                                    "value": "production",
+                                    "description": "production or staging",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "from",
+                                    "value": "2026-09-01",
+                                    "description": "ISO start (created_at >=)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "2026-09-08",
+                                    "description": "ISO end (created_at <=)",
+                                    "disabled": true
+                                }
+                            ],
+                            "variable": [
+                                {
+                                    "key": "chatbotId",
+                                    "value": "{{chatbotId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Sessions for one chatbot."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get conversation",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/conversations/{{conversationId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "conversations",
+                                "{{conversationId}}"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "conversationId",
+                                    "value": "{{conversationId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Session including saved variables."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Conversation transcript",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/conversations/{{conversationId}}/events",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "conversations",
+                                "{{conversationId}}",
+                                "events"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "500",
+                                    "description": "Max events (default 500, max 2000)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "offset",
+                                    "value": "0",
+                                    "description": "Offset",
+                                    "disabled": true
+                                }
+                            ],
+                            "variable": [
+                                {
+                                    "key": "conversationId",
+                                    "value": "{{conversationId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Ordered events (messages, step.run, etc.)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Conversation uploads",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/conversations/{{conversationId}}/files",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "conversations",
+                                "{{conversationId}}",
+                                "files"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "conversationId",
+                                    "value": "{{conversationId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Files uploaded during this session (receipts, signatures, …)."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Analytics",
+            "description": "Volume, completion, drop-off",
+            "item": [
+                {
+                    "name": "Organisation analytics",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/organisations/{{organisationId}}/analytics",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "organisations",
+                                "{{organisationId}}",
+                                "analytics"
+                            ],
+                            "query": [
+                                {
+                                    "key": "days",
+                                    "value": "30",
+                                    "description": "Lookback days (default 30, max 365)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "environment",
+                                    "value": "production",
+                                    "description": "production or staging",
+                                    "disabled": true
+                                }
+                            ],
+                            "variable": [
+                                {
+                                    "key": "organisationId",
+                                    "value": "{{organisationId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Session volume, completion, drop-off, by chatbot and by day."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Chatbot analytics",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/chatbots/{{chatbotId}}/analytics",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "chatbots",
+                                "{{chatbotId}}",
+                                "analytics"
+                            ],
+                            "query": [
+                                {
+                                    "key": "days",
+                                    "value": "30",
+                                    "description": "Lookback days",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "environment",
+                                    "value": "production",
+                                    "description": "production or staging",
+                                    "disabled": true
+                                }
+                            ],
+                            "variable": [
+                                {
+                                    "key": "chatbotId",
+                                    "value": "{{chatbotId}}",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "description": "Same analytics shape, scoped to one chatbot."
+                    },
+                    "response": []
+                }
+            ]
+        }
+    ]
+}

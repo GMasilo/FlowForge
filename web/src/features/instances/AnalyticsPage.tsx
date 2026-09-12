@@ -12,12 +12,17 @@ import {
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { supabase } from '@/shared/lib/supabase'
 import type { ConversationEvent, ConversationSession } from '@/shared/types/database'
+import { instanceFeatureEnabled } from '@/shared/types/database'
+import { PlanLockedState } from '@/features/billing/PlanLockedState'
 import { Card } from '@/shared/ui/card'
+import { PAGE_HELP, SECTION_HELP } from '@/shared/help/pageHelp'
+import { HelpTooltip } from '@/shared/ui/help-tooltip'
 import { PageHeader } from '@/shared/ui/page-header'
 import { Select } from '@/shared/ui/select'
 import { cn } from '@/shared/lib/utils'
-import { buildConversationAnalytics, buildDropOffForVersion, compareDropOff } from '@/features/instances/conversationAnalytics'
+import { buildConversationAnalytics, buildDropOffForVersion, buildTransferAnalytics, compareDropOff } from '@/features/instances/conversationAnalytics'
 import { ExperimentsPanel } from '@/features/instances/ExperimentsPanel'
+import { StagingTestHistoryPanel } from '@/features/instances/StagingTestHistoryPanel'
 
 type SessionRow = ConversationSession & { chatbots: { name: string } | null }
 
@@ -40,8 +45,11 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function AnalyticsPage() {
   const { instance } = useRequiredInstance()
+  const analyticsV2 = instanceFeatureEnabled(instance, 'analytics_v2')
+  const experimentsEnabled = instanceFeatureEnabled(instance, 'experiments')
   const [chatbotId, setChatbotId] = useState('')
   const [range, setRange] = useState<RangeKey>('30')
+  const [environment, setEnvironment] = useState<'production' | 'staging' | ''>('')
   const [versionA, setVersionA] = useState('')
   const [versionB, setVersionB] = useState('')
 
@@ -126,9 +134,10 @@ export function AnalyticsPage() {
         events: events.data ?? [],
         payments: payments.data ?? [],
         chatbotId: effectiveChatbotId || null,
+        environment: environment || null,
         rangeDays,
       }),
-    [sessions.data, events.data, payments.data, effectiveChatbotId, rangeDays],
+    [sessions.data, events.data, payments.data, effectiveChatbotId, environment, rangeDays],
   )
 
   const versionOptions = stats.byVersion.map((v) => v.version)
@@ -145,6 +154,7 @@ export function AnalyticsPage() {
       events: events.data ?? [],
       version: effectiveA,
       chatbotId: effectiveChatbotId || null,
+      environment: environment || null,
       rangeDays,
     })
     const b = buildDropOffForVersion({
@@ -152,6 +162,7 @@ export function AnalyticsPage() {
       events: events.data ?? [],
       version: effectiveB,
       chatbotId: effectiveChatbotId || null,
+      environment: environment || null,
       rangeDays,
     })
     return {
@@ -159,7 +170,16 @@ export function AnalyticsPage() {
       b,
       rows: compareDropOff(a.dropOff, b.dropOff).slice(0, 14),
     }
-  }, [sessions.data, events.data, effectiveA, effectiveB, effectiveChatbotId, rangeDays])
+  }, [sessions.data, events.data, effectiveA, effectiveB, effectiveChatbotId, environment, rangeDays])
+
+  const transferStats = useMemo(() => {
+    const nameMap = new Map((accessibleBots.data ?? []).map((b) => [b.id, b.name]))
+    return buildTransferAnalytics({
+      sessions: sessions.data ?? [],
+      events: events.data ?? [],
+      chatbotNames: nameMap,
+    })
+  }, [sessions.data, events.data, accessibleBots.data])
 
   const loading = sessions.isLoading || events.isLoading
 
@@ -168,6 +188,7 @@ export function AnalyticsPage() {
       <PageHeader
         title="Analytics"
         description={`Conversation volume, conversion, and funnel health for ${instance.name}.`}
+        help={PAGE_HELP.analytics}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -195,11 +216,72 @@ export function AnalyticsPage() {
                 </option>
               ))}
             </Select>
+            <Select
+              className="min-w-[140px]"
+              value={environment}
+              onChange={(e) => setEnvironment(e.target.value as typeof environment)}
+              aria-label="Environment"
+            >
+              <option value="">All environments</option>
+              <option value="production">Production</option>
+              <option value="staging">Staging</option>
+            </Select>
           </div>
         }
       />
 
-      <ExperimentsPanel chatbotId={effectiveChatbotId || undefined} />
+      {!experimentsEnabled ? (
+        <PlanLockedState feature="experiments" title="A/B experiments" />
+      ) : (
+        <ExperimentsPanel chatbotId={effectiveChatbotId || undefined} />
+      )}
+
+      <Card className="p-4">
+        <SectionTitle
+          icon={<Users className="h-4 w-4" />}
+          title="Chatbot transfers"
+          subtitle="Volume, outcomes after transfer, and required-variable failures"
+          help={SECTION_HELP.transfers}
+        />
+        <div className="mt-3 grid gap-3 sm:grid-cols-4">
+          <div>
+            <p className="text-xs text-[var(--color-ink-muted)]">Sessions transferred</p>
+            <p className="text-xl font-semibold tabular-nums">{transferStats.transferCount}</p>
+          </div>
+          <div>
+            <p className="text-xs text-[var(--color-ink-muted)]">Completed after</p>
+            <p className="text-xl font-semibold tabular-nums">{transferStats.completedAfterTransfer}</p>
+          </div>
+          <div>
+            <p className="text-xs text-[var(--color-ink-muted)]">Abandoned after</p>
+            <p className="text-xl font-semibold tabular-nums">{transferStats.abandonedAfterTransfer}</p>
+          </div>
+          <div>
+            <p className="text-xs text-[var(--color-ink-muted)]">Transfer failures</p>
+            <p className="text-xl font-semibold tabular-nums">{transferStats.failedCount}</p>
+          </div>
+        </div>
+        {transferStats.pairs.length ? (
+          <ul className="mt-4 space-y-1.5 text-sm">
+            {transferStats.pairs.map((p) => (
+              <li key={`${p.from}-${p.to}`} className="flex justify-between gap-3">
+                <span className="min-w-0 truncate text-[var(--color-ink)]">
+                  {p.from} → {p.to}
+                </span>
+                <span className="tabular-nums text-[var(--color-ink-muted)]">{p.count}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-sm text-[var(--color-ink-muted)]">No transfers in loaded sessions.</p>
+        )}
+        {transferStats.failuresByReason.length ? (
+          <p className="mt-3 text-xs text-[var(--color-ink-muted)]">
+            Failures:{' '}
+            {transferStats.failuresByReason.map((f) => `${f.reason} (${f.count})`).join(', ')}
+          </p>
+        ) : null}
+      </Card>
 
       {loading ? (
         <p className="text-sm text-[var(--color-ink-muted)]">Loading analytics…</p>
@@ -330,7 +412,20 @@ export function AnalyticsPage() {
         </Card>
       </div>
 
-      {versionOptions.length >= 2 ? (
+      {analyticsV2 ? (
+        <StagingTestHistoryPanel
+          instance={instance}
+          sessions={sessions.data ?? []}
+          events={events.data ?? []}
+          chatbotId={effectiveChatbotId || null}
+          rangeDays={rangeDays}
+          loading={loading}
+        />
+      ) : (
+        <PlanLockedState feature="analytics_v2" title="Advanced analytics" />
+      )}
+
+      {analyticsV2 && versionOptions.length >= 2 ? (
         <Card className="p-4">
           <SectionTitle
             title="Version compare — drop-off"
@@ -509,18 +604,23 @@ export function AnalyticsPage() {
 function SectionTitle({
   title,
   subtitle,
+  help,
   icon,
 }: {
   title: string
   subtitle?: string
+  help?: string
   icon?: React.ReactNode
 }) {
   return (
     <div className="mb-3">
-      <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
-        {icon}
-        {title}
-      </h2>
+      <div className="flex items-center gap-1.5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+          {icon}
+          {title}
+        </h2>
+        {help ? <HelpTooltip content={help} label={`Help: ${title}`} /> : null}
+      </div>
       {subtitle ? <p className="mt-0.5 text-[11px] text-[var(--color-ink-muted)]">{subtitle}</p> : null}
     </div>
   )

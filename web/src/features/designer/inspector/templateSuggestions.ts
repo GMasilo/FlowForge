@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { Connection } from '@/shared/types/database'
 import type { DesignerNode } from '@/features/designer/model/flowSchema'
-import { getStepOutputVariable } from '@/features/designer/model/flowSchema'
+import { getStepOutputVariables } from '@/features/designer/model/flowSchema'
 import { connectionInfoFromRow } from '@/features/connections/connectionValidation'
 import type { TemplateSuggestion } from '@/features/designer/inspector/TemplateField'
 import { EXPRESSION_FUNCTION_DOCS } from '@/features/designer/preview/expressionEval'
@@ -85,8 +85,7 @@ export function buildTemplateSuggestions(args: {
 
   for (const node of nodes) {
     if (node.id === currentNodeId) continue
-    const stepOut = getStepOutputVariable(node)
-    if (stepOut) {
+    for (const stepOut of getStepOutputVariables(node)) {
       out.push({
         insert: `{{vars.${stepOut}}}`,
         label: stepOut,

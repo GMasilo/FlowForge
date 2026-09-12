@@ -3,7 +3,15 @@ import type { EntityAttribute, VariableType } from '@/shared/types/database'
 import { coerceEntityValue } from '@/features/entities/entityValueValidation'
 import { downloadBlob } from '@/shared/lib/downloadJson'
 
-const VARIABLE_TYPES = new Set<VariableType>(['string', 'number', 'boolean', 'date', 'array', 'object'])
+const VARIABLE_TYPES = new Set<VariableType>([
+  'string',
+  'number',
+  'boolean',
+  'date',
+  'array',
+  'object',
+  'password',
+])
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 export type EntityExcelColumn = {

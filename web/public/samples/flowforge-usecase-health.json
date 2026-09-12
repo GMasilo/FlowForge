@@ -1,0 +1,3433 @@
+{
+  "kind": "flowforge.chatbotFlow",
+  "version": 1,
+  "exportedAt": "2026-09-12T13:46:29.357Z",
+  "chatbot": {
+    "id": "c3000000-0000-4000-8000-000000000001",
+    "name": "Health — Patient intake & care journey",
+    "description": "CareFlow Clinic: book visits, triage symptoms, pharmacy shop, records release, and feedback."
+  },
+  "flow": {
+    "id": "f3000000-0000-4000-8000-000000000001",
+    "name": "Main",
+    "version": 1
+  },
+  "globals": [
+    {
+      "key": "brand_name",
+      "label": "Brand",
+      "value_type": "string",
+      "default_value": "CareFlow Clinic",
+      "description": "Organisation or product name displayed to visitors."
+    },
+    {
+      "key": "brand_tagline",
+      "label": "Tagline",
+      "value_type": "string",
+      "default_value": "Your wellness, our priority.",
+      "description": "Short slogan shown at the end of the chat."
+    },
+    {
+      "key": "guest_label",
+      "label": "Guest label",
+      "value_type": "string",
+      "default_value": "Patient",
+      "description": "How we address a visitor before they give their name."
+    },
+    {
+      "key": "support_email",
+      "label": "Support email",
+      "value_type": "string",
+      "default_value": "care@careflow.example",
+      "description": "Contact email for visitor queries."
+    },
+    {
+      "key": "followup_days",
+      "label": "Follow-up days",
+      "value_type": "number",
+      "default_value": 2,
+      "description": "Days until the estimated follow-up date."
+    },
+    {
+      "key": "service_cities",
+      "label": "Service cities",
+      "value_type": "array",
+      "default_value": [
+        "Cape Town",
+        "Johannesburg",
+        "Durban",
+        "Pretoria",
+        "Sandton",
+        "Centurion"
+      ],
+      "description": "City choices for the autocomplete field."
+    },
+    {
+      "key": "demo_lab_base",
+      "label": "Demo lab base URL",
+      "value_type": "string",
+      "default_value": "https://gkjtt.co.za/flowforge/demo",
+      "description": "Internal demo API base (not shown to visitors)."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a3001000-0000-4000-8000-000000000001",
+      "key": "welcome",
+      "type": "message",
+      "label": "Welcome",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{{templates.welcome_msg.text}}",
+        "templateBindings": {
+          "welcome_msg": {
+            "name": "{{vars.guest_label}}"
+          }
+        }
+      },
+      "position": {
+        "x": 80,
+        "y": 40
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000002",
+      "key": "ask_captcha",
+      "type": "question",
+      "label": "Captcha",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Quick patient check — solve this before we open your file.",
+        "answerType": "captcha",
+        "answerRequired": true,
+        "outputVariable": "captcha_ok",
+        "captchaKind": "math",
+        "captchaMaxAttempts": 5
+      },
+      "position": {
+        "x": 80,
+        "y": 150
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000003",
+      "key": "ask_confirm",
+      "type": "question",
+      "label": "Confirm demo",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "This is a CareFlow demonstration. Do not enter real medical history or someone else’s ID.",
+        "answerType": "confirm",
+        "answerRequired": true,
+        "outputVariable": "terms_ok",
+        "confirmLabel": "I understand — continue as a demo patient"
+      },
+      "position": {
+        "x": 80,
+        "y": 260
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000004",
+      "key": "menu_bridge",
+      "type": "message",
+      "label": "Services",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{{templates.main_menu.text}}\n\n{color:muted}Pick one — we’ll only ask for details after that.{/color}"
+      },
+      "position": {
+        "x": 80,
+        "y": 370
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000005",
+      "key": "ask_service",
+      "type": "question",
+      "label": "Service",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "What brings you in today?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "service",
+        "choices": [
+          "Book appointment",
+          "Report symptoms",
+          "Pharmacy shop",
+          "Request records",
+          "Clinic feedback"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 480
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000006",
+      "key": "intake_intro",
+      "type": "message",
+      "label": "A few details",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "A couple of details for **{{vars.service}}** — then we continue."
+      },
+      "position": {
+        "x": 80,
+        "y": 590
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000007",
+      "key": "ask_name",
+      "type": "question",
+      "label": "Patient name",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Patient full name as it should appear on the clinic file?",
+        "answerType": "name",
+        "answerRequired": true,
+        "outputVariable": "visitor_name"
+      },
+      "position": {
+        "x": 80,
+        "y": 700
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000008",
+      "key": "ask_birthday",
+      "type": "question",
+      "label": "Date of birth",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Date of birth? (demo — use any date)",
+        "answerType": "date",
+        "answerRequired": true,
+        "outputVariable": "birthday"
+      },
+      "position": {
+        "x": 80,
+        "y": 810
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000009",
+      "key": "ask_gender",
+      "type": "question",
+      "label": "Gender",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Gender for the clinic chart? (optional)",
+        "answerType": "gender",
+        "answerRequired": false,
+        "outputVariable": "gender"
+      },
+      "position": {
+        "x": 80,
+        "y": 920
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000010",
+      "key": "ask_phone",
+      "type": "question",
+      "label": "Mobile",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Mobile number for appointment SMS reminders?",
+        "answerType": "phone",
+        "answerRequired": true,
+        "outputVariable": "phone"
+      },
+      "position": {
+        "x": 80,
+        "y": 1030
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000011",
+      "key": "ask_email",
+      "type": "question",
+      "label": "Email",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Email for prescriptions and visit summaries?",
+        "answerType": "email",
+        "answerRequired": true,
+        "outputVariable": "email"
+      },
+      "position": {
+        "x": 80,
+        "y": 1140
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000012",
+      "key": "ask_city",
+      "type": "question",
+      "label": "Clinic area",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Which CareFlow area is most convenient?",
+        "answerType": "autocomplete",
+        "answerRequired": true,
+        "outputVariable": "city",
+        "choicesFrom": "{{vars.service_cities}}"
+      },
+      "position": {
+        "x": 80,
+        "y": 1250
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000013",
+      "key": "ask_mood",
+      "type": "question",
+      "label": "How you feel",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "How are you feeling as you start this visit?",
+        "answerType": "mood",
+        "answerRequired": true,
+        "outputVariable": "mood"
+      },
+      "position": {
+        "x": 80,
+        "y": 1360
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000014",
+      "key": "set_identity_vars",
+      "type": "set_variable",
+      "label": "Identity variables",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "full_name",
+        "value": "{{trim(coalesce(vars.visitor_name, \"\"))}}",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "full_name",
+            "value": "{{trim(coalesce(vars.visitor_name, \"\"))}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "phone",
+            "value": "{{coalesce(vars.phone, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "country",
+            "value": "{{coalesce(vars.country, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "city",
+            "value": "{{coalesce(vars.city, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "gender",
+            "value": "{{coalesce(vars.gender, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "birthday",
+            "value": "{{coalesce(vars.birthday, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "address",
+            "value": "{{coalesce(vars.address, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "mood",
+            "value": "{{coalesce(vars.mood, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "national_id",
+            "value": "{{coalesce(vars.national_id, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "company",
+            "value": "{{coalesce(vars.company, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "postal_code",
+            "value": "{{coalesce(vars.postal_code, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "priority",
+            "value": "standard",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "summary",
+            "value": "",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "checklist",
+            "value": "[\"Our team reviews your request\",\"You receive a confirmation email\",\"A care coordinator may follow up\",\"Keep this reference for your records\"]",
+            "valueType": "array"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 1470
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000015",
+      "key": "op_upper_name",
+      "type": "operation",
+      "label": "Uppercase name",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "operation": "upper",
+        "left": "{{vars.visitor_name}}",
+        "right": "",
+        "outputVariable": "visitor_name_upper"
+      },
+      "position": {
+        "x": 80,
+        "y": 1580
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000016",
+      "key": "op_name_len",
+      "type": "operation",
+      "label": "Name length",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "operation": "length",
+        "left": "{{vars.visitor_name}}",
+        "right": "",
+        "outputVariable": "name_len"
+      },
+      "position": {
+        "x": 80,
+        "y": 1690
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000017",
+      "key": "op_email_display",
+      "type": "operation",
+      "label": "Email display",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "operation": "replace",
+        "left": "{{vars.email}}",
+        "right": "@",
+        "replaceWith": " [at] ",
+        "outputVariable": "email_display"
+      },
+      "position": {
+        "x": 80,
+        "y": 1800
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000018",
+      "key": "identity_recap",
+      "type": "message",
+      "label": "Profile ready",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "**Patient file ready for {{titleCase(vars.visitor_name)}}**\n\nBorn {{if(empty(vars.birthday), \"—\", formatDate(vars.birthday, \"d MMM yyyy\"))}} · {{coalesce(vars.gender, \"gender not shared\")}}\nContact: `{{vars.email_display}}` · {{coalesce(vars.phone, \"no phone on file\")}}\nFeeling today: **{{coalesce(vars.mood, \"—\")}}**\n\n{color:muted}Preferred clinic area: {{coalesce(vars.city, \"any CareFlow site\")}}{/color}"
+      },
+      "position": {
+        "x": 80,
+        "y": 1910
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000019",
+      "key": "init_signature",
+      "type": "set_variable",
+      "label": "Init signature",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "signature",
+        "value": "",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "signature",
+            "value": "",
+            "valueType": "string"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 2020
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000020",
+      "key": "sw_service",
+      "type": "switch",
+      "label": "Route service",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "value": "{{vars.service}}",
+        "cases": [
+          {
+            "id": "case_appt",
+            "match": "Book appointment",
+            "label": "Appointment"
+          },
+          {
+            "id": "case_triage",
+            "match": "Report symptoms",
+            "label": "Triage"
+          },
+          {
+            "id": "case_shop",
+            "match": "Pharmacy shop",
+            "label": "Pharmacy"
+          },
+          {
+            "id": "case_records",
+            "match": "Request records",
+            "label": "Records"
+          },
+          {
+            "id": "case_feedback",
+            "match": "Clinic feedback",
+            "label": "Feedback"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 2130
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000040",
+      "key": "http_submit",
+      "type": "http",
+      "label": "Confirm request",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "POST",
+        "path": "/industry/submit",
+        "body": "{\"industry\":\"health\",\"service\":\"{{vars.service}}\",\"name\":\"{{vars.visitor_name}}\",\"email\":\"{{vars.email}}\",\"phone\":\"{{vars.phone}}\",\"country\":\"{{vars.country}}\",\"city\":\"{{vars.city}}\",\"mood\":\"{{vars.mood}}\",\"priority\":\"{{vars.priority}}\"}",
+        "paramValues": {},
+        "outputVariable": "lab_submit"
+      },
+      "position": {
+        "x": 80,
+        "y": 2240
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000041",
+      "key": "intro_appt",
+      "type": "message",
+      "label": "Appointment",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Let’s book a clinic or telehealth slot."
+      },
+      "position": {
+        "x": 80,
+        "y": 2350
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000042",
+      "key": "list_services",
+      "type": "entity",
+      "label": "List services",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "entityId": "b3100000-0000-4000-8000-000000000001",
+        "operation": "list",
+        "recordId": "",
+        "filterAttribute": "",
+        "filterEquals": "",
+        "fieldMap": {},
+        "outputVariable": "clinic_services"
+      },
+      "position": {
+        "x": 80,
+        "y": 2460
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000043",
+      "key": "appt_type",
+      "type": "question",
+      "label": "Visit type",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Which service?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "visit_type",
+        "choices": [
+          "General practice",
+          "Telehealth triage",
+          "Nurse / vaccinations",
+          "Paediatrics"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 2570
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000044",
+      "key": "appt_returning",
+      "type": "question",
+      "label": "Returning?",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Have you visited CareFlow before?",
+        "answerType": "boolean",
+        "answerRequired": true,
+        "outputVariable": "returning_patient"
+      },
+      "position": {
+        "x": 80,
+        "y": 2680
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000045",
+      "key": "appt_clinic",
+      "type": "question",
+      "label": "Clinic area",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Roughly where should we see you? (optional)",
+        "answerType": "location",
+        "answerRequired": false,
+        "outputVariable": "clinic_geo"
+      },
+      "position": {
+        "x": 80,
+        "y": 2790
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000046",
+      "key": "appt_stars",
+      "type": "question",
+      "label": "Preference",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Preferred clinician rating (demo)?",
+        "answerType": "stars",
+        "answerRequired": false,
+        "outputVariable": "clinician_pref"
+      },
+      "position": {
+        "x": 80,
+        "y": 2900
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000047",
+      "key": "appt_when",
+      "type": "question",
+      "label": "Slot",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Preferred date and time?",
+        "answerType": "appointment",
+        "answerRequired": true,
+        "outputVariable": "appointment_at"
+      },
+      "position": {
+        "x": 80,
+        "y": 3010
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000048",
+      "key": "appt_reason",
+      "type": "question",
+      "label": "Reason",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Brief reason for the visit?",
+        "answerType": "long_text",
+        "answerRequired": true,
+        "outputVariable": "visit_reason"
+      },
+      "position": {
+        "x": 80,
+        "y": 3120
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000049",
+      "key": "http_appt",
+      "type": "http",
+      "label": "Confirm booking",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "POST",
+        "path": "/health/appointments",
+        "body": "{\"visit_type\":\"{{vars.visit_type}}\",\"appointment_at\":\"{{vars.appointment_at}}\",\"reason\":\"{{vars.visit_reason}}\",\"patient\":\"{{vars.visitor_name}}\",\"email\":\"{{vars.email}}\",\"returning\":\"{{vars.returning_patient}}\"}",
+        "paramValues": {},
+        "outputVariable": "booking"
+      },
+      "position": {
+        "x": 80,
+        "y": 3230
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000050",
+      "key": "set_booking_id",
+      "type": "set_variable",
+      "label": "Booking id",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "booking_id",
+        "value": "{{vars.booking.booking_id}}",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "booking_id",
+            "value": "{{vars.booking.booking_id}}",
+            "valueType": "string"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 3340
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000051",
+      "key": "done_appt",
+      "type": "message",
+      "label": "Booked",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Booked **{{vars.visit_type}}** for **{{prettify(vars.appointment_at)}}**.\nReminder day: **{{formatDate(dateAdd(vars.appointment_at, -1, \"days\"), \"EEE d MMM\")}}**.\nReference: **{{vars.booking_id}}** · returning patient: **{{if(vars.returning_patient, \"yes\", \"no\")}}**.\n{{if(empty(vars.clinician_pref), \"\", concat(\"Preferred rating: \", vars.clinician_pref, \"★\"))}}"
+      },
+      "position": {
+        "x": 80,
+        "y": 3450
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000064",
+      "key": "intro_triage",
+      "type": "message",
+      "label": "Triage",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Short triage — not a diagnosis."
+      },
+      "position": {
+        "x": 80,
+        "y": 3560
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000065",
+      "key": "symptom_main",
+      "type": "question",
+      "label": "Symptom",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Main symptom today?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "main_symptom",
+        "choices": [
+          "Fever / flu",
+          "Pain",
+          "Cough / breathing",
+          "Stomach",
+          "Mental wellbeing",
+          "Other"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 3670
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000066",
+      "key": "symptom_severity",
+      "type": "question",
+      "label": "Severity",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "How severe (1–5)?",
+        "answerType": "likert",
+        "answerRequired": true,
+        "outputVariable": "severity"
+      },
+      "position": {
+        "x": 80,
+        "y": 3780
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000067",
+      "key": "symptom_days",
+      "type": "question",
+      "label": "Days",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "How many days?",
+        "answerType": "number",
+        "answerRequired": true,
+        "outputVariable": "symptom_days"
+      },
+      "position": {
+        "x": 80,
+        "y": 3890
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000068",
+      "key": "http_services",
+      "type": "http",
+      "label": "Load wait times",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "GET",
+        "path": "/health/services",
+        "body": "",
+        "paramValues": {},
+        "outputVariable": "live_services"
+      },
+      "position": {
+        "x": 80,
+        "y": 4000
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000069",
+      "key": "cond_urgent",
+      "type": "condition",
+      "label": "Urgent?",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "left": "{{vars.severity}}",
+        "operator": "gte",
+        "right": "4"
+      },
+      "position": {
+        "x": 80,
+        "y": 4110
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000070",
+      "key": "msg_urgent",
+      "type": "message",
+      "label": "Urgent path",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:danger}**Higher severity**{/color} ({{vars.severity}}/5). A nurse would call you next. There are **{{length(vars.live_services.data)}}** clinic services available right now."
+      },
+      "position": {
+        "x": 80,
+        "y": 4220
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000071",
+      "key": "msg_routine",
+      "type": "message",
+      "label": "Routine path",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:success}**Routine triage**{/color} for **{{vars.main_symptom}}** (~{{vars.symptom_days}} days). There are **{{length(vars.live_services.data)}}** clinic services available right now."
+      },
+      "position": {
+        "x": 80,
+        "y": 4330
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000072",
+      "key": "done_triage",
+      "type": "message",
+      "label": "Triage done",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Triage complete for **{{vars.main_symptom}}**."
+      },
+      "position": {
+        "x": 80,
+        "y": 4440
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000084",
+      "key": "intro_shop",
+      "type": "message",
+      "label": "Pharmacy",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Add wellness items, then pay the cart total (demo payment)."
+      },
+      "position": {
+        "x": 80,
+        "y": 4550
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000085",
+      "key": "ask_shop",
+      "type": "question",
+      "label": "Shop",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Browse the CareFlow pharmacy and checkout.",
+        "answerType": "shop",
+        "answerRequired": true,
+        "outputVariable": "cart",
+        "shopTemplateKey": "clinic_store"
+      },
+      "position": {
+        "x": 80,
+        "y": 4660
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000086",
+      "key": "ask_payment",
+      "type": "question",
+      "label": "Payment",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Pay for your cart.",
+        "answerType": "payment",
+        "answerRequired": true,
+        "outputVariable": "payment",
+        "paymentAmount": "{{vars.cart.total}}",
+        "paymentItemName": "CareFlow pharmacy",
+        "paymentBuyerEmail": "{{vars.email}}",
+        "paymentBuyerName": "{{vars.visitor_name}}"
+      },
+      "position": {
+        "x": 80,
+        "y": 4770
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000087",
+      "key": "done_shop",
+      "type": "message",
+      "label": "Paid",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Cart total **{{vars.cart.total}} {{vars.cart.currency}}** · payment `{{coalesce(vars.payment.reference, \"demo\")}}`."
+      },
+      "position": {
+        "x": 80,
+        "y": 4880
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000093",
+      "key": "intro_records",
+      "type": "message",
+      "label": "Records",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Request a copy of your medical records."
+      },
+      "position": {
+        "x": 80,
+        "y": 4990
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000094",
+      "key": "record_type",
+      "type": "question",
+      "label": "Type",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "What do you need?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "record_type",
+        "choices": [
+          "Visit summary",
+          "Lab results",
+          "Vaccination card",
+          "Referral letter"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 5100
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000095",
+      "key": "ask_otp",
+      "type": "question",
+      "label": "Verification",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Enter the verification code sent to your email (any 6 digits for this demo).",
+        "answerType": "otp",
+        "answerRequired": true,
+        "outputVariable": "otp_ok",
+        "otpSubject": "CareFlow records code",
+        "otpLength": 6
+      },
+      "position": {
+        "x": 80,
+        "y": 5210
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000096",
+      "key": "ask_signature",
+      "type": "question",
+      "label": "Signature",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Sign to authorise release.",
+        "answerType": "signature",
+        "answerRequired": true,
+        "outputVariable": "signature"
+      },
+      "position": {
+        "x": 80,
+        "y": 5320
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000097",
+      "key": "done_records",
+      "type": "message",
+      "label": "Released",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "**{{vars.record_type}}** queued for **{{vars.visitor_name}}**. PDF pack is attached at wrap-up."
+      },
+      "position": {
+        "x": 80,
+        "y": 5430
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000104",
+      "key": "intro_feedback",
+      "type": "message",
+      "label": "Feedback",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Tell us about your last visit."
+      },
+      "position": {
+        "x": 80,
+        "y": 5540
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000105",
+      "key": "ask_form",
+      "type": "question",
+      "label": "Visit form",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Complete this short form.",
+        "answerType": "form",
+        "answerRequired": true,
+        "outputVariable": "visit_form",
+        "formFields": [
+          {
+            "key": "clinician",
+            "label": "Clinician name",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "department",
+            "label": "Department",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "comments",
+            "label": "Comments",
+            "type": "string",
+            "required": false
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 5650
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000106",
+      "key": "ask_wait_stars",
+      "type": "question",
+      "label": "Wait time",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "How was the wait?",
+        "answerType": "stars",
+        "answerRequired": true,
+        "outputVariable": "wait_stars"
+      },
+      "position": {
+        "x": 80,
+        "y": 5760
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000107",
+      "key": "ask_thumbs",
+      "type": "question",
+      "label": "Overall",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Was the visit helpful overall?",
+        "answerType": "thumbs",
+        "answerRequired": true,
+        "outputVariable": "visit_thumbs"
+      },
+      "position": {
+        "x": 80,
+        "y": 5870
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000108",
+      "key": "ask_nps",
+      "type": "question",
+      "label": "NPS",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "How likely are you to recommend CareFlow? (0–10)",
+        "answerType": "nps",
+        "answerRequired": true,
+        "outputVariable": "nps"
+      },
+      "position": {
+        "x": 80,
+        "y": 5980
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000109",
+      "key": "cond_nps",
+      "type": "condition",
+      "label": "Promoter?",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "left": "{{vars.nps}}",
+        "operator": "gte",
+        "right": "9"
+      },
+      "position": {
+        "x": 80,
+        "y": 6090
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000110",
+      "key": "msg_promoter",
+      "type": "message",
+      "label": "Promoter",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:success}**Thank you!**{/color} NPS **{{vars.nps}}** · wait **{{vars.wait_stars}}★** · helpful: **{{vars.visit_thumbs}}**."
+      },
+      "position": {
+        "x": 80,
+        "y": 6200
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000111",
+      "key": "msg_feedback_ok",
+      "type": "message",
+      "label": "Noted",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:warning}**We hear you.**{/color} NPS **{{vars.nps}}** · department **{{vars.visit_form.department}}**."
+      },
+      "position": {
+        "x": 80,
+        "y": 6310
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000112",
+      "key": "done_feedback",
+      "type": "message",
+      "label": "Thanks",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Feedback saved for **{{vars.visit_form.department}}** · score band {{if(vars.nps >= 9, \"promoter\", if(vars.nps >= 7, \"passive\", \"detractor\"))}}."
+      },
+      "position": {
+        "x": 80,
+        "y": 6420
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000124",
+      "key": "set_ref_vars",
+      "type": "set_variable",
+      "label": "Set reference",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "reference",
+        "value": "{{coalesce(vars.lab_submit.submission_id, \"pending\")}}",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "reference",
+            "value": "{{coalesce(vars.lab_submit.submission_id, \"pending\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "followup_on",
+            "value": "{{formatDate(dateAdd(utcNow(), coalesce(vars.followup_days, 2), \"days\"), \"EEE d MMM\")}}",
+            "valueType": "string"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 6530
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000125",
+      "key": "set_summary_vars",
+      "type": "set_variable",
+      "label": "Set summary",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "summary",
+        "value": "{{if(empty(vars.summary), vars.service + \" in \" + coalesce(vars.city, \"your area\"), vars.summary)}}",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "summary",
+            "value": "{{if(empty(vars.summary), vars.service + \" in \" + coalesce(vars.city, \"your area\"), vars.summary)}}",
+            "valueType": "string"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 6640
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000126",
+      "key": "http_email_sink",
+      "type": "http",
+      "label": "Notify inbox",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "POST",
+        "path": "/email/sink",
+        "body": "{\"to\":\"{{vars.email}}\",\"subject\":\"CareFlow Clinic: {{vars.service}}\",\"body\":\"Thanks {{vars.visitor_name}} -- we logged your {{vars.service}} request. Ref {{vars.reference}}.\"}",
+        "paramValues": {},
+        "outputVariable": "email_sink"
+      },
+      "position": {
+        "x": 80,
+        "y": 6750
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000127",
+      "key": "send_email",
+      "type": "email",
+      "label": "Send confirmation",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "templateKey": "followup_email",
+        "to": "{{vars.email}}",
+        "subject": "",
+        "body": "{{templates.followup_email.html}}",
+        "paramValues": {},
+        "templateBindings": {
+          "followup_email": {
+            "name": "{{vars.full_name}}",
+            "brand": "{{vars.brand_name}}",
+            "service": "{{vars.service}}",
+            "reference": "{{vars.reference}}",
+            "city": "{{vars.city}}",
+            "followup": "{{vars.followup_on}}",
+            "summary": "{{vars.summary}}",
+            "support": "{{vars.support_email}}"
+          }
+        }
+      },
+      "position": {
+        "x": 80,
+        "y": 6860
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000128",
+      "key": "save_enquiry",
+      "type": "entity",
+      "label": "Save enquiry",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "entityId": "b3200000-0000-4000-8000-000000000001",
+        "operation": "create",
+        "recordId": "",
+        "filterAttribute": "",
+        "filterEquals": "",
+        "fieldMap": {
+          "name": "{{vars.visitor_name}}",
+          "email": "{{vars.email}}",
+          "phone": "{{coalesce(vars.phone, \"\")}}",
+          "country": "{{coalesce(vars.country, \"\")}}",
+          "city": "{{coalesce(vars.city, \"\")}}",
+          "service": "{{vars.service}}",
+          "summary": "{{vars.summary}}",
+          "priority": "{{vars.priority}}",
+          "mood": "{{coalesce(vars.mood, \"\")}}",
+          "reference": "{{vars.reference}}",
+          "followup_on": "{{vars.followup_on}}"
+        },
+        "outputVariable": "enquiry"
+      },
+      "position": {
+        "x": 80,
+        "y": 6970
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000129",
+      "key": "loop_next",
+      "type": "loop",
+      "label": "Next steps",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "collection": "{{vars.checklist}}",
+        "itemVariable": "check_item",
+        "indexVariable": "check_index"
+      },
+      "position": {
+        "x": 80,
+        "y": 7080
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000130",
+      "key": "msg_check_item",
+      "type": "message",
+      "label": "Checklist item",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{{vars.check_index + 1}}. {{vars.check_item}}"
+      },
+      "position": {
+        "x": 80,
+        "y": 7190
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000131",
+      "key": "ask_doc_sign",
+      "type": "question",
+      "label": "Sign pack",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Please sign so we can stamp your confirmation pack.",
+        "answerType": "signature",
+        "answerRequired": true,
+        "outputVariable": "signature"
+      },
+      "position": {
+        "x": 80,
+        "y": 7300
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000132",
+      "key": "wrap",
+      "type": "message",
+      "label": "Confirmation",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "## Thanks, {{titleCase(vars.visitor_name)}} ✓\n\n**Service:** {{vars.service}}\n**Reference:** `{{vars.reference}}`\n**Follow-up:** around {{vars.followup_on}}\n\n📍 {{coalesce(vars.city, \"Your area\")}}, {{coalesce(vars.country, \"\")}}\n📱 {{coalesce(vars.phone, \"—\")}}\n📧 `{{vars.email_display}}`\n\n{color:accent}If symptoms worsen, please seek immediate care.{/color}\n\n---\n\n{{templates.order_receipt.text}}\n\n{{templates.pack_document.file}}",
+        "templateBindings": {
+          "order_receipt": {
+            "name": "{{vars.visitor_name}}",
+            "service": "{{vars.service}}",
+            "city": "{{vars.city}}",
+            "order_id": "{{coalesce(vars.enquiry.id, vars.reference, \"demo\")}}"
+          },
+          "pack_document": {
+            "name": "{{vars.visitor_name}}",
+            "email": "{{vars.email}}",
+            "phone": "{{vars.phone}}",
+            "country": "{{vars.country}}",
+            "city": "{{vars.city}}",
+            "service": "{{vars.service}}",
+            "priority": "{{vars.priority}}",
+            "mood": "{{vars.mood}}",
+            "reference": "{{vars.reference}}",
+            "followup": "{{vars.followup_on}}",
+            "summary": "{{vars.summary}}",
+            "signature": "{{vars.signature}}",
+            "brand": "{{vars.brand_name}}",
+            "support": "{{vars.support_email}}"
+          }
+        }
+      },
+      "position": {
+        "x": 80,
+        "y": 7410
+      }
+    },
+    {
+      "id": "a3001000-0000-4000-8000-000000000133",
+      "key": "end",
+      "type": "end",
+      "label": "Goodbye",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "message": "Thanks for exploring **{{vars.brand_name}}**.\n\n{{coalesce(vars.brand_tagline, \"\")}}\n\n{color:muted}Restart the chat to try another service.{/color}"
+      },
+      "position": {
+        "x": 80,
+        "y": 7520
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e3001000-0000-4000-8000-000000000021",
+      "source": "a3001000-0000-4000-8000-000000000001",
+      "target": "a3001000-0000-4000-8000-000000000002",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000022",
+      "source": "a3001000-0000-4000-8000-000000000002",
+      "target": "a3001000-0000-4000-8000-000000000003",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000023",
+      "source": "a3001000-0000-4000-8000-000000000003",
+      "target": "a3001000-0000-4000-8000-000000000004",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000024",
+      "source": "a3001000-0000-4000-8000-000000000004",
+      "target": "a3001000-0000-4000-8000-000000000005",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000025",
+      "source": "a3001000-0000-4000-8000-000000000005",
+      "target": "a3001000-0000-4000-8000-000000000006",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000026",
+      "source": "a3001000-0000-4000-8000-000000000006",
+      "target": "a3001000-0000-4000-8000-000000000007",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000027",
+      "source": "a3001000-0000-4000-8000-000000000007",
+      "target": "a3001000-0000-4000-8000-000000000008",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000028",
+      "source": "a3001000-0000-4000-8000-000000000008",
+      "target": "a3001000-0000-4000-8000-000000000009",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000029",
+      "source": "a3001000-0000-4000-8000-000000000009",
+      "target": "a3001000-0000-4000-8000-000000000010",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000030",
+      "source": "a3001000-0000-4000-8000-000000000010",
+      "target": "a3001000-0000-4000-8000-000000000011",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000031",
+      "source": "a3001000-0000-4000-8000-000000000011",
+      "target": "a3001000-0000-4000-8000-000000000012",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000032",
+      "source": "a3001000-0000-4000-8000-000000000012",
+      "target": "a3001000-0000-4000-8000-000000000013",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000033",
+      "source": "a3001000-0000-4000-8000-000000000013",
+      "target": "a3001000-0000-4000-8000-000000000014",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000034",
+      "source": "a3001000-0000-4000-8000-000000000014",
+      "target": "a3001000-0000-4000-8000-000000000015",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000035",
+      "source": "a3001000-0000-4000-8000-000000000015",
+      "target": "a3001000-0000-4000-8000-000000000016",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000036",
+      "source": "a3001000-0000-4000-8000-000000000016",
+      "target": "a3001000-0000-4000-8000-000000000017",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000037",
+      "source": "a3001000-0000-4000-8000-000000000017",
+      "target": "a3001000-0000-4000-8000-000000000018",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000038",
+      "source": "a3001000-0000-4000-8000-000000000018",
+      "target": "a3001000-0000-4000-8000-000000000019",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000039",
+      "source": "a3001000-0000-4000-8000-000000000019",
+      "target": "a3001000-0000-4000-8000-000000000020",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000052",
+      "source": "a3001000-0000-4000-8000-000000000041",
+      "target": "a3001000-0000-4000-8000-000000000042",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000053",
+      "source": "a3001000-0000-4000-8000-000000000042",
+      "target": "a3001000-0000-4000-8000-000000000043",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000054",
+      "source": "a3001000-0000-4000-8000-000000000043",
+      "target": "a3001000-0000-4000-8000-000000000044",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000055",
+      "source": "a3001000-0000-4000-8000-000000000044",
+      "target": "a3001000-0000-4000-8000-000000000045",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000056",
+      "source": "a3001000-0000-4000-8000-000000000045",
+      "target": "a3001000-0000-4000-8000-000000000046",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000057",
+      "source": "a3001000-0000-4000-8000-000000000046",
+      "target": "a3001000-0000-4000-8000-000000000047",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000058",
+      "source": "a3001000-0000-4000-8000-000000000047",
+      "target": "a3001000-0000-4000-8000-000000000048",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000059",
+      "source": "a3001000-0000-4000-8000-000000000048",
+      "target": "a3001000-0000-4000-8000-000000000049",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000060",
+      "source": "a3001000-0000-4000-8000-000000000049",
+      "target": "a3001000-0000-4000-8000-000000000050",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000061",
+      "source": "a3001000-0000-4000-8000-000000000050",
+      "target": "a3001000-0000-4000-8000-000000000051",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000062",
+      "source": "a3001000-0000-4000-8000-000000000020",
+      "target": "a3001000-0000-4000-8000-000000000041",
+      "sourceHandle": "case_appt",
+      "label": "Book appointment"
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000063",
+      "source": "a3001000-0000-4000-8000-000000000051",
+      "target": "a3001000-0000-4000-8000-000000000040",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000073",
+      "source": "a3001000-0000-4000-8000-000000000064",
+      "target": "a3001000-0000-4000-8000-000000000065",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000074",
+      "source": "a3001000-0000-4000-8000-000000000065",
+      "target": "a3001000-0000-4000-8000-000000000066",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000075",
+      "source": "a3001000-0000-4000-8000-000000000066",
+      "target": "a3001000-0000-4000-8000-000000000067",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000076",
+      "source": "a3001000-0000-4000-8000-000000000067",
+      "target": "a3001000-0000-4000-8000-000000000068",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000077",
+      "source": "a3001000-0000-4000-8000-000000000068",
+      "target": "a3001000-0000-4000-8000-000000000069",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000078",
+      "source": "a3001000-0000-4000-8000-000000000069",
+      "target": "a3001000-0000-4000-8000-000000000070",
+      "sourceHandle": "true",
+      "label": "Urgent"
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000079",
+      "source": "a3001000-0000-4000-8000-000000000069",
+      "target": "a3001000-0000-4000-8000-000000000071",
+      "sourceHandle": "false",
+      "label": "Routine"
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000080",
+      "source": "a3001000-0000-4000-8000-000000000070",
+      "target": "a3001000-0000-4000-8000-000000000072",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000081",
+      "source": "a3001000-0000-4000-8000-000000000071",
+      "target": "a3001000-0000-4000-8000-000000000072",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000082",
+      "source": "a3001000-0000-4000-8000-000000000020",
+      "target": "a3001000-0000-4000-8000-000000000064",
+      "sourceHandle": "case_triage",
+      "label": "Report symptoms"
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000083",
+      "source": "a3001000-0000-4000-8000-000000000072",
+      "target": "a3001000-0000-4000-8000-000000000040",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000088",
+      "source": "a3001000-0000-4000-8000-000000000084",
+      "target": "a3001000-0000-4000-8000-000000000085",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000089",
+      "source": "a3001000-0000-4000-8000-000000000085",
+      "target": "a3001000-0000-4000-8000-000000000086",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000090",
+      "source": "a3001000-0000-4000-8000-000000000086",
+      "target": "a3001000-0000-4000-8000-000000000087",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000091",
+      "source": "a3001000-0000-4000-8000-000000000020",
+      "target": "a3001000-0000-4000-8000-000000000084",
+      "sourceHandle": "case_shop",
+      "label": "Pharmacy shop"
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000092",
+      "source": "a3001000-0000-4000-8000-000000000087",
+      "target": "a3001000-0000-4000-8000-000000000040",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000098",
+      "source": "a3001000-0000-4000-8000-000000000093",
+      "target": "a3001000-0000-4000-8000-000000000094",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000099",
+      "source": "a3001000-0000-4000-8000-000000000094",
+      "target": "a3001000-0000-4000-8000-000000000095",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000100",
+      "source": "a3001000-0000-4000-8000-000000000095",
+      "target": "a3001000-0000-4000-8000-000000000096",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000101",
+      "source": "a3001000-0000-4000-8000-000000000096",
+      "target": "a3001000-0000-4000-8000-000000000097",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000102",
+      "source": "a3001000-0000-4000-8000-000000000020",
+      "target": "a3001000-0000-4000-8000-000000000093",
+      "sourceHandle": "case_records",
+      "label": "Request records"
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000103",
+      "source": "a3001000-0000-4000-8000-000000000097",
+      "target": "a3001000-0000-4000-8000-000000000040",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000113",
+      "source": "a3001000-0000-4000-8000-000000000104",
+      "target": "a3001000-0000-4000-8000-000000000105",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000114",
+      "source": "a3001000-0000-4000-8000-000000000105",
+      "target": "a3001000-0000-4000-8000-000000000106",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000115",
+      "source": "a3001000-0000-4000-8000-000000000106",
+      "target": "a3001000-0000-4000-8000-000000000107",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000116",
+      "source": "a3001000-0000-4000-8000-000000000107",
+      "target": "a3001000-0000-4000-8000-000000000108",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000117",
+      "source": "a3001000-0000-4000-8000-000000000108",
+      "target": "a3001000-0000-4000-8000-000000000109",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000118",
+      "source": "a3001000-0000-4000-8000-000000000109",
+      "target": "a3001000-0000-4000-8000-000000000110",
+      "sourceHandle": "true",
+      "label": "Promoter"
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000119",
+      "source": "a3001000-0000-4000-8000-000000000109",
+      "target": "a3001000-0000-4000-8000-000000000111",
+      "sourceHandle": "false",
+      "label": "Other"
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000120",
+      "source": "a3001000-0000-4000-8000-000000000110",
+      "target": "a3001000-0000-4000-8000-000000000112",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000121",
+      "source": "a3001000-0000-4000-8000-000000000111",
+      "target": "a3001000-0000-4000-8000-000000000112",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000122",
+      "source": "a3001000-0000-4000-8000-000000000020",
+      "target": "a3001000-0000-4000-8000-000000000104",
+      "sourceHandle": "case_feedback",
+      "label": "Clinic feedback"
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000123",
+      "source": "a3001000-0000-4000-8000-000000000112",
+      "target": "a3001000-0000-4000-8000-000000000040",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000134",
+      "source": "a3001000-0000-4000-8000-000000000040",
+      "target": "a3001000-0000-4000-8000-000000000124",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000135",
+      "source": "a3001000-0000-4000-8000-000000000124",
+      "target": "a3001000-0000-4000-8000-000000000125",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000136",
+      "source": "a3001000-0000-4000-8000-000000000125",
+      "target": "a3001000-0000-4000-8000-000000000126",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000137",
+      "source": "a3001000-0000-4000-8000-000000000126",
+      "target": "a3001000-0000-4000-8000-000000000127",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000138",
+      "source": "a3001000-0000-4000-8000-000000000127",
+      "target": "a3001000-0000-4000-8000-000000000128",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000139",
+      "source": "a3001000-0000-4000-8000-000000000128",
+      "target": "a3001000-0000-4000-8000-000000000129",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000140",
+      "source": "a3001000-0000-4000-8000-000000000129",
+      "target": "a3001000-0000-4000-8000-000000000130",
+      "sourceHandle": "body",
+      "label": "Each"
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000141",
+      "source": "a3001000-0000-4000-8000-000000000130",
+      "target": "a3001000-0000-4000-8000-000000000131",
+      "sourceHandle": null,
+      "label": "Then"
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000142",
+      "source": "a3001000-0000-4000-8000-000000000131",
+      "target": "a3001000-0000-4000-8000-000000000132",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000143",
+      "source": "a3001000-0000-4000-8000-000000000132",
+      "target": "a3001000-0000-4000-8000-000000000133",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3001000-0000-4000-8000-000000000144",
+      "source": "a3001000-0000-4000-8000-000000000020",
+      "target": "a3001000-0000-4000-8000-000000000040",
+      "sourceHandle": "default",
+      "label": "Default"
+    }
+  ],
+  "entities": [
+    {
+      "id": "b3100000-0000-4000-8000-000000000001",
+      "key": "clinic_services"
+    },
+    {
+      "id": "b3200000-0000-4000-8000-000000000001",
+      "key": "care_requests"
+    }
+  ],
+  "entityDefs": [
+    {
+      "id": "b3100000-0000-4000-8000-000000000001",
+      "key": "clinic_services",
+      "name": "Clinic services",
+      "description": "Static service catalog",
+      "kind": "static",
+      "attributes": [
+        {
+          "key": "id",
+          "label": "Id",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": true,
+          "is_unique": true,
+          "sort_order": -1,
+          "default_value": null
+        },
+        {
+          "key": "code",
+          "label": "Code",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": true,
+          "sort_order": 0,
+          "default_value": null
+        },
+        {
+          "key": "name",
+          "label": "Name",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 1,
+          "default_value": null
+        },
+        {
+          "key": "wait_mins",
+          "label": "Wait (mins)",
+          "value_type": "number",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 2,
+          "default_value": null
+        }
+      ],
+      "records": [
+        {
+          "id": "31111111-1111-4111-8111-111111111101",
+          "code": "GP-01",
+          "name": "General practice",
+          "wait_mins": 25
+        },
+        {
+          "id": "31111111-1111-4111-8111-111111111102",
+          "code": "TEL-10",
+          "name": "Telehealth triage",
+          "wait_mins": 10
+        },
+        {
+          "id": "31111111-1111-4111-8111-111111111103",
+          "code": "VAX-03",
+          "name": "Nurse / vaccinations",
+          "wait_mins": 15
+        }
+      ]
+    },
+    {
+      "id": "b3200000-0000-4000-8000-000000000001",
+      "key": "care_requests",
+      "name": "Care requests",
+      "description": "Logged CareFlow enquiries",
+      "kind": "dynamic",
+      "attributes": [
+        {
+          "key": "id",
+          "label": "Id",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": true,
+          "is_unique": true,
+          "sort_order": -1,
+          "default_value": null
+        },
+        {
+          "key": "name",
+          "label": "Name",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 0,
+          "default_value": null
+        },
+        {
+          "key": "email",
+          "label": "Email",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 1,
+          "default_value": null
+        },
+        {
+          "key": "phone",
+          "label": "Phone",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 2,
+          "default_value": null
+        },
+        {
+          "key": "country",
+          "label": "Country",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 3,
+          "default_value": null
+        },
+        {
+          "key": "city",
+          "label": "City",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 4,
+          "default_value": null
+        },
+        {
+          "key": "service",
+          "label": "Service",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 5,
+          "default_value": null
+        },
+        {
+          "key": "summary",
+          "label": "Summary",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 6,
+          "default_value": null
+        },
+        {
+          "key": "priority",
+          "label": "Priority",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 7,
+          "default_value": null
+        },
+        {
+          "key": "mood",
+          "label": "Mood",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 8,
+          "default_value": null
+        },
+        {
+          "key": "reference",
+          "label": "Reference",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 9,
+          "default_value": null
+        },
+        {
+          "key": "followup_on",
+          "label": "Follow-up on",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 10,
+          "default_value": null
+        }
+      ],
+      "records": []
+    }
+  ],
+  "templates": [
+    {
+      "key": "welcome_msg",
+      "name": "Welcome",
+      "kind": "message",
+      "description": "Opening copy",
+      "content": {
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Guest name",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "text": "Hi — I’m the **CareFlow** clinic assistant.\n\nTell me what you need and we’ll take it from there.\n\n{color:muted}{{formatDate(utcNow(), \"EEEE, d MMMM yyyy\")}}{/color}"
+      }
+    },
+    {
+      "key": "main_menu",
+      "name": "Services menu",
+      "kind": "menu",
+      "description": "Service overview with hints",
+      "content": {
+        "inputs": [],
+        "title": "How can I help?",
+        "items": [
+          {
+            "label": "Book appointment",
+            "description": "Schedule a visit or telehealth session",
+            "value": "Book appointment"
+          },
+          {
+            "label": "Report symptoms",
+            "description": "Quick symptom check and triage",
+            "value": "Report symptoms"
+          },
+          {
+            "label": "Pharmacy shop",
+            "description": "Order wellness products",
+            "value": "Pharmacy shop"
+          },
+          {
+            "label": "Request records",
+            "description": "Request medical records",
+            "value": "Request records"
+          },
+          {
+            "label": "Clinic feedback",
+            "description": "Share your experience",
+            "value": "Clinic feedback"
+          }
+        ]
+      }
+    },
+    {
+      "key": "hours_main",
+      "name": "Opening hours",
+      "kind": "hours",
+      "description": "Hours card",
+      "content": {
+        "inputs": [],
+        "timezone": "Africa/Johannesburg",
+        "note": "Clinic hours for walk-ins and telehealth (demo).",
+        "days": [
+          {
+            "day": "Monday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Tuesday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Wednesday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Thursday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Friday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Saturday",
+            "open": "08:00",
+            "close": "13:00",
+            "closed": false
+          },
+          {
+            "day": "Sunday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": true
+          }
+        ]
+      }
+    },
+    {
+      "key": "help_faq",
+      "name": "FAQ",
+      "kind": "faq",
+      "description": "FAQ with intro",
+      "content": {
+        "inputs": [
+          {
+            "key": "brand",
+            "label": "Brand",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "title": "FAQ",
+        "intro": "Quick answers about {{coalesce(inputs.brand, \"CareFlow Clinic\")}}:",
+        "items": [
+          {
+            "question": "Is this medical advice?",
+            "answer": "No — this is a demonstration only. Do not enter real patient data."
+          },
+          {
+            "question": "How do I book a visit?",
+            "answer": "Choose Book appointment from the menu, then pick a service and time that suits you."
+          }
+        ]
+      }
+    },
+    {
+      "key": "terms_of_use",
+      "name": "Terms",
+      "kind": "legal",
+      "description": "Demo terms",
+      "content": {
+        "inputs": [],
+        "title": "Patient demo terms",
+        "body": "Demo only. Do not enter real medical history or third-party ID numbers."
+      }
+    },
+    {
+      "key": "followup_email",
+      "name": "Follow-up email",
+      "kind": "email",
+      "description": "Confirmation email HTML with reference",
+      "content": {
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Name",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "brand",
+            "label": "Brand",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "service",
+            "label": "Service",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "reference",
+            "label": "Reference",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "city",
+            "label": "City",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "followup",
+            "label": "Follow-up date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "summary",
+            "label": "Summary",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "support",
+            "label": "Support email",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "subject": "CareFlow Clinic: your {{coalesce(inputs.service, \"request\")}} · ref {{coalesce(inputs.reference, \"pending\")}}",
+        "html": "<!DOCTYPE html>\n<html><body style=\"margin:0;background:#f1f5f9;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;\">\n  <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f1f5f9;padding:28px 0;\">\n    <tr><td align=\"center\">\n      <table role=\"presentation\" width=\"580\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 12px 40px rgba(15,23,42,.08);\">\n        <tr>\n          <td style=\"background:linear-gradient(135deg,#0f766e,#0891b2);padding:32px 36px;color:#ffffff;\">\n            <p style=\"margin:0;font-size:11px;letter-spacing:.2em;text-transform:uppercase;opacity:.88;\">{{coalesce(inputs.brand, \"CareFlow Clinic\")}}</p>\n            <h1 style=\"margin:10px 0 0;font-size:24px;font-weight:650;letter-spacing:-.02em;\">You're all set, {{titleCase(inputs.name)}}</h1>\n            <p style=\"margin:10px 0 0;font-size:14px;opacity:.9;\">{{formatDate(utcNow(), \"EEEE, d MMMM yyyy · HH:mm\")}}</p>\n          </td>\n        </tr>\n        <tr>\n          <td style=\"padding:28px 36px 8px;color:#334155;font-size:15px;line-height:1.65;\">\n            <p style=\"margin:0 0 14px;\">We have logged your <strong>{{coalesce(inputs.service, \"service\")}}</strong> request.</p>\n            <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;margin:0 0 18px;\">\n              <tr>\n                <td style=\"padding:16px 18px;\">\n                  <p style=\"margin:0 0 6px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;\">Reference</p>\n                  <p style=\"margin:0;font-size:18px;font-weight:650;color:#0f172a;font-family:ui-monospace,Consolas,monospace;\">{{coalesce(inputs.reference, \"pending\")}}</p>\n                </td>\n              </tr>\n              <tr>\n                <td style=\"padding:0 18px 16px;\">\n                  <p style=\"margin:0;font-size:13px;color:#64748b;\">City · {{coalesce(inputs.city, \"—\")}} · Follow-up around {{coalesce(inputs.followup, \"soon\")}}</p>\n                </td>\n              </tr>\n            </table>\n            <p style=\"margin:0 0 12px;\">{{coalesce(inputs.summary, \"A member of the team will use the details you shared in this chat.\")}}</p>\n            <p style=\"margin:0 0 18px;color:#64748b;font-size:13px;\">Need help? Reply to this email or write to <a href=\"mailto:{{coalesce(inputs.support, \"\")}}\" style=\"color:#0d9488;\">{{coalesce(inputs.support, \"support\")}}</a>.</p>\n          </td>\n        </tr>\n        <tr>\n          <td style=\"padding:0 36px 28px;\">\n            <p style=\"margin:0;padding:14px 16px;border-radius:12px;background:linear-gradient(90deg,#ecfdf5,#e0f2fe);color:#0f766e;font-size:13px;line-height:1.5;\">\n              This is a demonstration confirmation from <strong>{{coalesce(inputs.brand, \"CareFlow Clinic\")}}</strong> — thank you for trying the assistant.\n            </p>\n          </td>\n        </tr>\n      </table>\n    </td></tr>\n  </table>\n</body></html>"
+      }
+    },
+    {
+      "key": "order_receipt",
+      "name": "Receipt",
+      "kind": "receipt",
+      "description": "Shop receipt with expressions",
+      "content": {
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Name",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "service",
+            "label": "Service",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "city",
+            "label": "City",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "order_id",
+            "label": "Order id",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "title": "CareFlow Clinic receipt",
+        "intro": "Thanks **{{titleCase(inputs.name)}}** — {{coalesce(inputs.service, \"your request\")}} in {{coalesce(inputs.city, \"your area\")}}.\n\nReference: **{{coalesce(inputs.order_id, \"pending\")}}**",
+        "footer": "Demo receipt · CareFlow Clinic · FlowForge"
+      }
+    },
+    {
+      "key": "pack_document",
+      "name": "Document pack",
+      "kind": "document",
+      "description": "Formatted A4 PDF with field cells and signature",
+      "content": {
+        "format": "pdf",
+        "filename": "{{slugify(coalesce(inputs.name, \"visitor\"))}}-health-pack.pdf",
+        "title": "CareFlow Clinic – confirmation pack",
+        "intro": "Prepared for **{{titleCase(inputs.name)}}** on {{formatDate(utcNow(), \"EEEE, d MMMM yyyy\")}}.",
+        "body": "This pack confirms your {{coalesce(inputs.service, \"enquiry\")}} with {{coalesce(inputs.brand, \"CareFlow Clinic\")}}.\n\n{{if(empty(inputs.summary), \"\", inputs.summary)}}\n\n{{if(empty(inputs.followup), \"\", \"We aim to follow up around \" + inputs.followup + \".\")}}\n\nQuestions? {{coalesce(inputs.support, \"care@careflow.example\")}}",
+        "footer": "© CareFlow Clinic · generated by FlowForge",
+        "fields": [
+          {
+            "label": "Full name",
+            "value": "{{titleCase(inputs.name)}}",
+            "as": "text"
+          },
+          {
+            "label": "Email",
+            "value": "{{inputs.email}}",
+            "as": "text"
+          },
+          {
+            "label": "Cell",
+            "value": "{{coalesce(inputs.phone, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Country",
+            "value": "{{coalesce(inputs.country, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "City",
+            "value": "{{coalesce(inputs.city, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Service",
+            "value": "{{coalesce(inputs.service, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Priority",
+            "value": "{{coalesce(inputs.priority, \"standard\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Reference",
+            "value": "{{coalesce(inputs.reference, \"pending\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Follow-up",
+            "value": "{{coalesce(inputs.followup, \"soon\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Summary",
+            "value": "{{coalesce(inputs.summary, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Signature",
+            "value": "{{inputs.signature}}",
+            "as": "image"
+          }
+        ],
+        "includeCart": true,
+        "layout": "page",
+        "orientation": "portrait",
+        "blocks": [
+          {
+            "id": "hdr",
+            "type": "heading",
+            "x": 8,
+            "y": 5,
+            "w": 84,
+            "h": 8,
+            "page": 1,
+            "text": "CareFlow Clinic confirmation",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 20,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f766e",
+            "fill": "#ecfdf5"
+          },
+          {
+            "id": "sub",
+            "type": "text",
+            "x": 8,
+            "y": 14,
+            "w": 84,
+            "h": 7,
+            "page": 1,
+            "text": "Prepared for {{titleCase(inputs.name)}} · {{formatDate(utcNow(), \"EEEE, d MMMM yyyy\")}}",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 10,
+            "fontFamily": "times",
+            "bold": false,
+            "color": "#475569",
+            "fill": ""
+          },
+          {
+            "id": "div1",
+            "type": "divider",
+            "x": 8,
+            "y": 22,
+            "w": 84,
+            "h": 0.4,
+            "page": 1,
+            "text": "",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#99f6e4",
+            "fill": ""
+          },
+          {
+            "id": "name",
+            "type": "field",
+            "x": 8,
+            "y": 25,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Full name",
+            "value": "{{titleCase(inputs.name)}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "cell",
+            "type": "field",
+            "x": 52,
+            "y": 25,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Cell",
+            "value": "{{coalesce(inputs.phone, \"—\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "email",
+            "type": "field",
+            "x": 8,
+            "y": 34,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Email",
+            "value": "{{inputs.email}}",
+            "align": "left",
+            "fontSize": 10,
+            "fontFamily": "courier",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "city",
+            "type": "field",
+            "x": 52,
+            "y": 34,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "City / area",
+            "value": "{{coalesce(inputs.city, \"—\")}}, {{coalesce(inputs.country, \"\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "service",
+            "type": "field",
+            "x": 8,
+            "y": 43,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Service",
+            "value": "{{coalesce(inputs.service, \"—\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f766e",
+            "fill": "#ecfdf5"
+          },
+          {
+            "id": "ref",
+            "type": "field",
+            "x": 52,
+            "y": 43,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Reference",
+            "value": "{{coalesce(inputs.reference, \"pending\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "courier",
+            "bold": true,
+            "color": "#0f766e",
+            "fill": "#ecfdf5"
+          },
+          {
+            "id": "prio",
+            "type": "field",
+            "x": 8,
+            "y": 52,
+            "w": 40,
+            "h": 6,
+            "page": 1,
+            "text": "",
+            "label": "Priority",
+            "value": "{{coalesce(inputs.priority, \"standard\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#9a3412",
+            "fill": "#fff7ed"
+          },
+          {
+            "id": "follow",
+            "type": "field",
+            "x": 52,
+            "y": 52,
+            "w": 40,
+            "h": 6,
+            "page": 1,
+            "text": "",
+            "label": "Follow-up",
+            "value": "{{coalesce(inputs.followup, \"soon\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#9a3412",
+            "fill": "#fff7ed"
+          },
+          {
+            "id": "div2",
+            "type": "divider",
+            "x": 8,
+            "y": 60,
+            "w": 84,
+            "h": 0.35,
+            "page": 1,
+            "text": "",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#cbd5e1",
+            "fill": ""
+          },
+          {
+            "id": "notes",
+            "type": "text",
+            "x": 8,
+            "y": 63,
+            "w": 84,
+            "h": 10,
+            "page": 1,
+            "text": "{{if(empty(inputs.summary), \"No additional notes.\", \"Notes: \" + inputs.summary)}}",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "times",
+            "bold": false,
+            "color": "#334155",
+            "fill": ""
+          },
+          {
+            "id": "sig",
+            "type": "image",
+            "x": 8,
+            "y": 75,
+            "w": 46,
+            "h": 14,
+            "page": 1,
+            "text": "",
+            "label": "Signature",
+            "value": "{{inputs.signature}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#ffffff"
+          },
+          {
+            "id": "cart",
+            "type": "cart",
+            "x": 56,
+            "y": 75,
+            "w": 36,
+            "h": 14,
+            "page": 1,
+            "text": "",
+            "label": "Order (if any)",
+            "value": "",
+            "align": "left",
+            "fontSize": 9,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "foot",
+            "type": "text",
+            "x": 8,
+            "y": 92,
+            "w": 84,
+            "h": 4,
+            "page": 1,
+            "text": "© CareFlow Clinic · demo pack · FlowForge",
+            "label": "",
+            "value": "",
+            "align": "center",
+            "fontSize": 8,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#94a3b8",
+            "fill": ""
+          }
+        ],
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Full name",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "email",
+            "label": "Email",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "phone",
+            "label": "Cell",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "country",
+            "label": "Country",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "city",
+            "label": "City",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "service",
+            "label": "Service",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "priority",
+            "label": "Priority",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "mood",
+            "label": "Mood",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "reference",
+            "label": "Reference",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "followup",
+            "label": "Follow-up date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "summary",
+            "label": "Summary",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "signature",
+            "label": "Signature",
+            "type": "file",
+            "required": false
+          },
+          {
+            "key": "brand",
+            "label": "Brand",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "support",
+            "label": "Support email",
+            "type": "string",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "clinic_store",
+      "name": "CareFlow pharmacy",
+      "kind": "cart",
+      "description": "CareFlow pharmacy catalog for shop + payment.",
+      "content": {
+        "storeName": "CareFlow pharmacy",
+        "intro": "Wellness products — checkout includes shipping and VAT (demo).",
+        "currency": "ZAR",
+        "categories": [
+          {
+            "id": "cat_vax",
+            "name": "Vaccines"
+          },
+          {
+            "id": "cat_well",
+            "name": "Wellness"
+          }
+        ],
+        "products": [
+          {
+            "id": "prod_flu",
+            "sku": "CF-FLU",
+            "name": "Flu shot voucher",
+            "description": "Seasonal vaccination",
+            "price": 350,
+            "categoryId": "cat_vax",
+            "stock": 40,
+            "image": ""
+          },
+          {
+            "id": "prod_tele",
+            "sku": "CF-TEL",
+            "name": "Telehealth credit",
+            "description": "15-min video consult",
+            "price": 280,
+            "categoryId": "cat_well",
+            "stock": 50,
+            "image": ""
+          },
+          {
+            "id": "prod_kit",
+            "sku": "CF-KIT",
+            "name": "Home vitals kit",
+            "description": "BP cuff + oximeter",
+            "price": 620,
+            "categoryId": "cat_well",
+            "stock": 22,
+            "image": ""
+          }
+        ],
+        "fees": [
+          {
+            "id": "fee_ship",
+            "name": "Shipping / handling",
+            "kind": "fixed",
+            "amount": 45
+          },
+          {
+            "id": "fee_vat",
+            "name": "VAT",
+            "kind": "percent",
+            "amount": 15
+          }
+        ]
+      }
+    }
+  ],
+  "testScenarios": [],
+  "connectionHints": [
+    {
+      "name": "Demo Lab HTTP",
+      "kind": "http",
+      "baseUrl": "https://gkjtt.co.za/flowforge/demo",
+      "note": "Required for lookups, quotes, submit, and email sink."
+    },
+    {
+      "name": "Demo Lab SQLite",
+      "kind": "database",
+      "note": "Optional -- SQLite file on the demo host (see CONNECTIONS.md)."
+    }
+  ]
+}

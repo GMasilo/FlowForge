@@ -1,13 +1,17 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { PlanLockedState } from '@/features/billing/PlanLockedState'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { supabase } from '@/shared/lib/supabase'
 import type { InstanceRole, InstanceSsoConfig } from '@/shared/types/database'
+import { instanceFeatureEnabled } from '@/shared/types/database'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { FieldError } from '@/shared/ui/field-error'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
+import { PAGE_HELP, SECTION_HELP } from '@/shared/help/pageHelp'
+import { SectionHeading } from '@/shared/ui/help-tooltip'
 import { PageHeader } from '@/shared/ui/page-header'
 import { Select } from '@/shared/ui/select'
 import { Textarea } from '@/shared/ui/textarea'
@@ -17,6 +21,9 @@ export function SecurityPage() {
   const qc = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [scimToken, setScimToken] = useState<string | null>(null)
+  const [apiToken, setApiToken] = useState<string | null>(null)
+  const [apiTokenName, setApiTokenName] = useState('service')
+  const [apiTokenExpiry, setApiTokenExpiry] = useState<'never' | '90' | '365'>('never')
   const [form, setForm] = useState({
     protocol: 'oidc' as 'oidc' | 'saml',
     name: 'Primary IdP',
@@ -45,6 +52,19 @@ export function SecurityPage() {
         .order('updated_at', { ascending: false })
       if (qError) throw qError
       return (data ?? []) as InstanceSsoConfig[]
+    },
+  })
+
+  const platformTokens = useQuery({
+    queryKey: ['platform-api-tokens', instance.id],
+    queryFn: async () => {
+      const { data, error: qError } = await supabase
+        .from('instance_platform_api_tokens')
+        .select('id, name, token_prefix, created_at, last_used_at, revoked_at, expires_at')
+        .eq('instance_id', instance.id)
+        .order('created_at', { ascending: false })
+      if (qError) throw qError
+      return data ?? []
     },
   })
 
@@ -93,6 +113,36 @@ export function SecurityPage() {
     await qc.invalidateQueries({ queryKey: ['sso-configs', instance.id] })
   }
 
+  const createPlatformToken = useMutation({
+    mutationFn: async () => {
+      const days = apiTokenExpiry === 'never' ? null : Number(apiTokenExpiry)
+      const { data, error: rpcError } = await supabase.rpc('create_platform_api_token', {
+        p_instance_id: instance.id,
+        p_name: apiTokenName.trim() || 'service',
+        p_expires_days: days,
+      })
+      if (rpcError) throw rpcError
+      return data as { token?: string; prefix?: string }
+    },
+    onSuccess: async (data) => {
+      setApiToken(data.token ?? null)
+      setError(null)
+      await qc.invalidateQueries({ queryKey: ['platform-api-tokens', instance.id] })
+    },
+    onError: (e: Error) => setError(e.message),
+  })
+
+  const revokePlatformToken = useMutation({
+    mutationFn: async (id: string) => {
+      const { error: rpcError } = await supabase.rpc('revoke_platform_api_token', { p_id: id })
+      if (rpcError) throw rpcError
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['platform-api-tokens', instance.id] })
+    },
+    onError: (e: Error) => setError(e.message),
+  })
+
   const createToken = useMutation({
     mutationFn: async () => {
       const { data, error: rpcError } = await supabase.rpc('create_scim_token', {
@@ -109,16 +159,24 @@ export function SecurityPage() {
     onError: (e: Error) => setError(e.message),
   })
 
+  const ssoEnabled = instanceFeatureEnabled(instance, 'sso')
+  const apiEnabled = instanceFeatureEnabled(instance, 'platform_api')
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Security · SSO / SCIM"
-        description="Configure OIDC and SAML enterprise login, and SCIM provisioning tokens."
+        title="Security · SSO / SCIM / API"
+        description="Configure OIDC and SAML enterprise login, SCIM provisioning, and long-lived Platform API tokens."
+        help={PAGE_HELP.security}
       />
       {error ? <FieldError>{error}</FieldError> : null}
 
+      {!ssoEnabled ? (
+        <PlanLockedState feature="sso" title="SSO & SCIM" />
+      ) : (
+        <>
       <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold">Existing SSO configs</h2>
+        <SectionHeading title="Existing SSO configs" help={SECTION_HELP.ssoConfigs} />
         <ul className="space-y-2 text-sm">
           {(configs.data ?? []).map((c) => (
             <li key={c.id} className="rounded-lg border border-[var(--color-border)]/60 px-3 py-2">
@@ -139,7 +197,7 @@ export function SecurityPage() {
       </Card>
 
       <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold">Add SSO config</h2>
+        <SectionHeading title="Add SSO config" help={SECTION_HELP.ssoConfigs} />
         <form className="space-y-3" onSubmit={(e) => void saveConfig(e)}>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1 text-xs">
@@ -257,7 +315,7 @@ export function SecurityPage() {
       </Card>
 
       <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold">SCIM 2.0</h2>
+        <SectionHeading title="SCIM 2.0" help={SECTION_HELP.scim} />
         <p className="text-sm text-[var(--color-ink-muted)]">
           Point your IdP SCIM client at <code className="text-xs">/api/scim/v2/</code> with a bearer token.
         </p>
@@ -278,6 +336,98 @@ export function SecurityPage() {
           </p>
         ) : null}
       </Card>
+        </>
+      )}
+
+      {!apiEnabled ? (
+        <PlanLockedState feature="platform_api" title="Platform API" />
+      ) : (
+      <Card className="space-y-3 p-4">
+        <SectionHeading title="Platform API tokens" help={SECTION_HELP.platformApiTokens} />
+        <p className="text-sm text-[var(--color-ink-muted)]">
+          Long-lived Bearer tokens for <code className="text-xs">/v1</code> service accounts. The PHP
+          API verifies the token, then reads this organisation with the server database key. Shown
+          once — store it in your secret manager.
+        </p>
+        <ul className="space-y-2 text-sm">
+          {(platformTokens.data ?? []).map((t) => (
+            <li
+              key={t.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--color-border)]/60 px-3 py-2"
+            >
+              <div>
+                <span className="font-medium">{t.name}</span>
+                <span className="ml-2 font-mono text-xs text-[var(--color-ink-muted)]">{t.token_prefix}…</span>
+                {t.revoked_at ? (
+                  <span className="ml-2 text-xs text-rose-700">revoked</span>
+                ) : t.expires_at ? (
+                  <span className="ml-2 text-xs text-[var(--color-ink-muted)]">
+                    expires {new Date(t.expires_at).toLocaleDateString()}
+                  </span>
+                ) : (
+                  <span className="ml-2 text-xs text-teal-700">no expiry</span>
+                )}
+                {t.last_used_at ? (
+                  <p className="text-xs text-[var(--color-ink-muted)]">
+                    Last used {new Date(t.last_used_at).toLocaleString()}
+                  </p>
+                ) : null}
+              </div>
+              {!t.revoked_at ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={revokePlatformToken.isPending}
+                  onClick={() => revokePlatformToken.mutate(t.id)}
+                >
+                  Revoke
+                </Button>
+              ) : null}
+            </li>
+          ))}
+          {!platformTokens.data?.length ? (
+            <p className="text-sm text-[var(--color-ink-muted)]">No Platform API tokens yet.</p>
+          ) : null}
+        </ul>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="space-y-1 text-xs">
+            <Label htmlFor="platform-token-name">Name</Label>
+            <Input
+              id="platform-token-name"
+              value={apiTokenName}
+              onChange={(e) => setApiTokenName(e.target.value)}
+              placeholder="service"
+              maxLength={80}
+            />
+          </label>
+          <label className="space-y-1 text-xs">
+            <Label htmlFor="platform-token-expiry">Expiry</Label>
+            <Select
+              id="platform-token-expiry"
+              value={apiTokenExpiry}
+              onChange={(e) => setApiTokenExpiry(e.target.value as 'never' | '90' | '365')}
+            >
+              <option value="never">No expiry</option>
+              <option value="90">90 days</option>
+              <option value="365">1 year</option>
+            </Select>
+          </label>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={createPlatformToken.isPending}
+            onClick={() => createPlatformToken.mutate()}
+          >
+            Create token
+          </Button>
+        </div>
+        {apiToken ? (
+          <p className="rounded-lg bg-amber-50 p-2 font-mono text-xs text-amber-950">
+            Copy now — shown once: {apiToken}
+          </p>
+        ) : null}
+      </Card>
+      )}
     </div>
   )
 }

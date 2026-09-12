@@ -20,6 +20,8 @@ import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Input } from '@/shared/ui/input'
+import { PAGE_HELP, SECTION_HELP } from '@/shared/help/pageHelp'
+import { HelpTooltip } from '@/shared/ui/help-tooltip'
 import { PageHeader } from '@/shared/ui/page-header'
 import { Select } from '@/shared/ui/select'
 import { cn } from '@/shared/lib/utils'
@@ -258,12 +260,17 @@ export function InboxPage() {
       <PageHeader
         title="Agent inbox"
         description={`Queues, assignment, and SLA for escalated chats on ${instance.name}.`}
+        help={PAGE_HELP.inbox}
         actions={
           <Badge className="bg-teal-100 text-teal-900">{onlineCount} agent{onlineCount === 1 ? '' : 's'} online</Badge>
         }
       />
 
       <Card className="flex flex-wrap items-end gap-3 p-4">
+        <div className="flex w-full items-center gap-1.5 pb-1 sm:w-auto sm:pb-0">
+          <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-muted)]">Filters</span>
+          <HelpTooltip content={SECTION_HELP.inboxFilters} label="Help: Inbox filters" />
+        </div>
         <label className="space-y-1 text-xs">
           <span className="text-[var(--color-ink-muted)]">Queue</span>
           <Select value={queueFilter} onChange={(e) => setQueueFilter(e.target.value)} className="min-w-[10rem]">

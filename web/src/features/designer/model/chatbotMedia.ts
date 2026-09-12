@@ -2,9 +2,19 @@ import {
   decodeDocumentEmbed,
   type FilledDocument,
 } from '@/features/templates/documentFill'
+import {
+  decodeHoursEmbed,
+  hoursEmbedPlainSummary,
+  type HoursEmbedPayload,
+} from '@/features/templates/hoursEmbed'
+import {
+  decodeSocialEmbed,
+  socialEmbedPlainSummary,
+  type SocialEmbedPayload,
+} from '@/features/chat/socialEmbed'
 
 export const DESIGNER_MEDIA_ACCEPT =
-  '.jpg,.jpeg,.png,.gif,.webp,.mp3,.wav,.ogg,.mp4,.webm,.pdf,.txt,.csv,.doc,.docx,.xls,.xlsx,.zip'
+  '.jpg,.jpeg,.png,.gif,.webp,.svg,.mp3,.wav,.ogg,.mp4,.webm,.pdf,.txt,.csv,.doc,.docx,.xls,.xlsx,.zip,.woff2,.woff,.ttf,.otf'
 
 export type ChatbotMediaFile = {
   filename: string
@@ -193,9 +203,11 @@ export type ChatContentSegment =
   | { kind: 'text'; text: string }
   | { kind: 'file'; file: ChatbotMediaFile }
   | { kind: 'document'; document: FilledDocument }
+  | { kind: 'hours'; hours: HoursEmbedPayload }
+  | { kind: 'social'; social: SocialEmbedPayload }
 
 const CHAT_EMBED_RE =
-  /<<ff:doc:([A-Za-z0-9+/=]+)>>|<<ff:file:([A-Za-z0-9+/=]+)>>|(https?:\/\/[^\s<>"]+\/file\/get\?[^\s<>"]+)|(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)(?:\?[^\s<>"]*)?)/gi
+  /<<ff:embed:([A-Za-z0-9+/=]+)>>|<<ff:hours:([A-Za-z0-9+/=]+)>>|<<ff:doc:([A-Za-z0-9+/=]+)>>|<<ff:file:([A-Za-z0-9+/=]+)>>|(https?:\/\/[^\s<>"]+\/file\/get\?[^\s<>"]+)|(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)(?:\?[^\s<>"]*)?)/gi
 
 export function parseChatSegments(text: string): ChatContentSegment[] {
   if (!text) return []
@@ -207,11 +219,21 @@ export function parseChatSegments(text: string): ChatContentSegment[] {
     if (match.index > last) {
       segments.push({ kind: 'text', text: text.slice(last, match.index) })
     }
-    const docB64 = match[1]
-    const fileB64 = match[2]
-    const fileGetUrl = match[3]
-    const mediaUrl = match[4]
-    if (docB64) {
+    const socialB64 = match[1]
+    const hoursB64 = match[2]
+    const docB64 = match[3]
+    const fileB64 = match[4]
+    const fileGetUrl = match[5]
+    const mediaUrl = match[6]
+    if (socialB64) {
+      const social = decodeSocialEmbed(socialB64)
+      if (social) segments.push({ kind: 'social', social })
+      else segments.push({ kind: 'text', text: match[0] })
+    } else if (hoursB64) {
+      const hours = decodeHoursEmbed(hoursB64)
+      if (hours) segments.push({ kind: 'hours', hours })
+      else segments.push({ kind: 'text', text: match[0] })
+    } else if (docB64) {
       const document = decodeDocumentEmbed(docB64)
       if (document) segments.push({ kind: 'document', document })
       else segments.push({ kind: 'text', text: match[0] })
@@ -239,9 +261,17 @@ export function stripFileEmbeds(text: string): string {
     .map((seg) => {
       if (seg.kind === 'text') return seg.text
       if (seg.kind === 'document') return seg.document.filename
+      if (seg.kind === 'hours') return hoursEmbedPlainSummary(seg.hours)
+      if (seg.kind === 'social') return socialEmbedPlainSummary(seg.social)
       return seg.file.url
     })
     .join('')
+}
+
+/** Bot bubbles with social embeds should use nearly the full chat column width. */
+export function chatTextHasSocialEmbed(text: string | null | undefined): boolean {
+  if (!text) return false
+  return parseChatSegments(text).some((seg) => seg.kind === 'social')
 }
 
 export function mimeFromFilename(filename: string): string {
@@ -265,6 +295,11 @@ export function mimeFromFilename(filename: string): string {
     xls: 'application/vnd.ms-excel',
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     zip: 'application/zip',
+    woff2: 'font/woff2',
+    woff: 'font/woff',
+    ttf: 'font/ttf',
+    otf: 'font/otf',
+    svg: 'image/svg+xml',
   }
   return map[ext] ?? 'application/octet-stream'
 }

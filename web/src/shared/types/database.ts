@@ -326,6 +326,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["entity_kind"]
           name: string
           updated_at: string
+          visibility: Database["public"]["Enums"]["entity_visibility"]
         }
         Insert: {
           chatbot_id: string
@@ -338,6 +339,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["entity_kind"]
           name: string
           updated_at?: string
+          visibility?: Database["public"]["Enums"]["entity_visibility"]
         }
         Update: {
           chatbot_id?: string
@@ -350,6 +352,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["entity_kind"]
           name?: string
           updated_at?: string
+          visibility?: Database["public"]["Enums"]["entity_visibility"]
         }
         Relationships: [
           {
@@ -357,6 +360,57 @@ export type Database = {
             columns: ["chatbot_id"]
             isOneToOne: false
             referencedRelation: "chatbots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chatbot_entity_links: {
+        Row: {
+          added_by: string | null
+          can_create: boolean
+          can_delete: boolean
+          can_query: boolean
+          can_update: boolean
+          chatbot_id: string
+          created_at: string
+          entity_id: string
+          id: string
+        }
+        Insert: {
+          added_by?: string | null
+          can_create?: boolean
+          can_delete?: boolean
+          can_query?: boolean
+          can_update?: boolean
+          chatbot_id: string
+          created_at?: string
+          entity_id: string
+          id?: string
+        }
+        Update: {
+          added_by?: string | null
+          can_create?: boolean
+          can_delete?: boolean
+          can_query?: boolean
+          can_update?: boolean
+          chatbot_id?: string
+          created_at?: string
+          entity_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chatbot_entity_links_chatbot_id_fkey"
+            columns: ["chatbot_id"]
+            isOneToOne: false
+            referencedRelation: "chatbots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chatbot_entity_links_entity_id_fkey"
+            columns: ["entity_id"]
+            isOneToOne: false
+            referencedRelation: "chatbot_entities"
             referencedColumns: ["id"]
           },
         ]
@@ -593,6 +647,7 @@ export type Database = {
           name: string
           public_enabled: boolean
           public_slug: string | null
+          staging_test_token: string
           settings: Json
           updated_at: string
         }
@@ -607,6 +662,7 @@ export type Database = {
           name: string
           public_enabled?: boolean
           public_slug?: string | null
+          staging_test_token?: string
           settings?: Json
           updated_at?: string
         }
@@ -621,6 +677,7 @@ export type Database = {
           name?: string
           public_enabled?: boolean
           public_slug?: string | null
+          staging_test_token?: string
           settings?: Json
           updated_at?: string
         }
@@ -1177,6 +1234,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "entity_attributes_entity_id_fkey"
+            columns: ["entity_id"]
+            isOneToOne: false
+            referencedRelation: "chatbot_entities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entity_shares: {
+        Row: {
+          created_at: string
+          entity_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_shares_entity_id_fkey"
             columns: ["entity_id"]
             isOneToOne: false
             referencedRelation: "chatbot_entities"
@@ -1923,6 +2009,53 @@ export type Database = {
           },
         ]
       }
+      instance_platform_api_tokens: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          instance_id: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          token_hash: string
+          token_prefix: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          instance_id: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          token_hash: string
+          token_prefix: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          instance_id?: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          token_hash?: string
+          token_prefix?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instance_platform_api_tokens_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instance_scim_tokens: {
         Row: {
           created_at: string
@@ -2149,9 +2282,12 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
+          plan: Database['public']['Enums']['organisation_plan']
+          quota_max_chatbots: number
           quota_max_conversations_month: number
           quota_max_emails_month: number
           quota_max_http_calls_month: number
+          quota_max_seats: number
           slug: string
           updated_at: string
           website: string | null
@@ -2172,9 +2308,12 @@ export type Database = {
           name: string
           notes?: string | null
           phone?: string | null
+          plan?: Database['public']['Enums']['organisation_plan']
+          quota_max_chatbots?: number
           quota_max_conversations_month?: number
           quota_max_emails_month?: number
           quota_max_http_calls_month?: number
+          quota_max_seats?: number
           slug: string
           updated_at?: string
           website?: string | null
@@ -2195,9 +2334,12 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
+          plan?: Database['public']['Enums']['organisation_plan']
+          quota_max_chatbots?: number
           quota_max_conversations_month?: number
           quota_max_emails_month?: number
           quota_max_http_calls_month?: number
+          quota_max_seats?: number
           slug?: string
           updated_at?: string
           website?: string | null
@@ -2230,8 +2372,48 @@ export type Database = {
           },
         ]
       }
+      chatbot_integrations: {
+        Row: {
+          added_by: string | null
+          chatbot_id: string
+          created_at: string
+          id: string
+          integration_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          chatbot_id: string
+          created_at?: string
+          id?: string
+          integration_id: string
+        }
+        Update: {
+          added_by?: string | null
+          chatbot_id?: string
+          created_at?: string
+          id?: string
+          integration_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chatbot_integrations_chatbot_id_fkey"
+            columns: ["chatbot_id"]
+            isOneToOne: false
+            referencedRelation: "chatbots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chatbot_integrations_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integrations: {
         Row: {
+          chatbot_id: string
           config: Json
           created_at: string
           created_by: string | null
@@ -2244,6 +2426,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          chatbot_id: string
           config?: Json
           created_at?: string
           created_by?: string | null
@@ -2256,6 +2439,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          chatbot_id?: string
           config?: Json
           created_at?: string
           created_by?: string | null
@@ -2268,6 +2452,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "integrations_chatbot_id_fkey"
+            columns: ["chatbot_id"]
+            isOneToOne: false
+            referencedRelation: "chatbots"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "integrations_instance_id_fkey"
             columns: ["instance_id"]
@@ -2492,6 +2683,69 @@ export type Database = {
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "conversation_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_settings: {
+        Row: {
+          about_text: string | null
+          contact_email: string | null
+          contact_phone: string | null
+          contact_url: string | null
+          hero_description: string | null
+          hero_tagline: string | null
+          id: string
+          landing_demo_chatbot_id: string | null
+          landing_demo_instance_id: string | null
+          landing_public_slug: string | null
+          usecase_demos: Json
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          about_text?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          contact_url?: string | null
+          hero_description?: string | null
+          hero_tagline?: string | null
+          id?: string
+          landing_demo_chatbot_id?: string | null
+          landing_demo_instance_id?: string | null
+          landing_public_slug?: string | null
+          usecase_demos?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          about_text?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          contact_url?: string | null
+          hero_description?: string | null
+          hero_tagline?: string | null
+          id?: string
+          landing_demo_chatbot_id?: string | null
+          landing_demo_instance_id?: string | null
+          landing_public_slug?: string | null
+          usecase_demos?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_settings_landing_demo_chatbot_id_fkey"
+            columns: ["landing_demo_chatbot_id"]
+            isOneToOne: false
+            referencedRelation: "chatbots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_settings_landing_demo_instance_id_fkey"
+            columns: ["landing_demo_instance_id"]
+            isOneToOne: false
+            referencedRelation: "instances"
             referencedColumns: ["id"]
           },
         ]
@@ -2924,18 +3178,59 @@ export type Database = {
         Args: { p_connection_id: string }
         Returns: boolean
       }
+      can_manage_entity: {
+        Args: { p_entity_id: string }
+        Returns: boolean
+      }
       can_see_connection_meta: {
         Args: { p_connection_id: string }
+        Returns: boolean
+      }
+      can_see_entity_meta: {
+        Args: { p_entity_id: string }
         Returns: boolean
       }
       can_share_chatbot: {
         Args: { p_chatbot_id: string }
         Returns: boolean
       }
+      chatbot_has_integration: {
+        Args: { p_chatbot_id: string; p_integration_id: string }
+        Returns: boolean
+      }
       chatbot_instance_id: { Args: { p_chatbot_id: string }; Returns: string }
       check_instance_quota: {
         Args: { p_instance_id: string; p_kind: string }
         Returns: boolean
+      }
+      claim_chatbot_public_slug: {
+        Args: {
+          p_chatbot_id: string
+          p_name?: string | null
+          p_public_enabled?: boolean | null
+          p_slug: string
+        }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          environment: string
+          id: string
+          instance_id: string
+          name: string
+          public_enabled: boolean
+          public_slug: string | null
+          staging_test_token: string
+          settings: Json
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chatbots"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       claim_conversation: {
         Args: { p_session_id: string }
@@ -3129,6 +3424,10 @@ export type Database = {
         }
         Returns: Json
       }
+      create_platform_api_token: {
+        Args: { p_expires_days?: number | null; p_instance_id: string; p_name?: string | null }
+        Returns: Json
+      }
       create_scim_token: {
         Args: { p_instance_id: string; p_name?: string | null }
         Returns: Json
@@ -3200,7 +3499,11 @@ export type Database = {
         Returns: undefined
       }
       escalate_conversation_session: {
-        Args: { p_node_key?: string | null; p_session_id: string }
+        Args: {
+          p_node_key?: string | null
+          p_queue_id?: string | null
+          p_session_id: string
+        }
         Returns: {
           assigned_at: string | null
           assigned_to: string | null
@@ -3245,7 +3548,12 @@ export type Database = {
       get_experiment_stats: { Args: { p_experiment_id: string }; Returns: Json }
       get_invite_for_sending: { Args: { p_invite_id: string }; Returns: Json }
       get_payment_intent: { Args: { p_reference: string }; Returns: Json }
-      get_public_chatbot: { Args: { p_slug: string }; Returns: Json }
+      get_platform_settings: { Args: never; Returns: Json }
+      get_public_chatbot: { Args: { p_org_slug?: string | null; p_slug: string }; Returns: Json }
+      get_public_chatbot_appearance: {
+        Args: { p_org_slug?: string | null; p_slug: string }
+        Returns: Json
+      }
       has_instance_role: {
         Args: {
           p_instance_id: string
@@ -3802,13 +4110,40 @@ export type Database = {
         Returns: undefined
       }
       soft_delete_entity: { Args: { p_entity_id: string }; Returns: undefined }
+      entity_link_allows: {
+        Args: { p_chatbot_id: string; p_entity_id: string; p_op: string }
+        Returns: boolean
+      }
+      public_chat_entity_op: {
+        Args: {
+          p_session_id: string
+          p_chatbot_id: string
+          p_entity_id: string
+          p_operation: string
+          p_payload?: Json
+        }
+        Returns: Json
+      }
       start_public_conversation: {
-        Args: { p_slug: string; p_visitor_key?: string | null }
+        Args: { p_org_slug?: string | null; p_slug: string; p_visitor_key?: string | null }
         Returns: Json
       }
       start_public_conversation_env: {
-        Args: { p_environment?: string | null; p_slug: string; p_visitor_key?: string | null }
+        Args: {
+          p_environment?: string | null
+          p_org_slug?: string | null
+          p_slug: string
+          p_visitor_key?: string | null
+        }
         Returns: Json
+      }
+      start_staging_test_conversation: {
+        Args: { p_token: string; p_visitor_key?: string | null }
+        Returns: Json
+      }
+      regenerate_staging_test_token: {
+        Args: { p_chatbot_id: string }
+        Returns: string
       }
       submit_marketplace_listing: {
         Args: { p_listing_id: string }
@@ -3906,9 +4241,52 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
+          plan: Database['public']['Enums']['organisation_plan']
+          quota_max_chatbots: number
           quota_max_conversations_month: number
           quota_max_emails_month: number
           quota_max_http_calls_month: number
+          quota_max_seats: number
+          slug: string
+          updated_at: string
+          website: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "instances"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      organisation_chatbot_count: { Args: { p_instance_id: string }; Returns: number }
+      organisation_seat_count: { Args: { p_instance_id: string }; Returns: number }
+      set_organisation_plan: {
+        Args: {
+          p_instance_id: string
+          p_plan: Database['public']['Enums']['organisation_plan']
+        }
+        Returns: {
+          billing_address: string | null
+          brand_accent_color: string | null
+          brand_apply_to_public_chat: boolean
+          brand_display_name: string | null
+          brand_logo_url: string | null
+          contact_email: string | null
+          created_at: string
+          created_by: string | null
+          features: Json
+          http_host_allowlist: string[]
+          id: string
+          legal_name: string | null
+          name: string
+          notes: string | null
+          phone: string | null
+          plan: Database['public']['Enums']['organisation_plan']
+          quota_max_chatbots: number
+          quota_max_conversations_month: number
+          quota_max_emails_month: number
+          quota_max_http_calls_month: number
+          quota_max_seats: number
           slug: string
           updated_at: string
           website: string | null
@@ -4005,6 +4383,8 @@ export type Database = {
         }
         Returns: Json
       }
+      revoke_platform_api_token: { Args: { p_id: string }; Returns: undefined }
+      verify_platform_api_token: { Args: { p_token: string }; Returns: Json }
       verify_scim_token: { Args: { p_token: string }; Returns: string }
       write_audit_event: {
         Args: {
@@ -4029,9 +4409,10 @@ export type Database = {
       }
     }
     Enums: {
-      connection_kind: "http" | "email" | "payment"
+      connection_kind: "http" | "email" | "payment" | "database"
       connection_visibility: "private" | "global" | "shared"
       entity_kind: "static" | "dynamic"
+      entity_visibility: "private" | "global" | "shared"
       flow_node_type:
         | "message"
         | "question"
@@ -4046,7 +4427,13 @@ export type Database = {
         | "integration"
         | "handoff"
         | "transfer"
+        | "sign_in"
+        | "switch"
+        | "database"
+        | "button"
+        | "skip_to"
       instance_role: "owner" | "admin" | "editor" | "viewer" | "agent"
+      organisation_plan: "starter" | "pro" | "business" | "enterprise"
       integration_provider:
         | "microsoft_onedrive"
         | "google_drive"
@@ -4070,6 +4457,8 @@ export type Database = {
         | "legal"
         | "receipt"
         | "document"
+        | "agreement"
+        | "sso"
       variable_scope: "global" | "step"
       variable_type:
         | "string"
@@ -4078,6 +4467,7 @@ export type Database = {
         | "date"
         | "array"
         | "object"
+        | "password"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4092,6 +4482,7 @@ export type VariableType = Database['public']['Enums']['variable_type']
 export type VariableScope = Database['public']['Enums']['variable_scope']
 export type ConnectionKind = Database['public']['Enums']['connection_kind']
 export type ConnectionVisibility = Database['public']['Enums']['connection_visibility']
+export type EntityVisibility = Database['public']['Enums']['entity_visibility']
 export type IntegrationProvider = Database['public']['Enums']['integration_provider']
 export type IntegrationStatus = Database['public']['Enums']['integration_status']
 export type FlowNodeType = Database['public']['Enums']['flow_node_type']
@@ -4119,6 +4510,8 @@ export type ChatbotFlow = PublicTables['chatbot_flows']['Row']
 export type FlowNode = PublicTables['flow_nodes']['Row']
 export type FlowEdge = PublicTables['flow_edges']['Row']
 export type ChatbotEntity = PublicTables['chatbot_entities']['Row']
+export type ChatbotEntityLink = PublicTables['chatbot_entity_links']['Row']
+export type EntityShare = PublicTables['entity_shares']['Row']
 export type ChatbotTemplate = PublicTables['chatbot_templates']['Row']
 export type ChatbotTestScenario = PublicTables['chatbot_test_scenarios']['Row']
 export type EntityAttribute = PublicTables['entity_attributes']['Row']
@@ -4177,9 +4570,16 @@ export type InstanceFeatures = {
   sso?: boolean
   marketplace?: boolean
   collaborative_editing?: boolean
+  webhooks?: boolean
+  integrations?: boolean
+  platform_api?: boolean
+  advanced_connections?: boolean
+  alerts?: boolean
 }
 
 export type InstanceFeatureFlag = keyof InstanceFeatures
+
+export type OrganisationPlan = 'starter' | 'pro' | 'business' | 'enterprise'
 
 export function instanceFeatureEnabled(
   instance: { features?: Json | null } | null | undefined,

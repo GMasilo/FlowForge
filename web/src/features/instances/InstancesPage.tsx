@@ -13,6 +13,7 @@ import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Textarea } from '@/shared/ui/textarea'
 import { FieldError } from '@/shared/ui/field-error'
+import { PAGE_HELP } from '@/shared/help/pageHelp'
 import { PageHeader } from '@/shared/ui/page-header'
 import {
   BulkActionBar,
@@ -260,6 +261,7 @@ export function InstancesPage() {
       <PageHeader
         title="Organisations"
         description="Client accounts for FlowForge. Only app admins can create and manage organisations."
+        help={PAGE_HELP.organisations}
         actions={
           <Button onClick={() => (open && !editingId ? resetForm() : startCreate())}>
             <Plus className="h-4 w-4" />

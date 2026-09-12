@@ -325,4 +325,112 @@ const welcome = { html: 'Hello {{vars.name}} from {{vars.brand}}' }
   )
 }
 
+{
+  const signIn = node({
+    id: 's1',
+    key: 'login',
+    type: 'sign_in',
+    config: {
+      mode: 'entity',
+      entityId: 'e1',
+      otpBody: 'Your verification code is {{otp.code}}.',
+      otpSubject: 'Code {{otp.code}}',
+    },
+  })
+  const issues = validateFlow([signIn], [], { globalVariables: [] })
+  assert(
+    !issues.some((i) => i.code === 'otp_ref_outside_otp'),
+    'Sign-in entity mode should ignore unused OTP body defaults',
+  )
+}
+
+{
+  const signIn = node({
+    id: 's1',
+    key: 'login',
+    type: 'sign_in',
+    config: {
+      mode: 'otp',
+      otpBody: 'Your verification code is {{otp.code}}.',
+    },
+  })
+  const issues = validateFlow([signIn], [], { globalVariables: [] })
+  assert(
+    !issues.some((i) => i.code === 'otp_ref_outside_otp'),
+    'Sign-in OTP mode allows {{otp.code}} in otpBody',
+  )
+}
+
+{
+  const a = node({
+    id: 's1',
+    key: 'sign_in_1',
+    type: 'sign_in',
+    config: { mode: 'entity', entityId: 'e1' },
+  })
+  const b = node({
+    id: 's2',
+    key: 'sign_in_2',
+    type: 'sign_in',
+    config: { mode: 'entity', entityId: 'e1' },
+  })
+  const edge: DesignerEdge = { id: 'ed', source: 's2', target: 's1' }
+  const issues = validateFlow([a, b], [edge], { globalVariables: [] })
+  assert(
+    !issues.some((i) => i.code === 'variable_overwrite'),
+    'Sign-in overwriting another Sign-in’s default outputs is not warned when unused',
+  )
+}
+
+{
+  const ask = node({
+    id: 'q1',
+    key: 'ask_email',
+    type: 'question',
+    config: { prompt: 'Email?', outputVariable: 'email' },
+  })
+  const again = node({
+    id: 'q2',
+    key: 'ask_email_again',
+    type: 'question',
+    config: { prompt: 'Email again?', outputVariable: 'email' },
+  })
+  const msg = node({
+    id: 'm1',
+    key: 'say',
+    type: 'message',
+    config: { text: 'Hi {{vars.email}}' },
+  })
+  const edges: DesignerEdge[] = [
+    { id: 'e1', source: 'q1', target: 'q2' },
+    { id: 'e2', source: 'q2', target: 'm1' },
+  ]
+  const issues = validateFlow([ask, again, msg], edges, { globalVariables: [] })
+  assert(
+    issues.some((i) => i.code === 'variable_overwrite' && i.message.includes('vars.email')),
+    'Overwrite still warned when the variable is referenced later',
+  )
+}
+
+{
+  const ask = node({
+    id: 'q1',
+    key: 'ask_email',
+    type: 'question',
+    config: { prompt: 'Email?', outputVariable: 'email' },
+  })
+  const again = node({
+    id: 'q2',
+    key: 'ask_email_again',
+    type: 'question',
+    config: { prompt: 'Email again?', outputVariable: 'email' },
+  })
+  const edge: DesignerEdge = { id: 'e1', source: 'q1', target: 'q2' }
+  const issues = validateFlow([ask, again], [edge], { globalVariables: [] })
+  assert(
+    !issues.some((i) => i.code === 'variable_overwrite'),
+    'Overwrite not warned when the variable is never referenced',
+  )
+}
+
 console.log('referenceValidator.templates.check.ts: all passed')

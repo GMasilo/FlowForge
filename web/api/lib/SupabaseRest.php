@@ -108,7 +108,77 @@ final class SupabaseRest
     }
 
     /**
-     * @return array{ok: bool, status: int, data?: mixed, error?: string}
+     * GET a PostgREST table as the calling user (RLS applies).
+     *
+     * @return array{ok: bool, status: int, data?: mixed, error?: string, total?: int|null}
+     */
+    public static function restGet(array $config, string $userJwt, string $table, string $query): array
+    {
+        $base = rtrim((string) ($config['supabase_url'] ?? ''), '/');
+        $anon = (string) ($config['supabase_anon_key'] ?? '');
+        if ($base === '' || $anon === '' || $anon === 'REPLACE_WITH_SUPABASE_ANON_KEY') {
+            return [
+                'ok' => false,
+                'status' => 500,
+                'error' => 'supabase_url / supabase_anon_key missing in config.php',
+            ];
+        }
+        if (!preg_match('/^[a-z_][a-z0-9_]*$/i', $table)) {
+            return ['ok' => false, 'status' => 500, 'error' => 'Invalid table name'];
+        }
+
+        $url = $base . '/rest/v1/' . rawurlencode($table);
+        if ($query !== '') {
+            $url .= '?' . $query;
+        }
+
+        $responseHeaders = [];
+        $ch = curl_init($url);
+        if ($ch === false) {
+            return ['ok' => false, 'status' => 500, 'error' => 'curl_init failed'];
+        }
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'apikey: ' . $anon,
+                'Authorization: Bearer ' . $userJwt,
+                'Prefer: count=exact',
+            ],
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_HEADERFUNCTION => static function ($ch, string $header) use (&$responseHeaders): int {
+                unset($ch);
+                if (preg_match('/^([^:]+):\s*(.*)$/', trim($header), $m) === 1) {
+                    $responseHeaders[strtolower($m[1])] = trim($m[2]);
+                }
+                return strlen($header);
+            },
+        ]);
+        $raw = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $cerr = curl_error($ch);
+        curl_close($ch);
+
+        if (!is_string($raw)) {
+            return ['ok' => false, 'status' => 502, 'error' => $cerr !== '' ? $cerr : 'Empty Supabase response'];
+        }
+
+        $data = json_decode($raw, true);
+        $total = null;
+        $cr = (string) ($responseHeaders['content-range'] ?? '');
+        if (preg_match('#/(\d+|\*)$#', $cr, $m) === 1 && $m[1] !== '*') {
+            $total = (int) $m[1];
+        }
+
+        if ($status >= 200 && $status < 300) {
+            return ['ok' => true, 'status' => $status, 'data' => $data, 'total' => $total];
+        }
+
+        $msg = is_array($data) ? (string) ($data['message'] ?? $data['error'] ?? $raw) : $raw;
+        return ['ok' => false, 'status' => $status, 'error' => $msg !== '' ? $msg : 'Supabase GET failed', 'total' => $total];
+    }
+
+    /**
+     * @return array{ok: bool, status: int, data?: mixed, error?: string, total?: int|null}
      */
     public static function restSelectAsService(array $config, string $table, string $query): array
     {
@@ -147,7 +217,7 @@ final class SupabaseRest
 
     /**
      * @param array<string, mixed>|null $body
-     * @return array{ok: bool, status: int, data?: mixed, error?: string}
+     * @return array{ok: bool, status: int, data?: mixed, error?: string, total?: int|null}
      */
     private static function restRequestAsService(
         array $config,
@@ -181,7 +251,9 @@ final class SupabaseRest
             'apikey: ' . $anon,
             'Authorization: Bearer ' . $serviceKey,
         ];
-        if ($preferRepresentation || $method === 'PATCH' || $method === 'POST') {
+        if ($method === 'GET') {
+            $headers[] = 'Prefer: count=exact';
+        } elseif ($preferRepresentation || $method === 'PATCH' || $method === 'POST') {
             $headers[] = 'Prefer: return=representation';
         }
 
@@ -190,11 +262,19 @@ final class SupabaseRest
             return ['ok' => false, 'status' => 500, 'error' => 'curl_init failed'];
         }
 
+        $responseHeaders = [];
         $opts = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_TIMEOUT => 30,
+            CURLOPT_HEADERFUNCTION => static function ($ch, string $header) use (&$responseHeaders): int {
+                unset($ch);
+                if (preg_match('/^([^:]+):\s*(.*)$/', trim($header), $m) === 1) {
+                    $responseHeaders[strtolower($m[1])] = trim($m[2]);
+                }
+                return strlen($header);
+            },
         ];
         if ($body !== null) {
             $opts[CURLOPT_POSTFIELDS] = json_encode($body, JSON_UNESCAPED_UNICODE);
@@ -211,12 +291,18 @@ final class SupabaseRest
         }
 
         $data = json_decode($raw, true);
+        $total = null;
+        $cr = (string) ($responseHeaders['content-range'] ?? '');
+        if (preg_match('#/(\d+|\*)$#', $cr, $m) === 1 && $m[1] !== '*') {
+            $total = (int) $m[1];
+        }
+
         if ($status >= 200 && $status < 300) {
-            return ['ok' => true, 'status' => $status, 'data' => $data];
+            return ['ok' => true, 'status' => $status, 'data' => $data, 'total' => $total];
         }
 
         $msg = is_array($data) ? (string) ($data['message'] ?? $data['error'] ?? $raw) : $raw;
-        return ['ok' => false, 'status' => $status, 'error' => $msg !== '' ? $msg : 'Supabase REST failed'];
+        return ['ok' => false, 'status' => $status, 'error' => $msg !== '' ? $msg : 'Supabase REST failed', 'total' => $total];
     }
 
     /**

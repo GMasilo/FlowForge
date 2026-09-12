@@ -31,14 +31,18 @@
   --color-node-http: #7c3aed;
   --color-node-email: #ea580c;
   --color-node-condition: #ca8a04;
+  --color-node-switch: #d97706;
   --color-node-loop: #0d9488;
   --color-node-set: #475569;
   --color-node-operation: #4f46e5;
   --color-node-end: #334155;
 
   --shadow-soft: 0 10px 40px -16px rgb(15 23 42 / 0.18);
-  --shadow-lift: 0 18px 50px -20px rgb(15 118 110 / 0.35);
+  --shadow-lift: 0 22px 56px -18px rgb(15 118 110 / 0.42);
   --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 180ms;
+  --duration-normal: 280ms;
+  --duration-slow: 420ms;
 }
 
 /* Unlayered so these beat @theme tokens on :root */
@@ -66,13 +70,14 @@
   --color-node-http: #a78bfa;
   --color-node-email: #fb923c;
   --color-node-condition: #facc15;
+  --color-node-switch: #fbbf24;
   --color-node-loop: #2dd4bf;
   --color-node-set: #94a3b8;
   --color-node-operation: #818cf8;
   --color-node-end: #cbd5e1;
 
   --shadow-soft: 0 10px 40px -16px rgb(0 0 0 / 0.55);
-  --shadow-lift: 0 18px 50px -20px rgb(45 212 191 / 0.28);
+  --shadow-lift: 0 22px 56px -18px rgb(45 212 191 / 0.38);
 }
 
 /* Embeds stay light even if the operator prefers dark */
@@ -202,41 +207,114 @@ html.ff-embed {
   }
 
   .ff-stagger > *:nth-child(1) {
-    animation-delay: 0.04s;
+    animation-delay: 0.05s;
   }
   .ff-stagger > *:nth-child(2) {
-    animation-delay: 0.08s;
+    animation-delay: 0.1s;
   }
   .ff-stagger > *:nth-child(3) {
-    animation-delay: 0.12s;
+    animation-delay: 0.15s;
   }
   .ff-stagger > *:nth-child(4) {
-    animation-delay: 0.16s;
-  }
-  .ff-stagger > *:nth-child(5) {
     animation-delay: 0.2s;
   }
+  .ff-stagger > *:nth-child(5) {
+    animation-delay: 0.25s;
+  }
   .ff-stagger > *:nth-child(6) {
-    animation-delay: 0.24s;
+    animation-delay: 0.3s;
   }
   .ff-stagger > *:nth-child(7) {
-    animation-delay: 0.28s;
+    animation-delay: 0.35s;
   }
   .ff-stagger > *:nth-child(8) {
-    animation-delay: 0.32s;
+    animation-delay: 0.4s;
+  }
+  .ff-stagger > *:nth-child(9) {
+    animation-delay: 0.45s;
+  }
+  .ff-stagger > *:nth-child(10) {
+    animation-delay: 0.5s;
+  }
+  .ff-stagger > *:nth-child(11) {
+    animation-delay: 0.55s;
+  }
+  .ff-stagger > *:nth-child(12) {
+    animation-delay: 0.6s;
+  }
+  .ff-stagger > *:nth-child(13) {
+    animation-delay: 0.65s;
+  }
+  .ff-stagger > *:nth-child(14) {
+    animation-delay: 0.7s;
+  }
+  .ff-stagger > *:nth-child(15) {
+    animation-delay: 0.75s;
+  }
+  .ff-stagger > *:nth-child(16) {
+    animation-delay: 0.8s;
   }
 
   .ff-hover-lift {
     transition:
-      transform 0.25s var(--ease-spring),
-      box-shadow 0.25s var(--ease-spring),
-      border-color 0.2s ease;
+      transform var(--duration-normal) var(--ease-spring),
+      box-shadow var(--duration-normal) var(--ease-spring),
+      border-color var(--duration-fast) ease;
   }
 
   .ff-hover-lift:hover {
-    transform: translateY(-3px);
+    transform: translateY(-8px) scale(1.015);
     box-shadow: var(--shadow-lift);
-    border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-border));
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-border));
+  }
+
+  .ff-press {
+    transition: transform var(--duration-fast) var(--ease-spring);
+  }
+
+  .ff-press:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+
+  .ff-focus-ring {
+    outline: none;
+    transition:
+      border-color var(--duration-fast) ease,
+      box-shadow var(--duration-fast) ease;
+  }
+
+  .ff-focus-ring:focus-visible {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-accent) 18%, transparent);
+  }
+
+  .ff-interactive {
+    transition:
+      transform var(--duration-fast) var(--ease-spring),
+      background-color var(--duration-fast) ease,
+      border-color var(--duration-fast) ease,
+      box-shadow var(--duration-normal) var(--ease-spring),
+      color var(--duration-fast) ease;
+  }
+
+  .ff-interactive:hover {
+    transform: translateY(-1px);
+  }
+
+  .ff-interactive:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+
+  .ff-skeleton {
+    background: linear-gradient(
+      110deg,
+      color-mix(in oklab, var(--color-surface-2) 80%, var(--color-border)) 25%,
+      color-mix(in oklab, var(--color-surface) 90%, white) 37%,
+      color-mix(in oklab, var(--color-surface-2) 80%, var(--color-border)) 63%
+    );
+    background-size: 200% 100%;
+    animation: ff-shimmer 1.4s ease-in-out infinite;
+    border-radius: 0.75rem;
   }
 
   .ff-mesh {
@@ -264,16 +342,37 @@ html.ff-embed {
     width: 0;
     height: 0;
   }
+
+  .ff-collapse {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--duration-normal) var(--ease-spring);
+  }
+
+  .ff-collapse[data-open='true'] {
+    grid-template-rows: 1fr;
+  }
+
+  .ff-collapse > .ff-collapse__inner {
+    overflow: hidden;
+    min-height: 0;
+    opacity: 0;
+    transition: opacity var(--duration-fast) ease;
+  }
+
+  .ff-collapse[data-open='true'] > .ff-collapse__inner {
+    opacity: 1;
+  }
 }
 
 @keyframes ff-rise {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(22px) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -315,5 +414,64 @@ html.ff-embed {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes ff-icon-spin-in {
+  from {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-page-enter,
+  .ff-stagger > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Tailwind arbitrary animations that reference FlowForge keyframes */
+  [class*='ff-icon-spin-in'],
+  [class*='ff-pulse-soft'],
+  [class*='ff-slide-in'],
+  [class*='ff-fade-in'],
+  [class*='ff-rise'] {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .ff-hover-lift,
+  .ff-press,
+  .ff-interactive,
+  .ff-collapse,
+  .ff-collapse > .ff-collapse__inner {
+    transition: none !important;
+  }
+
+  .ff-hover-lift:hover,
+  .ff-press:active:not(:disabled),
+  .ff-interactive:hover,
+  .ff-interactive:active:not(:disabled),
+  button:active:not(:disabled),
+  button:hover,
+  a:active {
+    transform: none !important;
+  }
+
+  .ff-skeleton {
+    animation: none !important;
+  }
+
+  .ff-designer-aside-panel,
+  .ff-designer-aside-panel__body,
+  .ff-designer-aside-panel__rail {
+    transition: none !important;
   }
 }

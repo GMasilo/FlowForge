@@ -1,13 +1,21 @@
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
+import { parseSwitchCases, switchCaseLabel } from '@/features/designer/model/switchStep'
 import {
   buildLinearItems,
-  conditionBranchStarts,
+  containerBranchHandles,
   findContinueRootIds,
-  loopBodyStart,
+  isContainerNodeType,
   outgoingMap,
   reachableIds,
   type LinearItem,
 } from '@/features/designer/utils/conditionGraph'
+
+export type SwitchCaseLane = {
+  id: string
+  label: string
+  match: string
+  nodes: ScopeNode[]
+}
 
 export type ScopeNode =
   | { kind: 'step'; item: LinearItem }
@@ -16,6 +24,13 @@ export type ScopeNode =
       item: LinearItem
       yes: ScopeNode[]
       no: ScopeNode[]
+      then: ScopeNode[]
+    }
+  | {
+      kind: 'switch'
+      item: LinearItem
+      cases: SwitchCaseLane[]
+      default: ScopeNode[]
       then: ScopeNode[]
     }
   | {
@@ -55,6 +70,40 @@ export function toScopeTree(items: LinearItem[]): ScopeNode[] {
     return { kind: 'condition', item, yes, no, then }
   }
 
+  function parseSwitch(item: LinearItem): ScopeNode {
+    const switchDepth = item.depth
+    const caseDefs = parseSwitchCases(item.node.config.cases)
+    const caseLanes: SwitchCaseLane[] = caseDefs.map((c, idx) => ({
+      id: c.id,
+      label: switchCaseLabel(c, idx),
+      match: c.match,
+      nodes: [],
+    }))
+    const caseById = new Map(caseLanes.map((c) => [c.id, c]))
+    const defaultNodes: ScopeNode[] = []
+    const then: ScopeNode[] = []
+
+    while (i < items.length) {
+      const next = items[i]!
+      if (next.depth === switchDepth + 1 && next.branch && caseById.has(next.branch)) {
+        const lane = caseById.get(next.branch)!
+        lane.nodes.push(...parseSequence(next.branch, switchDepth + 1))
+        continue
+      }
+      if (next.branch === 'default' && next.depth === switchDepth + 1) {
+        defaultNodes.push(...parseSequence('default', switchDepth + 1))
+        continue
+      }
+      if (next.branch === 'then' && next.depth === switchDepth) {
+        then.push(...parseSequence('then', switchDepth))
+        continue
+      }
+      break
+    }
+
+    return { kind: 'switch', item, cases: caseLanes, default: defaultNodes, then }
+  }
+
   function parseLoop(item: LinearItem): ScopeNode {
     const loopDepth = item.depth
     const body: ScopeNode[] = []
@@ -78,6 +127,7 @@ export function toScopeTree(items: LinearItem[]): ScopeNode[] {
 
   function parseContainer(item: LinearItem): ScopeNode {
     if (item.node.type === 'loop') return parseLoop(item)
+    if (item.node.type === 'switch') return parseSwitch(item)
     return parseCondition(item)
   }
 
@@ -87,7 +137,7 @@ export function toScopeTree(items: LinearItem[]): ScopeNode[] {
       const item = items[i]!
       if (item.branch !== branch || item.depth !== depth) break
       i += 1
-      if (item.node.type === 'condition' || item.node.type === 'loop') {
+      if (isContainerNodeType(item.node.type)) {
         out.push(parseContainer(item))
       } else {
         out.push({ kind: 'step', item })
@@ -101,7 +151,7 @@ export function toScopeTree(items: LinearItem[]): ScopeNode[] {
     while (i < items.length) {
       const item = items[i]!
       if (
-        (item.node.type === 'condition' || item.node.type === 'loop') &&
+        isContainerNodeType(item.node.type) &&
         (item.branch == null || item.branch === 'default' || item.branch === 'then')
       ) {
         i += 1
@@ -109,8 +159,10 @@ export function toScopeTree(items: LinearItem[]): ScopeNode[] {
         continue
       }
       if (item.branch === 'true' || item.branch === 'false' || item.branch === 'body') break
+      // Nested case / default lanes belong to a switch, not the root spine.
+      if (item.depth > 0 && item.branch && item.branch !== 'then') break
       i += 1
-      if (item.node.type === 'condition' || item.node.type === 'loop') {
+      if (isContainerNodeType(item.node.type)) {
         out.push(parseContainer(item))
       } else {
         out.push({ kind: 'step', item })
@@ -123,7 +175,7 @@ export function toScopeTree(items: LinearItem[]): ScopeNode[] {
 }
 
 export function isReorderableNode(node: DesignerNode) {
-  return node.type !== 'end' && node.type !== 'condition' && node.type !== 'loop'
+  return !isContainerNodeType(node.type) && node.type !== 'end'
 }
 
 /**
@@ -168,14 +220,14 @@ export function planNodeDeletion(
 
   const label = node.label || node.key
 
-  if (node.type === 'condition' || node.type === 'loop') {
+  if (isContainerNodeType(node.type)) {
     const continueRoots = findContinueRootIds(id, edges, nodes)
     const outgoing = outgoingMap(edges)
-    const { trueStart, falseStart } = conditionBranchStarts(id, edges)
-    const bodyStart = loopBodyStart(id, edges)
+    const handles = containerBranchHandles(node)
     const deleteIds = new Set<string>([id])
 
-    for (const start of [trueStart, falseStart, bodyStart]) {
+    for (const handle of handles) {
+      const start = edges.find((e) => e.source === id && e.sourceHandle === handle)?.target ?? null
       if (!start || continueRoots.has(start)) continue
       for (const rid of reachableIds(start, outgoing, continueRoots)) {
         deleteIds.add(rid)
@@ -221,6 +273,13 @@ export function findSiblingContext(
       if (n.kind === 'condition') {
         const hit = walk(n.yes) ?? walk(n.no) ?? walk(n.then)
         if (hit) return hit
+      } else if (n.kind === 'switch') {
+        for (const lane of n.cases) {
+          const hit = walk(lane.nodes)
+          if (hit) return hit
+        }
+        const hit = walk(n.default) ?? walk(n.then)
+        if (hit) return hit
       } else if (n.kind === 'loop') {
         const hit = walk(n.body) ?? walk(n.then)
         if (hit) return hit
@@ -265,7 +324,14 @@ export function edgesSwapAdjacent(
       source: laterId,
       target: earlierId,
       sourceHandle: null,
-      label: link.label === 'Yes' || link.label === 'No' || link.label === 'Each' ? 'Then' : link.label,
+      label:
+        link.label === 'Yes' ||
+        link.label === 'No' ||
+        link.label === 'Each' ||
+        link.label === 'Case' ||
+        link.label === 'Default'
+          ? 'Then'
+          : link.label,
     })
   }
 
@@ -326,4 +392,31 @@ export function edgesMoveToIndex(
     }
   }
   return working
+}
+
+/** Remove a single switch case lane and delete its interior steps. */
+export function removeSwitchCaseBranch(args: {
+  switchId: string
+  caseId: string
+  nodes: DesignerNode[]
+  edges: DesignerEdge[]
+}): { nodes: DesignerNode[]; edges: DesignerEdge[] } {
+  const { switchId, caseId, nodes, edges } = args
+  const continueRoots = findContinueRootIds(switchId, edges, nodes)
+  const outgoing = outgoingMap(edges)
+  const start = edges.find((e) => e.source === switchId && e.sourceHandle === caseId)?.target ?? null
+  const deleteIds = new Set<string>()
+  if (start && !continueRoots.has(start)) {
+    for (const id of reachableIds(start, outgoing, continueRoots)) deleteIds.add(id)
+  }
+
+  return {
+    nodes: nodes.filter((n) => !deleteIds.has(n.id)),
+    edges: edges.filter(
+      (e) =>
+        !deleteIds.has(e.source) &&
+        !deleteIds.has(e.target) &&
+        !(e.source === switchId && e.sourceHandle === caseId),
+    ),
+  }
 }

@@ -2,7 +2,14 @@ export type DocSection = {
   id: string
   title: string
   summary: string
-  body: Array<{ heading?: string; paragraphs?: string[]; bullets?: string[]; code?: string }>
+  body: Array<{
+    heading?: string
+    paragraphs?: string[]
+    bullets?: string[]
+    code?: string
+    /** Illustration under BASE_URL, e.g. docs/designer.png */
+    image?: { src: string; alt: string; caption?: string }
+  }>
   /** Optional detailed function reference (used by the Expressions section). */
   functions?: ExprFunctionDoc[]
 }
@@ -860,7 +867,7 @@ export const EXPRESSION_FUNCTIONS: ExprFunctionDoc[] = [
     aliases: ['file'],
     signature: 'renderFile(media.promo_logo_jpg)',
     description:
-      'Renders a media file inline in chat (image, video, audio, or a download chip). Pass a media object or a URL. In email/HTTP templates the same expression becomes the file URL. Properties: url, filename, name, mime, type, size, key.',
+      'Renders a media library file inline in chat (image, video, audio, or a download chip). Pass a media object or a URL. In email/HTTP templates the same expression becomes the file URL. Properties: url, filename, name, mime, type, size, key. For YouTube, X, and other social players, use embed() instead.',
     examples: [
       {
         expression: '{{renderFile(media.promo_logo_jpg)}}',
@@ -873,6 +880,79 @@ export const EXPRESSION_FUNCTIONS: ExprFunctionDoc[] = [
       {
         expression: '{{media.promo_logo_jpg.filename}}',
         result: 'promo-logo.jpg',
+      },
+    ],
+  },
+  {
+    name: 'embed',
+    aliases: ['embedMedia'],
+    signature: 'embed("https://www.youtube.com/watch?v=…")',
+    description:
+      'Embed a YouTube, X (Twitter), Vimeo, Spotify, or TikTok URL as an inline player or post in Message and Question text. Pass a quoted https URL or a variable that holds one (for example vars.video_url). Preview and public chat show a sandboxed player in a wider bubble; email and other non-chat contexts receive the plain URL. Unsupported hosts are rejected at runtime. Media library files still use renderFile(); opening-hours and downloadable-file templates use {{templates.key.text}} / {{templates.key.file}}.',
+    examples: [
+      {
+        expression: '{{embed("https://www.youtube.com/watch?v=dQw4w9WgXcQ")}}',
+        result: '(YouTube player in chat)',
+      },
+      {
+        expression: '{{embed("https://youtu.be/dQw4w9WgXcQ")}}',
+        result: '(same YouTube player)',
+      },
+      {
+        expression: '{{embed("https://x.com/FlowForge/status/1234567890")}}',
+        result: '(X post embed in chat)',
+      },
+      {
+        expression: '{{embed(vars.video_url)}}',
+        result: '(player for the URL stored in vars.video_url)',
+      },
+    ],
+  },
+  {
+    name: 'cookie',
+    aliases: ['getCookie'],
+    signature: 'cookie(name)',
+    description:
+      'Reads a FlowForge chat cookie saved for this chatbot in the browser (returning-visitor data). Returns null when missing. Cookies are scoped per chatbot — values set in one bot are not visible in another. Values are stored on the chat origin with a localStorage mirror so they still work in many embed contexts.',
+    examples: [
+      {
+        expression: '{{cookie("email")}}',
+        result: 'ada@example.com',
+        note: 'When setCookie("email", …) was used on a prior visit',
+      },
+      {
+        expression: '{{coalesce(cookie("name"), "Guest")}}',
+        result: 'Guest',
+        note: 'When the cookie is not set',
+      },
+    ],
+  },
+  {
+    name: 'setCookie',
+    signature: 'setCookie(name, value, days?)',
+    description:
+      'Saves a FlowForge chat cookie for later visits to this chatbot only. Optional days defaults to 365; use 0 for a session cookie. Returns the stored value. Prefer Button → Run function → setCookie for side effects; the expression form also works in templates.',
+    examples: [
+      {
+        expression: '{{setCookie("email", vars.email)}}',
+        result: 'ada@example.com',
+      },
+      {
+        expression: '{{setCookie("plan", "pro", 30)}}',
+        result: 'pro',
+        note: 'Expires after 30 days',
+      },
+    ],
+  },
+  {
+    name: 'clearCookie',
+    aliases: ['deleteCookie', 'removeCookie'],
+    signature: 'clearCookie(name)',
+    description: 'Deletes a FlowForge chat cookie for this chatbot (and its localStorage mirror). Returns null.',
+    examples: [
+      {
+        expression: '{{clearCookie("email")}}',
+        result: 'null',
       },
     ],
   },
@@ -898,16 +978,24 @@ export const DOC_SECTIONS: DocSection[] = [
     body: [
       {
         paragraphs: [
-          'FlowForge is a multi-organisation chatbot builder. Each organisation is a separate client (tenant). You design conversational flows visually, connect them to HTTP and email services, store structured data with entities, and preview conversations before publishing.',
+          'FlowForge is a multi-organisation chatbot builder. Each organisation is a separate client (tenant). You design conversational flows visually, connect HTTP/email/payment services and Integrations, store structured data with entities, hand off to live agents, transfer between chatbots, and preview before publishing.',
         ],
+        image: {
+          src: 'docs/chatbots.png',
+          alt: 'Organisation Chatbots home with chatbot cards, Import, and New chatbot',
+          caption: 'Organisation home — create, open, or import chatbots.',
+        },
       },
       {
         heading: 'First steps',
         bullets: [
           'Sign up or sign in, then open or create an organisation.',
           'Create a chatbot from the organisation home. You can start blank or from a starter template (support, leads, appointments, shop, feedback, and more) that seeds common flows, content templates, and data tables.',
-          'Open Design to add steps, connect them, and configure prompts/variables.',
-          'Use Preview to walk through the conversation, then Publish when ready.',
+          'Open Design to add steps, connect them, and configure prompts/variables. Use Templates for FAQ, catalogs, receipts, and downloadable files.',
+          'Use Preview to walk through the conversation, then Publish when ready (optionally to Staging first).',
+          'Invite teammates — including Agents for live Inbox support — from Admin → Users.',
+          'Configure organisation profile, Connections, and Integrations under the primary nav and Admin menu.',
+          'Monitor public chats under Conversations and Analytics; claim handoffs in Inbox; manage quotas, webhooks, and alerts from Admin.',
         ],
       },
     ],
@@ -915,20 +1003,34 @@ export const DOC_SECTIONS: DocSection[] = [
   {
     id: 'instances-roles',
     title: 'Organisations & roles',
-    summary: 'Organisations keep clients separate; roles control who can edit or admin.',
+    summary: 'Organisations keep clients separate; roles control who can edit, admin, or handle live handoffs.',
     body: [
       {
         paragraphs: [
-          'An organisation is a single client account — not a team within a larger company. Chatbots, connections, users, and entities belong to that organisation.',
+          'An organisation is a single client account — not a team within a larger company. Chatbots, connections, integrations, users, and entities belong to that organisation.',
         ],
+        image: {
+          src: 'docs/admin-users.png',
+          alt: 'Admin Users page showing member roles',
+          caption: 'Roles are assigned per organisation under Admin → Users.',
+        },
       },
       {
         heading: 'Roles',
         bullets: [
-          'Owner — full control, including users and destructive actions.',
-          'Admin — manage users, connections, and chatbots.',
-          'Editor — create and edit flows, data, and most chatbot settings.',
+          'Owner — full control, including users, billing-style settings, and destructive actions.',
+          'Admin — manage users, connections, integrations, compliance, security, and chatbots.',
+          'Editor — create and edit flows, templates, data, and most chatbot settings.',
+          'Agent — live support only: Inbox and Conversations (claim, reply, transfer, resolve). Cannot open Design, Connections, Analytics, Marketplace, or Admin. After sign-in, Agents land on Inbox.',
           'Viewer — read-only access to inspect flows and configuration.',
+        ],
+      },
+      {
+        heading: 'What each role sees',
+        bullets: [
+          'Owners and admins get the Admin menu (Users, Compliance, Security, Integrations, Webhooks, Audit, Usage, Alerts) plus Agent console.',
+          'Editors and viewers use the primary nav (Chatbots, Connections, Conversations, Inbox, Analytics, Marketplace) without Admin or Agent console.',
+          'Agents only see Inbox and Conversations.',
         ],
       },
     ],
@@ -936,15 +1038,20 @@ export const DOC_SECTIONS: DocSection[] = [
   {
     id: 'chatbots',
     title: 'Chatbots',
-    summary: 'Each chatbot has Settings, Design, and Data.',
+    summary: 'Each chatbot has Settings, Design, Templates, and Data.',
     body: [
       {
         bullets: [
-          'Settings — name, metadata, and chatbot-level options.',
+          'Settings — name, public chat, transfer variables, and chatbot-level options.',
           'Design — the flow designer (linear and canvas views), preview, and publish.',
           'Templates — reusable email, FAQ, hours, legal, store catalogs, receipts, and downloadable files.',
-          'Data — entities and records your flows can read or write.',
+          'Data — entities, records, and test scenarios your flows can use.',
         ],
+        image: {
+          src: 'docs/chatbots.png',
+          alt: 'Chatbots grid showing status badges and Open designer actions',
+          caption: 'Each card links to Design, Settings, and sharing metadata.',
+        },
       },
       {
         paragraphs: [
@@ -960,32 +1067,44 @@ export const DOC_SECTIONS: DocSection[] = [
     body: [
       {
         paragraphs: [
-          'The designer supports a hybrid experience: a linear sequence for straightforward paths and a canvas for branching logic. Changes autosave as you work. The Problems panel highlights missing references and configuration issues before you publish.',
+          'The designer supports a hybrid experience: a linear sequence for straightforward paths and a canvas for branching logic. Changes autosave as you work. The Problems panel highlights missing references and configuration issues before you publish. Collaborative editing can show presence, step locks, and comments when enabled for the organisation.',
         ],
+        image: {
+          src: 'docs/designer.png',
+          alt: 'Flow designer canvas with steps, inspector, and preview',
+          caption: 'Designer — canvas or linear view, inspector, and live preview.',
+        },
       },
       {
         heading: 'Step types',
         bullets: [
-          'Message — send text to the user (supports templates and attached media).',
-          'Question — collect an answer into a variable, with typed validation. Can attach media to the prompt.',
-          'HTTP — call a configured HTTP connection.',
-          'Email — send mail through an email connection.',
+          'Message — send text to the user. Supports **bold**, *italic*, ~~strike~~, `code`, [links](https://…), {color:name}coloured text{/color}, and {{embed("https://…")}} for YouTube / X / Vimeo / Spotify / TikTok (see Message formatting). Templates and attached media also work.',
+          'Button — show action buttons under an optional message. Each button has listeners: pick an event (Click, Hover, Double-click, Focus, Blur) and an action (Continue flow, Emit event, Run function, Skip to step). Run function lists setVar / setCookie / clearCookie plus every expression helper (cookie, toUpper, coalesce, …). Under Settings → Run after, use “When skipped, go to step” to jump ahead when the previous step’s outcome is not selected.',
+          'Skip to step — jump to another step by key (same target as Button → Skip to step). Empty target continues on the next edge.',
+          'Question — collect an answer into a variable, with typed validation. Prompt text supports the same formatting and social embeds as Message. Can attach media to the prompt.',
+          'HTTP request — call a configured HTTP connection.',
+          'Database — run parameterized SQL against a Database connection (PostgreSQL, MySQL, SQL Server, or SQLite). Bind values with :name placeholders; results land in the output variable as { rows, rowCount }.',
+          'Send email — send mail through an email connection.',
+          'Integration — run an organisation Integration (OneDrive, Drive, Slack, Sheets, S3, …): pick the integration, action, and fields; optional output variable. Separate from HTTP Connections.',
+          'Handoff — escalate the live conversation to the Agent Inbox. Pick a queue from Agent console; routing skills and auto-assign apply when matching agents are online and under their concurrency limit.',
+          'Transfer chatbot — move the live conversation to another active chatbot in the same organisation. Choose the start step (not an End step) and map variables (target globals and step output variables). Enable Return to previous chatbot to send the visitor back using {{vars._transferred_from}}. Mark Transfer variables under Chatbot settings → Global variables on the receiving bot. The target entry step only sees explicitly mapped inputs (or pass-all), plus its own globals.',
+          'Sign in — collect identity mid-flow. Sources: HTTP verify against a connection (map request field names or a JSON body with {{email}} / {{password}}), Entity lookup (match email + password attributes on an entity record — use attribute type password so values are hashed at rest with PBKDF2), password (optional HTTP), OTP email (email first → send code → verify), SSO (select an SSO / IdP template created under Templates — OIDC or SAML IdP settings, button label, and claim mapping live on the template), or Sign out (clears session variables and {{vars._signed_in}}). Skip if already signed in (default on) continues on Success when {{vars._signed_in}} is set. Incorrect HTTP/entity/OTP credentials stay on the step and show remaining attempts (Max attempts, default 5), then take the Fail edge. Success / Fail edges branch the flow; response paths (User id path, Token path, Profile path) map HTTP response fields into variables (defaults: {{vars.user_id}}, {{vars.auth_token}}, {{vars.user}}, {{vars.email}}, {{vars._signed_in}}). Entity mode stores the matched record as the profile (password omitted). SSO maps IdP claims into the same variables; designer preview simulates success with the template’s Preview email. Rename variables on the inspector. Access nested profile data with {{vars.user.email}}, {{vars.user.name}}, etc. Step output: {{steps.sign_in_1.ok}}, {{steps.sign_in_1.profile}}, etc.',
           'Condition — branch on comparisons (equals, contains, exists, …).',
+          'Switch — match a value against multiple cases (plus Default).',
           'For each — loop over a collection.',
-          'Set variable — assign a typed value.',
+          'Set variable — assign one or more typed values in a single step (rows run top to bottom).',
           'Operation — transform values (math, case, JSON path, replace, …).',
-          'Entity — query/get/create/update/delete entity records. Query supports no-code filters (AND/OR with equals, contains, comparisons). Create auto-generates the primary key `id` when left blank. Create/update values are checked against each column type (string, number, boolean, date, array, object).',
-          'Handoff — escalate the live conversation to the Agent inbox (`status = escalated`) so operators can reply and resolve.',
-          'Transfer chatbot — move the live conversation to another active chatbot in the same organisation. Choose the start step and map variables (target globals and step output variables). Mark Transfer variables under Chatbot settings → Global variables on the receiving bot. The target entry step only sees explicitly mapped inputs (or pass-all), plus its own globals — not prior step outputs or unmapped source variables.',
+          'Entity — query/get/create/update/delete entity records (owned or installed on this chatbot). Query supports no-code filters (AND/OR with equals, contains, comparisons). Create auto-generates the primary key `id` when left blank. Actions respect the install’s CRUD flags.',
           'End — finish the conversation, optionally with a closing message and media.',
         ],
       },
       {
         heading: 'Step settings',
         bullets: [
+          'On run — silent expressions evaluated when the step runs (setCookie, setVar, …). Results are not shown in chat.',
           'Delay — wait before the step runs in preview.',
           'Timeout — for optional questions and some connection steps.',
-          'Run after — gate a step on whether the previous step succeeded, failed, skipped, or timed out.',
+          'Run after — gate a step on whether the previous step succeeded, failed, skipped, or timed out. Optionally set “When skipped, go to step” to jump to another step instead of continuing to the next edge.',
         ],
       },
       {
@@ -1114,13 +1233,97 @@ export const DOC_SECTIONS: DocSection[] = [
     ],
   },
   {
+    id: 'message-formatting',
+    title: 'Message formatting',
+    summary: 'Style bot text, embed YouTube or X posts, and show hours or file cards in chat.',
+    body: [
+      {
+        paragraphs: [
+          'Message and Question prompts support lightweight styling marks, social video embeds, and rich template cards. Marks nest freely and work in Preview, public chat, and the website widget. The step inspector lists the syntax under Message text / Prompt.',
+        ],
+      },
+      {
+        heading: 'Syntax',
+        bullets: [
+          '**bold** — **bold text**',
+          '*italic* — *italic text*',
+          '~~strike~~ — ~~strikethrough~~',
+          '`code` — inline monospace',
+          '[label](https://…) — link (https only, opens in a new tab)',
+          '{color:danger}text{/color} — coloured text with a named colour',
+          '{color:#0f766e}text{/color} — coloured text with a hex code (#rgb, #rrggbb, or #rrggbbaa)',
+        ],
+      },
+      {
+        heading: 'Social & video embeds',
+        paragraphs: [
+          'Use the embed() expression in Message or Question text to show an inline player. Type {{ in the field and pick embed from Functions, or paste a full expression. Chat messages that include an embed use a wider bubble so the player is readable.',
+        ],
+        bullets: [
+          '{{embed("https://www.youtube.com/watch?v=…")}} — YouTube (watch, youtu.be, shorts, embed URLs)',
+          '{{embed("https://x.com/user/status/…")}} — X / Twitter post (x.com or twitter.com)',
+          '{{embed("https://vimeo.com/…")}} — Vimeo',
+          '{{embed("https://open.spotify.com/track/…")}} — Spotify track, album, playlist, episode, or show',
+          '{{embed("https://www.tiktok.com/@user/video/…")}} — TikTok',
+          '{{embed(vars.video_url)}} — URL stored in a variable (Problems checks that the variable exists)',
+          'Preview and public chat render a sandboxed iframe with an Open link; email and other non-chat uses get the plain URL',
+          'Only known hosts are allowed — unknown URLs fail at runtime with a clear error',
+        ],
+        code: 'Watch this overview:\n\n{{embed("https://www.youtube.com/watch?v=dQw4w9WgXcQ")}}\n\nOr from a variable:\n{{embed(vars.promo_video)}}',
+      },
+      {
+        heading: 'Opening hours card',
+        paragraphs: [
+          'When a Message or Question includes {{templates.your_hours.text}}, Preview and public chat show a schedule card: timezone, each weekday with open–close or Closed, today’s row highlighted, and an Open now / Closed now chip when the clock can be resolved. Email and other non-chat uses still get plain text lines.',
+        ],
+      },
+      {
+        heading: 'Media & downloadable files',
+        bullets: [
+          '{{renderFile(media.welcome_png)}} — inline image, video, or audio from the Media library',
+          '{{templates.invoice.file}} — downloadable PDF / Word / Excel chip from a Downloadable file template',
+          'You can also attach files on the step with the media picker (shown with the message without an expression)',
+        ],
+      },
+      {
+        heading: 'Named colours',
+        bullets: [
+          'accent — theme accent (teal)',
+          'highlight — orange highlight',
+          'danger — red / error',
+          'warning — amber / caution',
+          'success — green / positive',
+          'muted — subdued / secondary text',
+          'ink — default body text',
+          'teal, cyan, orange, red, green, blue — fixed palette colours',
+        ],
+      },
+      {
+        heading: 'Nesting',
+        paragraphs: [
+          'Marks can be combined: {color:danger}**Important**{/color} renders bold red text. Colours wrap bold, italic, strike, code, and links.',
+        ],
+      },
+      {
+        heading: 'Escaping',
+        paragraphs: [
+          'Prefix a mark character with a backslash to show it literally: \\* \\` \\~ \\[ \\{ \\\\. Underscores are intentionally not used as marks so that email addresses like user_name@example.com display normally.',
+        ],
+      },
+      {
+        heading: 'Example',
+        code: 'Welcome, **{{vars.user.email}}**\n\n{color:success}Sign-in successful{/color}\nYour token: `{{vars.auth_token}}`\nRead more: [Help centre](https://example.com/help)\n\n{{embed("https://www.youtube.com/watch?v=dQw4w9WgXcQ")}}',
+      },
+    ],
+  },
+  {
     id: 'variables-templates',
     title: 'Variables & templates',
     summary: 'Pass data between steps with {{vars…}}, {{steps…}}, {{media…}}, and {{templates…}}.',
     body: [
       {
         paragraphs: [
-          'Global variables are defined per chatbot and seeded into Preview. Step outputs can also write variables. Use template fields anywhere you see the insert helper.',
+          'Global variables are defined per chatbot (Settings → Global variables — add, edit, or remove) and seeded into Preview. Step outputs can also write variables. Use template fields anywhere you see the insert helper. Click a reference chip in the inspector to edit it.',
         ],
       },
       {
@@ -1130,7 +1333,11 @@ export const DOC_SECTIONS: DocSection[] = [
           '{{steps.step_key.response}} — a previous question answer',
           '{{steps.http_1.data}} — data from an HTTP step (shape depends on the response)',
           '{{media.welcome_png.url}} — public URL of a chatbot media file',
+          '{{embed("https://www.youtube.com/watch?v=…")}} — YouTube / X / Vimeo / Spotify / TikTok player in chat',
+          '{{embed(vars.video_url)}} — social embed from a variable',
           '{{renderFile(media.welcome_png)}} — inline image/file preview in chat',
+          '{{templates.store_hours.text}} — opening hours schedule card',
+          '{{templates.invoice.file}} — downloadable file chip',
           '{{templates.help_faq.text}} — rendered FAQ / menu / hours / legal text (inputs filled from the step)',
           '{{templates.welcome_email.html}} — HTML email body from a template',
           '{{templates.agreement.file}} — download chip for a filled PDF, Word, or Excel file',
@@ -1186,7 +1393,14 @@ export const DOC_SECTIONS: DocSection[] = [
       },
       {
         heading: 'Quick examples',
-        code: 'Hello {{concat(vars.first_name, " ", vars.last_name)}}!\n{{if(empty(vars.email), "No email on file", vars.email)}}\n{{parseJson(vars.payload).items[0].name}}\nSubmitted {{prettify(utcNow(), "relative")}}\nDue {{prettify(dateAdd(utcNow(), 7, "days"), "date")}}',
+        code: 'Hello {{concat(vars.first_name, " ", vars.last_name)}}!\n{{if(empty(vars.email), "No email on file", vars.email)}}\n{{parseJson(vars.payload).items[0].name}}\nSubmitted {{prettify(utcNow(), "relative")}}\nDue {{prettify(dateAdd(utcNow(), 7, "days"), "date")}}\n\n{{embed("https://www.youtube.com/watch?v=dQw4w9WgXcQ")}}',
+      },
+      {
+        heading: 'Chat-only helpers',
+        bullets: [
+          'embed("https://…") — YouTube, X, Vimeo, Spotify, or TikTok player in Message / Question text (see Message formatting)',
+          'renderFile(media.key) — Media library preview in chat (see Media library)',
+        ],
       },
       {
         heading: 'Function reference',
@@ -1204,9 +1418,9 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         bullets: [
           'Preview runs the flow in an in-app chat widget with typing delays, optional skips, timeouts, and live variables. Pick a test scenario (Data tab) to seed fixture globals; when the run finishes, the Run panel shows pass/fail for expected variables and step keys.',
-          'Connection steps (HTTP, email, entity) execute against your configured backends during preview when available.',
+          'Connection steps (HTTP, email, entity, integration, transfer, sign-in) execute against your configured backends during preview when available.',
           'Preview and published chat hide scrollbars on the message list, shop catalog, image-choice gallery, and similar panels so the widget stays uncluttered. Those areas still scroll.',
-          'Publish stores the current graph so runtime consumers can use a stable version of the flow.',
+          'Publish stores the current graph so runtime consumers can use a stable version of the flow. When Staging is enabled for the organisation, you can publish to staging, open a staging public link, then promote to production.',
         ],
       },
     ],
@@ -1214,19 +1428,52 @@ export const DOC_SECTIONS: DocSection[] = [
   {
     id: 'connections',
     title: 'Connections',
-    summary: 'Reusable HTTP, email, and payment integrations for your organisation.',
+    summary: 'Reusable HTTP, email, and payment backends for your organisation.',
     body: [
       {
         paragraphs: [
-          'Connections are defined at the organisation level. Bind a chatbot’s HTTP or email steps, or a Payment question, to a connection. Credentials stay in connection secrets and are only used on the server.',
+          'Connections are defined at the organisation level. Bind a chatbot’s HTTP request, Database, or Send email steps, a Payment question, or Sign-in HTTP/OTP delivery to a connection. Credentials stay in connection secrets and are only used on the server. Connections are separate from Integrations (Slack, Drive, Sheets, and similar) — see Integrations.',
         ],
+        image: {
+          src: 'docs/connections.png',
+          alt: 'Connections page listing HTTP and email organisation connections',
+          caption: 'Organisation Connections — HTTP, email, and payment backends.',
+        },
       },
       {
         bullets: [
           'HTTP — methods, paths, parameters, and response schema hints for autocomplete.',
-          'Email — send templated messages through a configured email connection.',
+          'Email — send templated messages through a configured email connection (also used for OTP delivery).',
           'Payment — PayFast merchant ID/key/passphrase, or a custom notify shared secret. The API confirms charges at /payment/notify; chat polls /payment/status.',
-          'Visibility may include personal connections and shared ForgeHub-style catalogs depending on your deployment.',
+          'Database — PostgreSQL (incl. Supabase/Neon), MySQL/MariaDB, SQL Server, or SQLite (allowlisted path on the API host). Use a Database step with parameterized SQL (:name placeholders); secrets stay on the server. On gkjtt, the connection lab SQLite file is under /flowforge/demo/data.',
+          'Visibility may include personal connections and shared catalogs depending on your deployment.',
+        ],
+      },
+      {
+        heading: 'My connections vs ForgeHub',
+        paragraphs: [
+          'The Connections page has two tabs. My connections lists credentials owned by this organisation (and personal ones where enabled). ForgeHub is a catalog — browse global and shared definitions, plus your own private connections, and install them into a selected chatbot. After install, re-check secrets and bindings; shared packs do not copy live credentials. Private stays hidden from other people, but you can still install your private connections onto other chatbots you edit.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'integrations',
+    title: 'Integrations',
+    summary: 'Connect Slack, Drive, Sheets, S3, and similar providers for Integration steps.',
+    body: [
+      {
+        paragraphs: [
+          'Create integrations on a chatbot’s Data → Integrations section (same place as Connections), or from the organisation Integrations page while choosing an owning chatbot. Connect providers such as Microsoft OneDrive, Google Drive, Dropbox, Box, SharePoint, Slack, Microsoft Teams, Google Sheets, Notion, S3, or a custom API connector. Mark accounts connected or disconnected as needed.',
+        ],
+      },
+      {
+        bullets: [
+          'An integration is owned by one chatbot and auto-installed there. Install the same account onto other chatbots from their Data tab.',
+          'On an Integration step in the designer, only installed integrations appear. Pick the account, choose an action, map fields, and optionally store the result in a variable.',
+          'Integrations are separate from HTTP/email/payment Connections — use Connections for generic REST and mail; use Integrations for provider-specific actions.',
+          'After marketplace install, rebind integrations — IDs are stripped from packs.',
+          'Slack integrations can also power Alerts digests and threshold Slack notifications (organisation-wide list).',
         ],
       },
     ],
@@ -1234,7 +1481,7 @@ export const DOC_SECTIONS: DocSection[] = [
   {
     id: 'entities',
     title: 'Entities & data',
-    summary: 'Store structured records your flows can query and update.',
+    summary: 'Store structured records your flows can query and update — and share across chatbots with CRUD grants.',
     body: [
       {
         paragraphs: [
@@ -1242,12 +1489,20 @@ export const DOC_SECTIONS: DocSection[] = [
         ],
       },
       {
+        heading: 'Sharing across chatbots',
+        paragraphs: [
+          'Entities stay owned by one chatbot. Set visibility to Private, Shared (listed for selected people), or Global (listed for the organisation). Install an entity onto other chatbots with per-install CRUD flags: query, create, update, and delete. Only the owning chatbot can edit schema and attributes; installed chatbots see a read-only schema and record access limited by their flags. Entity steps only list installed entities and hide actions the install does not allow.',
+        ],
+      },
+      {
         bullets: [
           'Use output variables to capture entity results for later steps.',
           'Keep attribute keys stable — flows and filters reference them by key.',
+          'Use attribute type password for credentials used by Sign-in → Entity lookup. Values are hashed (PBKDF2) when saved; the Data grid never shows the hash or plaintext.',
           'The `id` primary key cannot be renamed, removed, or edited after create. On Entity → Create, leave `id` empty to generate a UUID automatically.',
           'Query filters replace the older single “filter attribute equals” field (still supported on existing flows).',
           'Excel export writes attribute keys, a type row, then values so re-import can rebuild the entity.',
+          'Owner auto-installs with full CRUD. Other bots install query-only by default — raise grants on the owning Data tab or when sharing.',
         ],
       },
     ],
@@ -1269,7 +1524,8 @@ export const DOC_SECTIONS: DocSection[] = [
           'Help / FAQ — question and answer lists for support menus.',
           'Store catalog — categories, products, and optional checkout fees (shipping, delivery, tax) for a Shop question.',
           'Downloadable file — PDF, Word, or Excel filled from template inputs (and leftover {{vars.*}}). List layout stacks fields; Page layout is an A4 canvas (portrait or landscape). Insert {{templates.key.file}} on a Message or End step; visitors download the built file.',
-          'Menu, chat message, opening hours, legal copy, and receipts.',
+          'Agreement — Adobe Sign–style PDF: agreement name, message, terms, parties, signature image, and date signed. Insert {{templates.agreement.file}} after a Signature question.',
+          'Menu, chat message, opening hours (schedule card in chat; plain text elsewhere), legal copy, and receipts.',
         ],
       },
       {
@@ -1299,7 +1555,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         heading: 'Stock',
         paragraphs: [
-          'Each product can have an optional stock count. Empty means unlimited. At 0 the shop disables add-to-cart; quantities cannot exceed remaining stock. This number lives in the catalog JSON — it is not a concurrent inventory service, so overlapping chats can still oversell. A later orders table can decrement for real.',
+          'Each product can have an optional stock count. Empty means unlimited. At 0 the shop disables add-to-cart; quantities cannot exceed remaining stock. Stock decrements only when a Payment connection verifies the charge via /payment/notify (PayFast ITN or custom notify) — idempotent per payment. Self-confirm payments (no Payment connection) and Preview without a live notify do not reduce catalog stock. Overlapping chats can still race without a separate inventory ledger.',
         ],
       },
       {
@@ -1311,10 +1567,11 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         heading: 'Downloadable files',
         paragraphs: [
-          'Create a Downloadable file template and choose PDF, Word, or Excel. Declare inputs such as name, email, and signature, then use {{inputs.name}} in fields and {{inputs.signature}} on an Image field. Bind those inputs on the Message or End step that inserts {{templates.agreement.file}} — visitors get a download chip; the file is built from that conversation when they click it.',
+          'Create a Downloadable file or Agreement template. For e-sign, use Agreement (PDF with parties, terms, signature, and date). Bind inputs on the Message or End step that inserts {{templates.agreement.file}} — visitors get a download chip; the file is built from that conversation when they click it.',
         ],
         bullets: [
           'List layout — stacked title, intro, fields, body, and footer. Use this for a simple form-style file.',
+          'Data table — set Rows source to an array ({{inputs.lines}} / {{vars.items}}) and map columns (property key → header). Excel gets a header plus one row per item; PDF/Word list the same table.',
           'Page layout — A4 canvas. Add heading, text, field, signature, line, and cart blocks, then drag them into place.',
           'Snap to grid is on by default (2% of the page). Blocks also snap to each other and to the page center; teal guides appear while you drag. Hold Alt to move freely.',
           'Select a block to set millimetre Left, Top, Width, and Height (lines use Thickness, down to 0.1 mm). Values keep the decimals you type. You can still drag or pull the teal corner.',
@@ -1330,14 +1587,203 @@ export const DOC_SECTIONS: DocSection[] = [
     ],
   },
   {
-    id: 'analytics',
-    title: 'Analytics',
-    summary: 'Volume, completion, drop-off, and payments from public chats.',
+    id: 'conversations',
+    title: 'Conversations',
+    summary: 'Search, filter, replay, and export live and historical sessions.',
     body: [
       {
         paragraphs: [
-          'Open Analytics in the organisation to see session volume over time, completion vs abandoned vs failed, when people chat, and how far sessions reach (step.run events). Filter by chatbot and date range. Shop carts show conversion to a paid intent and product quantities from completed session variables. Conversation completed/failed webhooks include those same session variables.',
+          'Open Conversations from the primary nav to search sessions across chatbots. Filter by chatbot, status (active, escalated, completed, failed, abandoned), environment (production or staging), and tags. Export the current list as CSV. Agents see escalated and assigned sessions for their work; editors and admins see the full organisation history.',
         ],
+        image: {
+          src: 'docs/conversations.png',
+          alt: 'Conversations list with search, status filters, and session table',
+          caption: 'Conversations — search, filter by environment/status, and export CSV.',
+        },
+      },
+      {
+        heading: 'Session detail',
+        bullets: [
+          'Open a row to replay the transcript, inspect variables, visitor key, publish version, and SLA badges.',
+          'On escalated chats: claim, send replies, transfer to another agent or queue, add notes/tags, and resolve.',
+          'Export the session as JSON for support or debugging.',
+          'Abandoned sessions may appear after the visitor goes stale without completing.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'analytics',
+    title: 'Analytics',
+    summary: 'Volume, completion, drop-off, payments, transfers, and experiments.',
+    body: [
+      {
+        paragraphs: [
+          'Open Analytics in the organisation to see session volume over time, completion vs abandoned vs failed, when people chat, and how far sessions reach (step.run events). Filter by chatbot and date range. Shop carts show conversion to a paid intent and product quantities from completed session variables. Conversation completed/failed webhooks include those same session variables. Compare publish versions with the drop-off version picker when available.',
+        ],
+        image: {
+          src: 'docs/analytics.png',
+          alt: 'Analytics page with funnel, cohorts, experiments, and chatbot transfers',
+          caption: 'Analytics — funnel, cohorts, experiments, and transfer outcomes.',
+        },
+      },
+      {
+        heading: 'Panels',
+        bullets: [
+          'Sessions over time, status mix, drop-off by step, by publish version, and version compare.',
+          'Activity by hour and volume/completion by chatbot.',
+          'Top products from completed session carts.',
+          'Server analytics (funnel by step, weekly cohorts, revenue by node) when available.',
+        ],
+      },
+      {
+        heading: 'Transfers',
+        paragraphs: [
+          'The Chatbot transfers panel counts sessions that fired session.transferred, completion vs abandon after transfer, from→to pairs, and session.transfer_failed events (for example missing required variables).',
+        ],
+      },
+      {
+        heading: 'Experiments',
+        paragraphs: [
+          'When experiments are enabled for the organisation, Analytics includes an Experiments panel to define control/treatment variants and view stats. Wire live traffic to published graphs as your experiment setup allows.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'inbox-agents',
+    title: 'Inbox & agent console',
+    summary: 'Live handoff queues, skills, concurrency, and the agent Inbox.',
+    body: [
+      {
+        paragraphs: [
+          'When a flow hits Handoff, the conversation escalates to Inbox. Operators claim, reply, transfer to another agent or queue, add notes/tags, and resolve. Presence heartbeats show who is online. Users with the Agent role only see Inbox and Conversations; owners, admins, and editors can also operate the Inbox.',
+        ],
+        image: {
+          src: 'docs/inbox.png',
+          alt: 'Agent inbox with queue and assignee filters',
+          caption: 'Inbox — claim and work escalated conversations by queue.',
+        },
+      },
+      {
+        heading: 'Inbox filters',
+        bullets: [
+          'Queue — all queues or a specific Agent console queue.',
+          'Assignee — anyone, me, or unassigned.',
+          'Saved views — save the current filters for quick return.',
+          'Toggle yourself online from the presence control so auto-assign and “agents online” count include you.',
+        ],
+      },
+      {
+        heading: 'Agent console',
+        bullets: [
+          'Open Agent console from the primary nav or Admin menu (owners/admins manage queues and profiles).',
+          'Queues — name, description, first-response and resolve SLAs (seconds), default flag, and routing rules (required skills, match any vs all, auto-assign).',
+          'Profiles — display name, skills, and max concurrent open escalations (enforced on claim and assign).',
+          'Handoff steps can target a specific queue; otherwise the default queue is used. Auto-assign picks an online operator whose skills match and who is under max concurrent.',
+        ],
+        image: {
+          src: 'docs/agent-console.png',
+          alt: 'Agent console queue form with skills, SLAs, and auto-assign',
+          caption: 'Agent console — queues, skills, SLAs, and concurrency.',
+        },
+      },
+    ],
+  },
+  {
+    id: 'marketplace',
+    title: 'Marketplace',
+    summary: 'Publish and install serialized flow packs across organisations.',
+    body: [
+      {
+        paragraphs: [
+          'Publish a listing from a source chatbot to serialize a flowforge.chatbotFlow pack (steps, globals, templates, entities, scenarios). Choose kind (flow pack or template pack) and visibility (private, organisation, or public — public needs approval). Connection and integration IDs are stripped — rebind after install. Install creates a new chatbot from the pack (or falls back to a live clone for legacy listings).',
+        ],
+        image: {
+          src: 'docs/marketplace.png',
+          alt: 'Marketplace listings with Install and Publish a pack form',
+          caption: 'Marketplace — publish packs from a chatbot or install into this organisation.',
+        },
+      },
+    ],
+  },
+  {
+    id: 'staging',
+    title: 'Staging',
+    summary: 'Publish to staging, test, then promote to production.',
+    body: [
+      {
+        paragraphs: [
+          'When the organisation has the Staging feature enabled, the designer can publish to staging, then test before promoting to production. Each chatbot has a **Test** tab with a unique staging link (`/test/{token}`) that runs the staging graph without enabling production public chat. You can watch live sessions and transcripts there, and review staging-only stats (sessions, completion, drop-off). The older staging public link (`?env=staging` on the production URL) still works when public chat is enabled. Conversations and Analytics support filtering by environment (production vs staging).',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'admin-overview',
+    title: 'Admin overview',
+    summary: 'Organisation dashboard for chatbots, users, usage, webhooks, and recent activity.',
+    body: [
+      {
+        paragraphs: [
+          'Owners and admins open Admin from the top bar to manage the organisation beyond flow design. The Overview page is the landing dashboard: counts for active chatbots, users (and pending invites), recycle-bin items, this month’s usage, webhook subscriptions, and a shortcut to Organisation settings. Recent activity lists the latest audit events with a link to the full Audit log.',
+        ],
+        image: {
+          src: 'docs/admin-overview.png',
+          alt: 'Admin overview with stat cards and recent activity',
+          caption: 'Admin → Overview — organisation health and shortcuts.',
+        },
+      },
+      {
+        heading: 'Admin menu vs primary nav',
+        bullets: [
+          'Admin tab strip — Overview, Chatbots (inventory), Users, Recycle bin, Organisation, Compliance, Security, Usage, Webhooks, Audit.',
+          'Also in the Admin dropdown (outside the tab strip) — Agent console, Integrations, Alerts.',
+          'Primary nav — Chatbots home (design), Connections, Conversations, Inbox, Agent console, Analytics, Marketplace.',
+          'Admin → Chatbots is an inventory for search and bulk soft-delete; day-to-day design stays on the Chatbots home.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'organisation-settings',
+    title: 'Organisation settings',
+    summary: 'Profile, contact, billing address, and workspace branding.',
+    body: [
+      {
+        paragraphs: [
+          'Open Admin → Organisation to edit display name, legal name, slug, contact email, phone, website, billing address, and internal notes. The contact email is used for Alerts digests and threshold email notifications.',
+        ],
+        image: {
+          src: 'docs/organisation.png',
+          alt: 'Organisation settings form with profile and contact fields',
+          caption: 'Admin → Organisation — profile, contact, and branding.',
+        },
+      },
+      {
+        heading: 'Workspace branding',
+        bullets: [
+          'Product name override — leave blank to keep FlowForge in the shell.',
+          'Accent color and logo URL for the organisation chrome.',
+          'Optionally apply branding to public chat (accent, logo, and product name on published chatbot pages).',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'recycle-bin',
+    title: 'Recycle bin',
+    summary: 'Restore soft-deleted chatbots or delete them forever.',
+    body: [
+      {
+        paragraphs: [
+          'Deleting a chatbot from the Chatbots home or Admin → Chatbots moves it to the Recycle bin and turns off public chat for that bot. Open Admin → Recycle bin (or Recycle bin from the Chatbots home) to restore a bot or delete it forever. Empty recycle bin permanently removes everything in the bin.',
+        ],
+        image: {
+          src: 'docs/recycle-bin.png',
+          alt: 'Recycle bin page for deleted chatbots',
+          caption: 'Admin → Recycle bin — restore or permanently delete chatbots.',
+        },
       },
     ],
   },
@@ -1348,8 +1794,171 @@ export const DOC_SECTIONS: DocSection[] = [
     body: [
       {
         paragraphs: [
-          'Owners and admins can open Users to invite people and change roles. Viewers see the roster but cannot change access.',
+          'Owners and admins open Admin → Users to invite people by email and change roles (admin, editor, agent, or viewer). New invites appear as Pending until accepted; you can copy a signup link. Edit display name and job title on members. Ownership is managed separately. Viewers and agents cannot manage users. Agents invited for live support land on Inbox after sign-in.',
         ],
+        image: {
+          src: 'docs/admin-users.png',
+          alt: 'Admin Users table with roles and Add user',
+          caption: 'Admin → Users — invite members and assign roles.',
+        },
+      },
+    ],
+  },
+  {
+    id: 'compliance',
+    title: 'Compliance',
+    summary: 'Retention, consent policies, and visitor data export or delete.',
+    body: [
+      {
+        paragraphs: [
+          'Owners and admins open Admin → Compliance for data retention, visitor subject requests, and consent policies.',
+        ],
+        image: {
+          src: 'docs/compliance.png',
+          alt: 'Compliance page with retention TTLs and visitor data export',
+          caption: 'Admin → Compliance — retention, legal hold, and visitor export/delete.',
+        },
+      },
+      {
+        heading: 'Data retention',
+        bullets: [
+          'Set TTL days for sessions, events, files, and payment PII.',
+          'Enable Legal hold to block deletes and purge while an investigation is open.',
+          'Run retention purge to delete expired data according to those TTLs (blocked while legal hold is on).',
+        ],
+      },
+      {
+        heading: 'Visitor data subject requests',
+        paragraphs: [
+          'Enter a visitor key to Export JSON (GDPR-style access) or Delete data for that visitor across the organisation.',
+        ],
+      },
+      {
+        heading: 'Consent policies',
+        paragraphs: [
+          'Add versioned policies with a policy_key, title, and body. Wire consent capture in public chat when your flows require it; policy versions help you prove which text was shown.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'security',
+    title: 'Security & SSO',
+    summary: 'Organisation SSO, domains, SCIM, and Platform API tokens.',
+    body: [
+      {
+        paragraphs: [
+          'Owners and admins open Admin → Security to configure enterprise login for FlowForge staff. Visitor Sign-in SSO uses chatbot Templates (kind SSO / IdP), then the Sign-in step references that template by key — separate from organisation staff SSO.',
+        ],
+        image: {
+          src: 'docs/security.png',
+          alt: 'Security page for OIDC/SAML SSO and SCIM configuration',
+          caption: 'Admin → Security — SSO, SCIM, and Platform API tokens.',
+        },
+      },
+      {
+        heading: 'SSO configs',
+        bullets: [
+          'Protocol — OIDC (issuer, client ID, authorization/token/JWKS URLs) or SAML (entity ID, SSO/ACS URLs, PEM certificate).',
+          'Email domains — comma-separated domains allowed to use this IdP.',
+          'Default role for new SSO users (viewer, editor, or admin).',
+          'Enable the config and optionally Enforce SSO so members must use the IdP.',
+        ],
+      },
+      {
+        heading: 'Platform API tokens',
+        paragraphs: [
+          'Create a long-lived `ffpat_` token for service accounts calling `/v1`. It is shown once. The PHP API verifies it, then reads this organisation with the server database key. Revoke to cut off a client immediately. Session JWTs from `/docs/api` still work for interactive tests but expire.',
+        ],
+      },
+      {
+        heading: 'SCIM',
+        paragraphs: [
+          'Create a SCIM token for directory sync against `/api/scim/v2/`. The token is shown once — store it securely.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'usage',
+    title: 'Usage & quotas',
+    summary: 'Monthly conversation, email, and HTTP limits plus host allowlist.',
+    body: [
+      {
+        paragraphs: [
+          'Open Admin → Usage to see this month’s consumption against quotas for conversations, emails, and HTTP calls. Set monthly maxima and an optional HTTP host allowlist (comma-separated hosts). An empty allowlist means the platform default policy applies.',
+        ],
+        image: {
+          src: 'docs/usage.png',
+          alt: 'Usage and quotas page with monthly bars and allowlist',
+          caption: 'Admin → Usage — meters, quotas, and HTTP host allowlist.',
+        },
+      },
+    ],
+  },
+  {
+    id: 'webhooks',
+    title: 'Webhooks',
+    summary: 'Outbound events when flows publish or conversations finish.',
+    body: [
+      {
+        paragraphs: [
+          'Open Admin → Webhooks to notify external systems. Add a name, HTTPS URL, and one or more events: flow.published, conversation.completed, conversation.failed. Enable or disable subscriptions without deleting them. Conversation completed and failed payloads include the session’s variables. Recent deliveries lists the last 50 attempts across the organisation.',
+        ],
+        image: {
+          src: 'docs/webhooks.png',
+          alt: 'Webhooks page with Add webhook and recent deliveries',
+          caption: 'Admin → Webhooks — subscriptions and delivery history.',
+        },
+      },
+    ],
+  },
+  {
+    id: 'alerts',
+    title: 'Alerts',
+    summary: 'Weekly digests and threshold rules for organisation health.',
+    body: [
+      {
+        paragraphs: [
+          'Open Alerts from the Admin menu. Emails use the organisation contact email (set under Organisation settings). Threshold rules and digests also create in-app notifications for owners and admins.',
+        ],
+        image: {
+          src: 'docs/alerts.png',
+          alt: 'Alerts page with weekly digest and threshold rules',
+          caption: 'Alerts — weekly digest and abandon/failure/quota rules.',
+        },
+      },
+      {
+        heading: 'Weekly digest',
+        bullets: [
+          'Enable the digest and pick a UTC weekday.',
+          'Optionally post to a connected Slack integration.',
+        ],
+      },
+      {
+        heading: 'Threshold rules',
+        bullets: [
+          'Metrics — abandon rate ≥ %, failed sessions ≥ count, completion rate ≤ %, or conversation quota used ≥ %.',
+          'Set a threshold and rolling window in hours; notify by email and/or Slack.',
+          'Rules show a live status (for example OK with the current metric value).',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'audit',
+    title: 'Audit log',
+    summary: 'Security and admin activity for the organisation.',
+    body: [
+      {
+        paragraphs: [
+          'Open Admin → Audit for a chronological table of When, Action, Resource, and Meta. Typical actions include flow.published, marketplace.published / installed / deleted, and chatbot.cloned. Owners and admins use this for security review; the Overview Recent activity panel is a short preview of the same stream.',
+        ],
+        image: {
+          src: 'docs/audit.png',
+          alt: 'Audit log table with actions and resource metadata',
+          caption: 'Admin → Audit — organisation activity log.',
+        },
       },
     ],
   },
@@ -1374,6 +1983,43 @@ export const DOC_SECTIONS: DocSection[] = [
       },
     ],
   },
+  {
+    id: 'platform-api',
+    title: 'Platform API',
+    summary: 'OpenAPI 3.0 contract for the FlowForge HTTP API — import into Postman.',
+    body: [
+      {
+        paragraphs: [
+          'The Platform API is a REST read API for chatbot-rich data: organisations, chatbots, published flow JSON, designer export packs, media, templates, entities, conversations (with transcripts), and analytics. It is not the internal SMTP/invite sidecar — those remain separate runtime routes.',
+        ],
+      },
+      {
+        heading: 'Where to get a token',
+        bullets: [
+          'For service accounts: Organisation → Admin → Security → create a Platform API token. The ffpat_ value is shown once.',
+          'The PHP API verifies that token, then uses the server service_role key to read the database. You never send service_role yourself.',
+          'Tokens are scoped to one organisation and last until you revoke them (or until the optional expiry).',
+          'A signed-in session JWT from /docs/api still works for a quick Postman test but expires in about an hour.',
+        ],
+        code: 'Authorization: Bearer ffpat_…\nContent-Type: application/json',
+      },
+      {
+        heading: 'Import into Postman',
+        bullets: [
+          'Open /docs/api for the human reference and download buttons.',
+          'Download OpenAPI JSON from GET /openapi.json and import it: Postman → File → Import.',
+          'Or import the Postman Collection plus Environment (GET /postman.json and /postman-environment.json).',
+          'Set baseUrl to your API origin and paste the copied token into accessToken. Then call GET /v1/me and GET /v1/organisations/{id}/chatbots.',
+        ],
+      },
+      {
+        heading: 'Interactive docs',
+        paragraphs: [
+          'GET /docs on the API origin renders the same spec with Redoc. Live try-it-out is easiest from Postman after import.',
+        ],
+      },
+    ],
+  },
 ]
 
 export const FAQ_ITEMS: FaqItem[] = [
@@ -1381,43 +2027,73 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'what-is-flowforge',
     question: 'What is FlowForge?',
     answer:
-      'FlowForge is a multi-organisation chatbot builder. Organisations design conversational flows with questions, conditions, HTTP/email integrations, entities, and typed variables — then preview and publish.',
+      'FlowForge is a multi-organisation chatbot builder. Organisations design conversational flows with questions, conditions, HTTP/email/payment connections, Integrations, entities, shop checkout, agent handoff, and chatbot transfer — then preview, publish (optionally via staging), monitor Conversations and Analytics, and manage Users, Compliance, Security, Usage, Webhooks, and Alerts from Admin.',
+  },
+  {
+    id: 'terms-privacy',
+    question: 'Where are the Terms of Service and Privacy Policy?',
+    answer:
+      'Open Terms at /terms and Privacy at /privacy (also linked in the site footer, sign-in, and sign-up). They cover accounts, organisation content, chat visitors, connections, APIs, and retention tools. Chat visitors should also check the notice of the organisation running the bot they are talking to.',
+  },
+  {
+    id: 'pricing-plans',
+    question: 'How does FlowForge pricing work?',
+    answer:
+      'See /pricing for Starter, Pro, Business, and Enterprise. Plans map to real product capacity — conversations/email/HTTP quotas, staging, agent console, compliance, Platform API, and SSO/SCIM. Sign in to use your organisation workspace, or contact Help for Enterprise.',
   },
   {
     id: 'instance-vs-chatbot',
     question: 'What is the difference between an organisation and a chatbot?',
     answer:
-      'An organisation is a client account (tenant) with its own users, connections, and chatbots. A chatbot is one conversational product inside that organisation, with its own settings, flow design, and data.',
+      'An organisation is a client account (tenant) with its own users, connections, integrations, and chatbots. A chatbot is one conversational product inside that organisation, with its own settings, flow design, templates, and data.',
   },
   {
     id: 'who-can-edit',
     question: 'Who can edit flows?',
     answer:
-      'Owners, admins, and editors can change designs and most chatbot settings. Viewers can inspect but not modify. Access is managed on the Users page.',
+      'Owners, admins, and editors can change designs and most chatbot settings. Viewers can inspect but not modify. Agents cannot edit flows — they only use Inbox and Conversations for live handoffs. Access is managed under Admin → Users.',
+  },
+  {
+    id: 'agent-role',
+    question: 'What is the Agent role?',
+    answer:
+      'Agents handle live support: claim escalated chats in Inbox, reply, transfer to another agent or queue, and resolve. After sign-in they land on Inbox and cannot open Design, Connections, Analytics, Marketplace, or Admin. Configure queues and skills in Agent console (owners/admins).',
   },
   {
     id: 'recycle-bin',
     question: 'What happens when I delete a chatbot?',
     answer:
-      'Delete moves it to the Recycle bin and turns off public chat. Owners and admins can restore it, or permanently delete it (and its files) from the Recycle bin. Permanent delete cannot be undone.',
+      'Delete moves it to the Recycle bin (Admin → Recycle bin or from the Chatbots home) and turns off public chat. Owners and admins can restore it, or permanently delete it (and its files) from the Recycle bin / Empty recycle bin. Permanent delete cannot be undone.',
   },
   {
     id: 'conversation-replay',
     question: 'How do I replay a public conversation?',
     answer:
-      'Open Conversations in the organisation. Filter by chatbot or status, then click a session to replay the transcript, inspect step runs, export JSON, and view the variables saved at the end of the chat. Sessions still marked active after a day are shown as abandoned. Conversation completed/failed webhooks include those variables.',
+      'Open Conversations in the organisation. Filter by chatbot, status, environment (production/staging), or tags, then click a session to replay the transcript, inspect step runs, export JSON, and view saved variables. Agents typically see escalated or assigned sessions first. Sessions still marked active after a day are shown as abandoned. See Documentation → Conversations.',
   },
   {
     id: 'analytics',
     question: 'Where can I see drop-off and payment conversion?',
     answer:
-      'Open Analytics next to Conversations. Filter by chatbot and date range to see session volume, completion, drop-off by step, when people chat, payment conversion, and products from completed session carts.',
+      'Open Analytics next to Conversations. Filter by chatbot and date range to see session volume, completion, drop-off by step, when people chat, payment conversion, products from completed session carts, chatbot transfers, and (when enabled) experiments and server analytics panels.',
+  },
+  {
+    id: 'admin-where',
+    question: 'Where do I manage organisation settings, quotas, and security?',
+    answer:
+      'Open Admin from the top bar. Overview is the dashboard. Organisation covers profile and branding; Users invites people; Compliance and Security cover retention and SSO; Usage sets quotas and the HTTP allowlist; Webhooks and Audit cover outbound events and the activity log. Alerts and Integrations are also in the Admin dropdown.',
+  },
+  {
+    id: 'connections-vs-integrations',
+    question: 'What is the difference between Connections and Integrations?',
+    answer:
+      'Connections are chatbot-owned HTTP, email, payment, and database backends (with install links) used by HTTP request, Send email, Payment, and Sign-in steps. Integrations are provider connectors (Slack, Drive, Sheets, S3, …) also owned/installed per chatbot under Data → Integrations, and used by Integration steps. Slack accounts remain available organisation-wide for Alerts.',
   },
   {
     id: 'autosave-publish',
     question: 'Do I need to save before previewing?',
     answer:
-      'The designer autosaves as you edit. Preview uses your current draft. Publish creates a published graph snapshot for a stable runtime version.',
+      'The designer autosaves as you edit. Preview uses your current draft. Publish creates a published graph snapshot for a stable runtime version. With Staging enabled, publish to staging first, then promote to production.',
   },
   {
     id: 'smart-suggestions',
@@ -1447,7 +2123,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'shop-cart',
     question: 'How do shop carts and checkout fees work?',
     answer:
-      'Set Response to Shop and pick a Store catalog. Visitors browse products, add them to a cart, and checkout. Optional product stock lives on the catalog (empty = unlimited); sold-out items cannot be added and quantities cannot exceed remaining stock. That count is catalog JSON, not a live inventory service. Checkout lists the product subtotal, each catalog fee, then the total. Fees are defined on the catalog as a fixed amount (shipping, delivery) or a percent of that subtotal (tax), and they apply only when the cart has items. Charge {{vars.cart.total}} on the following Payment step. After payment, insert {{templates.receipt.text}} (or .html in Email) so line items, totals, and the payment reference fill in automatically.',
+      'Set Response to Shop and pick a Store catalog. Visitors browse products, add them to a cart, and checkout. Optional product stock lives on the catalog (empty = unlimited); sold-out items cannot be added and quantities cannot exceed remaining stock. Stock decrements only when a Payment connection verifies via /payment/notify — self-confirm without a connection does not reduce stock. Checkout lists the product subtotal, each catalog fee, then the total. Fees are a fixed amount or a percent of subtotal and apply only when the cart has items. Charge {{vars.cart.total}} on the following Payment step. After payment, insert {{templates.receipt.text}} (or .html in Email) so line items, totals, and the payment reference fill in automatically.',
   },
   {
     id: 'insert-template-kinds',
@@ -1462,6 +2138,12 @@ export const FAQ_ITEMS: FaqItem[] = [
       'Open Design, upload the file in the Media library, then attach it on a Message, Question, or End step — or insert {{renderFile(media.filename_ext)}} in the message text to show a preview (welcome.png becomes {{renderFile(media.welcome_png)}}). Use {{media.welcome_png.url}} when you need the link itself.',
   },
   {
+    id: 'social-embed',
+    question: 'How do I embed a YouTube video or X post in a message?',
+    answer:
+      'In a Message or Question prompt, insert {{embed("https://www.youtube.com/watch?v=…")}} (or an X, Vimeo, Spotify, or TikTok URL). You can also use {{embed(vars.video_url)}} when the URL is stored in a variable. Preview and public chat show an inline player; email falls back to the plain link. See Documentation → Message formatting.',
+  },
+  {
     id: 'document-download',
     question: 'How do I let visitors download a filled PDF, Word, or Excel file?',
     answer:
@@ -1471,7 +2153,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'http-fail',
     question: 'What happens if an HTTP request fails?',
     answer:
-      'The step is marked Failed. Downstream steps can use Run after → has failed to continue on that path, or stay gated on success only (the default).',
+      'The step is marked Failed. Downstream steps can use Run after → has failed to continue on that path, or stay gated on success only (the default). Sign-in steps use Success / Fail edges the same way.',
   },
   {
     id: 'entities-when',
@@ -1483,7 +2165,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'import-export',
     question: 'Can I copy a flow to another chatbot?',
     answer:
-      'Yes. Export the flow as JSON from the designer/chatbot tools, then import it into another chatbot. Review connection IDs and entity references after import — they may need remapping.',
+      'Yes. Export the flow as JSON from the designer/chatbot tools, then import it into another chatbot — or publish/install a Marketplace pack. Review connection and integration IDs and entity references after import — they may need remapping.',
   },
   {
     id: 'mobile',
@@ -1496,6 +2178,18 @@ export const FAQ_ITEMS: FaqItem[] = [
     question: 'Where do I go if I’m stuck?',
     answer:
       'Start with the Help page for guided tasks, skim Documentation for deeper topics, then check this FAQ. If something looks like a product bug, note the step type, browser, and what you expected vs. what happened.',
+  },
+  {
+    id: 'platform-api',
+    question: 'How do I call the Platform API from Postman?',
+    answer:
+      'Create a long-lived ffpat_ token on Admin → Security (shown once). In Postman: File → Import the OpenAPI or collection, set baseUrl, paste the token into accessToken. Start with GET /v1/me. Session JWTs from /docs/api also work but expire. Never send anon/service_role.',
+  },
+  {
+    id: 'platform-api-token',
+    question: 'Why does the Platform API say Missing or invalid Authorization bearer token?',
+    answer:
+      'Create a Platform API token (ffpat_) on Admin → Security and send Authorization: Bearer. Do not send the anon or service_role key. Session JWTs also work but expire. If the token was revoked or mistyped you get this 401. Spec downloads (/openapi.json, /postman.json) do not need a token.',
   },
 ]
 
@@ -1526,14 +2220,45 @@ export const HELP_TOPICS = [
     to: '/docs#expressions',
   },
   {
+    title: 'Format messages and embed video',
+    description:
+      'Bold, colour, links, and {{embed("https://…")}} for YouTube, X, Vimeo, Spotify, or TikTok in Message and Question text.',
+    to: '/docs#message-formatting',
+  },
+  {
     title: 'Attach media to a step',
     description: 'Upload files in the Design page Media library, then attach them on Message, Question, or End steps.',
     to: '/docs#media',
   },
   {
     title: 'Call an API from a step',
-    description: 'Create an HTTP connection, bind it on an HTTP step, map params, and Preview.',
+    description: 'Create an HTTP connection, bind it on an HTTP request step, map params, and Preview.',
     to: '/docs#connections',
+  },
+  {
+    title: 'Add an Integration step',
+    description: 'Connect Slack, Drive, Sheets, or S3 under Integrations, then call an action from the designer.',
+    to: '/docs#integrations',
+  },
+  {
+    title: 'Escalate to the Inbox',
+    description: 'Add a Handoff step, pick a queue in Agent console, and claim chats in Inbox.',
+    to: '/docs#inbox-agents',
+  },
+  {
+    title: 'Transfer between chatbots',
+    description: 'Map variables, choose a start step (not End), or return to the previous bot.',
+    to: '/docs#designer',
+  },
+  {
+    title: 'Publish to staging',
+    description: 'When Staging is enabled, publish a staging graph, test with ?env=staging, then promote.',
+    to: '/docs#staging',
+  },
+  {
+    title: 'Install a marketplace pack',
+    description: 'Browse approved packs, install a serialized flow, then rebind connections.',
+    to: '/docs#marketplace',
   },
   {
     title: 'Branch on success or failure',
@@ -1547,7 +2272,32 @@ export const HELP_TOPICS = [
   },
   {
     title: 'Invite organisation users',
-    description: 'Open Users on your organisation and assign owner, admin, editor, or viewer.',
+    description: 'Open Admin → Users and assign admin, editor, agent, or viewer.',
     to: '/docs#members',
+  },
+  {
+    title: 'Configure organisation Admin',
+    description: 'Overview, branding, compliance, SSO, quotas, webhooks, alerts, and audit.',
+    to: '/docs#admin-overview',
+  },
+  {
+    title: 'Search and export conversations',
+    description: 'Filter sessions by status and environment, open a transcript, or export CSV.',
+    to: '/docs#conversations',
+  },
+  {
+    title: 'Set usage quotas and allowlist',
+    description: 'Cap monthly conversations, emails, and HTTP calls; restrict HTTP hosts.',
+    to: '/docs#usage',
+  },
+  {
+    title: 'Add outbound webhooks',
+    description: 'Subscribe to flow.published and conversation completed/failed events.',
+    to: '/docs#webhooks',
+  },
+  {
+    title: 'Call the Platform API',
+    description: 'Import OpenAPI into Postman, set a Platform API token, and call /v1.',
+    to: '/docs/api',
   },
 ] as const

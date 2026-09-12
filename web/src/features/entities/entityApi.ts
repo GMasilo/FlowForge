@@ -1,9 +1,11 @@
 import { supabase } from '@/shared/lib/supabase'
 import type {
   ChatbotEntity,
+  ChatbotEntityLink,
   EntityAttribute,
   EntityKind,
   EntityStaticRecord,
+  EntityVisibility,
   Json,
   VariableType,
 } from '@/shared/types/database'
@@ -16,11 +18,24 @@ import {
 } from '@/features/entities/entityPrimaryKey'
 import { queryEntityRecords } from '@/features/entities/entityQuery'
 
+export type EntityCrudFlags = {
+  can_query: boolean
+  can_create: boolean
+  can_update: boolean
+  can_delete: boolean
+}
+
 export type EntityWithMeta = ChatbotEntity & {
   attributes: EntityAttribute[]
   static_records?: EntityStaticRecord[]
   dynamic_count?: number
 }
+
+export type InstalledEntity = EntityWithMeta &
+  EntityCrudFlags & {
+    owned: boolean
+    link_id?: string
+  }
 
 export type EntityRecordView = {
   id: string
@@ -30,21 +45,15 @@ export type EntityRecordView = {
   updated_at?: string
 }
 
+export type EntityLinkOp = 'query' | 'create' | 'update' | 'delete'
+
 function asValues(raw: Json | null | undefined): Record<string, unknown> {
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>
   return {}
 }
 
-export async function fetchChatbotEntities(chatbotId: string): Promise<EntityWithMeta[]> {
-  const { data: entities, error } = await supabase
-    .from('chatbot_entities')
-    .select('*')
-    .eq('chatbot_id', chatbotId)
-    .is('deleted_at', null)
-    .order('name')
-  if (error) throw error
-  if (!entities?.length) return []
-
+async function hydrateEntities(entities: ChatbotEntity[]): Promise<EntityWithMeta[]> {
+  if (!entities.length) return []
   const ids = entities.map((e) => e.id)
   const [{ data: attrs, error: attrsError }, { data: staticRows, error: staticError }, { data: dynamicRows, error: dynamicError }] =
     await Promise.all([
@@ -81,12 +90,239 @@ export async function fetchChatbotEntities(chatbotId: string): Promise<EntityWit
   }))
 }
 
+export async function fetchChatbotEntities(chatbotId: string): Promise<EntityWithMeta[]> {
+  const { data: entities, error } = await supabase
+    .from('chatbot_entities')
+    .select('*')
+    .eq('chatbot_id', chatbotId)
+    .is('deleted_at', null)
+    .order('name')
+  if (error) throw error
+  return hydrateEntities(entities ?? [])
+}
+
+/** Owned + installed entities available to this chatbot (with CRUD flags). */
+export async function fetchInstalledEntities(chatbotId: string): Promise<InstalledEntity[]> {
+  const { data: links, error: linksError } = await supabase
+    .from('chatbot_entity_links')
+    .select('*')
+    .eq('chatbot_id', chatbotId)
+  if (linksError) throw linksError
+  if (!links?.length) return []
+
+  const entityIds = links.map((l) => l.entity_id)
+  const { data: entities, error } = await supabase
+    .from('chatbot_entities')
+    .select('*')
+    .in('id', entityIds)
+    .is('deleted_at', null)
+    .order('name')
+  if (error) throw error
+
+  const hydrated = await hydrateEntities(entities ?? [])
+  const byId = new Map(hydrated.map((e) => [e.id, e]))
+  const out: InstalledEntity[] = []
+  for (const link of links) {
+    const entity = byId.get(link.entity_id)
+    if (!entity) continue
+    out.push({
+      ...entity,
+      owned: entity.chatbot_id === chatbotId,
+      link_id: link.id,
+      can_query: link.can_query,
+      can_create: link.can_create,
+      can_update: link.can_update,
+      can_delete: link.can_delete,
+    })
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name))
+  return out
+}
+
+export async function entityLinkAllows(
+  entityId: string,
+  chatbotId: string,
+  op: EntityLinkOp,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('entity_link_allows', {
+    p_entity_id: entityId,
+    p_chatbot_id: chatbotId,
+    p_op: op,
+  })
+  if (error) throw error
+  return !!data
+}
+
+export async function assertEntityLinkAllows(
+  entityId: string,
+  chatbotId: string,
+  op: EntityLinkOp,
+): Promise<void> {
+  const ok = await entityLinkAllows(entityId, chatbotId, op)
+  if (!ok) {
+    throw new Error(`This chatbot cannot ${op} records on this entity`)
+  }
+}
+
+export async function updateEntityVisibility(
+  entityId: string,
+  visibility: EntityVisibility,
+): Promise<void> {
+  const { error } = await supabase.from('chatbot_entities').update({ visibility }).eq('id', entityId)
+  if (error) throw error
+}
+
+export async function setEntityShares(entityId: string, userIds: string[]): Promise<void> {
+  const unique = [...new Set(userIds)]
+  const { error: delError } = await supabase.from('entity_shares').delete().eq('entity_id', entityId)
+  if (delError) throw delError
+  if (!unique.length) return
+  const { error } = await supabase
+    .from('entity_shares')
+    .insert(unique.map((user_id) => ({ entity_id: entityId, user_id })))
+  if (error) throw error
+}
+
+export async function listEntityShares(entityId: string): Promise<string[]> {
+  const { data, error } = await supabase.from('entity_shares').select('user_id').eq('entity_id', entityId)
+  if (error) throw error
+  return (data ?? []).map((r) => r.user_id)
+}
+
+export async function listEntityLinks(entityId: string): Promise<ChatbotEntityLink[]> {
+  const { data, error } = await supabase
+    .from('chatbot_entity_links')
+    .select('*')
+    .eq('entity_id', entityId)
+    .order('created_at')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function installEntityOnChatbot(args: {
+  chatbotId: string
+  entityId: string
+  addedBy?: string | null
+  can_query?: boolean
+  can_create?: boolean
+  can_update?: boolean
+  can_delete?: boolean
+}): Promise<ChatbotEntityLink> {
+  const { data, error } = await supabase
+    .from('chatbot_entity_links')
+    .upsert(
+      {
+        chatbot_id: args.chatbotId,
+        entity_id: args.entityId,
+        added_by: args.addedBy ?? null,
+        can_query: args.can_query ?? true,
+        can_create: args.can_create ?? false,
+        can_update: args.can_update ?? false,
+        can_delete: args.can_delete ?? false,
+      },
+      { onConflict: 'chatbot_id,entity_id' },
+    )
+    .select('*')
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateEntityLinkFlags(
+  linkId: string,
+  flags: Partial<EntityCrudFlags>,
+): Promise<void> {
+  const { error } = await supabase.from('chatbot_entity_links').update(flags).eq('id', linkId)
+  if (error) throw error
+}
+
+export async function uninstallEntityFromChatbot(args: {
+  chatbotId: string
+  entityId: string
+}): Promise<void> {
+  // Owning chatbot link is protected by RLS; this only removes non-owner installs.
+  const { error } = await supabase
+    .from('chatbot_entity_links')
+    .delete()
+    .eq('chatbot_id', args.chatbotId)
+    .eq('entity_id', args.entityId)
+  if (error) throw error
+}
+
+/** Installable catalog: global + shared-to-me entities in the instance (not already owned by this bot). */
+export async function listInstallableEntities(args: {
+  instanceId: string
+  chatbotId: string
+}): Promise<EntityWithMeta[]> {
+  const { data: bots, error: botsError } = await supabase
+    .from('chatbots')
+    .select('id')
+    .eq('instance_id', args.instanceId)
+    .is('deleted_at', null)
+  if (botsError) throw botsError
+  const botIds = (bots ?? []).map((b) => b.id)
+  if (!botIds.length) return []
+
+  const { data: entities, error } = await supabase
+    .from('chatbot_entities')
+    .select('*')
+    .in('chatbot_id', botIds)
+    .neq('chatbot_id', args.chatbotId)
+    .is('deleted_at', null)
+    .in('visibility', ['global', 'shared'])
+    .order('name')
+  if (error) throw error
+
+  const { data: links } = await supabase
+    .from('chatbot_entity_links')
+    .select('entity_id')
+    .eq('chatbot_id', args.chatbotId)
+  const installed = new Set((links ?? []).map((l) => l.entity_id))
+  const candidates = (entities ?? []).filter((e) => !installed.has(e.id))
+  return hydrateEntities(candidates)
+}
+
+export function entityVisibilityLabel(v: EntityVisibility): string {
+  switch (v) {
+    case 'private':
+      return 'Private'
+    case 'global':
+      return 'Global (organisation)'
+    case 'shared':
+      return 'Shared'
+  }
+}
+
+export function entityOpToLinkOp(operation: string): EntityLinkOp {
+  switch (operation) {
+    case 'create':
+      return 'create'
+    case 'update':
+      return 'update'
+    case 'delete':
+      return 'delete'
+    case 'list':
+    case 'get':
+    default:
+      return 'query'
+  }
+}
+
+export function entityAllowsOperation(flags: EntityCrudFlags, operation: string): boolean {
+  const op = entityOpToLinkOp(operation)
+  if (op === 'query') return flags.can_query
+  if (op === 'create') return flags.can_create
+  if (op === 'update') return flags.can_update
+  return flags.can_delete
+}
+
 export async function createEntity(input: {
   chatbotId: string
   key: string
   name: string
   description?: string
   kind: EntityKind
+  visibility?: EntityVisibility
 }): Promise<ChatbotEntity> {
   const { data, error } = await supabase
     .from('chatbot_entities')
@@ -96,6 +332,7 @@ export async function createEntity(input: {
       name: input.name.trim(),
       description: input.description?.trim() || null,
       kind: input.kind,
+      visibility: input.visibility ?? 'private',
     })
     .select('*')
     .single()
@@ -165,7 +402,7 @@ async function clearOtherIdentifiers(entityId: string): Promise<void> {
 
 export async function updateEntity(
   id: string,
-  patch: Partial<Pick<ChatbotEntity, 'name' | 'description' | 'key'>>,
+  patch: Partial<Pick<ChatbotEntity, 'name' | 'description' | 'key' | 'visibility'>>,
 ): Promise<void> {
   const { error } = await supabase.from('chatbot_entities').update(patch).eq('id', id)
   if (error) throw error
@@ -230,38 +467,46 @@ export async function upsertAttribute(input: {
   }
 
   const isIdentifier = !!input.is_identifier
-  if (input.id) {
+  const patch = {
+    key,
+    label: input.label?.trim() || null,
+    value_type: input.value_type,
+    required: !!input.required,
+    is_identifier: false,
+    is_unique: !!input.is_unique,
+    default_value: input.default_value ?? null,
+    sort_order: input.sort_order ?? 0,
+  }
+
+  let targetId = input.id
+  if (!targetId) {
+    const { data: existing, error: lookupError } = await supabase
+      .from('entity_attributes')
+      .select('id')
+      .eq('entity_id', input.entityId)
+      .eq('key', key)
+      .maybeSingle()
+    if (lookupError) throw lookupError
+    targetId = existing?.id
+  }
+
+  if (targetId) {
     const { data, error } = await supabase
       .from('entity_attributes')
-      .update({
-        key,
-        label: input.label?.trim() || null,
-        value_type: input.value_type,
-        required: !!input.required,
-        is_identifier: false,
-        is_unique: !!input.is_unique,
-        default_value: input.default_value ?? null,
-        sort_order: input.sort_order ?? 0,
-      })
-      .eq('id', input.id)
+      .update(patch)
+      .eq('id', targetId)
       .select('*')
       .single()
     if (error) throw error
     if (isIdentifier) await ensureEntityPrimaryKey(input.entityId)
     return data
   }
+
   const { data, error } = await supabase
     .from('entity_attributes')
     .insert({
       entity_id: input.entityId,
-      key,
-      label: input.label?.trim() || null,
-      value_type: input.value_type,
-      required: !!input.required,
-      is_identifier: false,
-      is_unique: !!input.is_unique,
-      default_value: input.default_value ?? null,
-      sort_order: input.sort_order ?? 0,
+      ...patch,
     })
     .select('*')
     .single()
@@ -338,10 +583,12 @@ async function loadEntityAttributes(entityId: string): Promise<EntityAttribute[]
 async function coerceValuesForEntity(
   entityId: string,
   values: Record<string, unknown>,
-  options?: { partial?: boolean },
+  options?: { partial?: boolean; previous?: Record<string, unknown> },
 ): Promise<Record<string, unknown>> {
   const attrs = await loadEntityAttributes(entityId)
-  return validateAndCoerceEntityValues(values, attrs, options)
+  const coerced = validateAndCoerceEntityValues(values, attrs, options)
+  const { applyPasswordHashesToValues } = await import('@/features/entities/entityPassword')
+  return applyPasswordHashesToValues(coerced, attrs, options?.previous)
 }
 
 export async function createStaticRecord(entityId: string, values: Record<string, unknown>, sortOrder = 0) {
@@ -387,7 +634,7 @@ export async function updateStaticRecord(id: string, values: Record<string, unkn
     throw new Error('Primary key "id" cannot be changed')
   }
   const withPk = ensurePrimaryKeyValue(values, { existingId: lockedId })
-  const coerced = await coerceValuesForEntity(resolvedEntityId, withPk)
+  const coerced = await coerceValuesForEntity(resolvedEntityId, withPk, { previous: previousValues })
   coerced[ENTITY_PRIMARY_KEY] = lockedId
   await assertUniqueAttributeValues({
     entityId: resolvedEntityId,
@@ -406,6 +653,21 @@ function isBlankPk(value: unknown): boolean {
 export async function deleteStaticRecord(id: string) {
   const { error } = await supabase.from('entity_static_records').delete().eq('id', id)
   if (error) throw error
+}
+
+/** Replace all static catalog rows on flow import (fresh UUIDs avoid cross-chatbot id clashes). */
+export async function replaceStaticRecordsFromImport(
+  entityId: string,
+  records: Array<Record<string, unknown>>,
+) {
+  await ensureEntityPrimaryKey(entityId)
+  const { error: delError } = await supabase.from('entity_static_records').delete().eq('entity_id', entityId)
+  if (delError) throw delError
+
+  for (const [index, raw] of records.entries()) {
+    const { [ENTITY_PRIMARY_KEY]: _drop, ...rest } = raw
+    await createStaticRecord(entityId, rest, index)
+  }
 }
 
 export async function listEntityRecords(entity: Pick<ChatbotEntity, 'id' | 'kind'>): Promise<EntityRecordView[]> {
@@ -448,9 +710,58 @@ export async function createDynamicRecord(entityId: string, values: Record<strin
     .from('entity_dynamic_records')
     .insert({ id: recordId, entity_id: entityId, values: coerced as Json })
     .select('*')
-    .single()
+    .maybeSingle()
   if (error) throw error
+  if (!data) {
+    throw new Error(
+      'Entity create did not return a row (often blocked by RLS for anonymous chat). Use a public chat session RPC or sign in as an editor.',
+    )
+  }
   return data
+}
+
+/** Public/anon chat entity ops (security definer; requires active conversation session). */
+export async function publicChatEntityOp(args: {
+  sessionId: string
+  chatbotId: string
+  entityId: string
+  operation: string
+  values?: Record<string, unknown>
+  recordId?: string
+}): Promise<{
+  ok: boolean
+  entity?: { id: string; key: string; kind: EntityKind }
+  record?: Record<string, unknown> | null
+  records?: Array<{ id: string; values: Record<string, unknown> }>
+  count?: number
+  found?: boolean
+  deleted?: boolean
+  id?: string
+}> {
+  const { data, error } = await supabase.rpc('public_chat_entity_op', {
+    p_session_id: args.sessionId,
+    p_chatbot_id: args.chatbotId,
+    p_entity_id: args.entityId,
+    p_operation: args.operation,
+    p_payload: {
+      values: args.values ?? {},
+      ...(args.recordId ? { recordId: args.recordId } : {}),
+    } as Json,
+  })
+  if (error) throw error
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Entity operation returned an invalid response')
+  }
+  return data as {
+    ok: boolean
+    entity?: { id: string; key: string; kind: EntityKind }
+    record?: Record<string, unknown> | null
+    records?: Array<{ id: string; values: Record<string, unknown> }>
+    count?: number
+    found?: boolean
+    deleted?: boolean
+    id?: string
+  }
 }
 
 export async function updateDynamicRecord(
@@ -477,7 +788,10 @@ export async function updateDynamicRecord(
     throw new Error('Primary key "id" cannot be changed')
   }
   const withPk = ensurePrimaryKeyValue(values, { existingId: lockedId })
-  const coerced = await coerceValuesForEntity(entityId, withPk, { partial: options?.merge === true })
+  const coerced = await coerceValuesForEntity(entityId, withPk, {
+    partial: options?.merge === true,
+    previous: prev,
+  })
   const nextValues = options?.merge ? { ...prev, ...coerced } : coerced
   nextValues[ENTITY_PRIMARY_KEY] = lockedId
 

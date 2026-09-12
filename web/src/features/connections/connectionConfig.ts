@@ -40,6 +40,20 @@ export type PaymentConnectionConfig = {
   sharedSecret: string
 }
 
+export type DatabaseProvider = 'postgres' | 'mysql' | 'mssql' | 'sqlite'
+export type DatabaseSslMode = 'disable' | 'require'
+
+export type DatabaseConnectionConfig = {
+  provider: DatabaseProvider
+  host: string
+  port: number
+  database: string
+  username: string
+  password: string
+  sslMode: DatabaseSslMode
+  timeoutMs: number
+}
+
 export type EmailConnectionConfig = {
   smtpHost: string
   smtpPort: number
@@ -130,6 +144,24 @@ export const defaultPaymentConfig = (): PaymentConnectionConfig => ({
   passphrase: '',
   sandbox: true,
   sharedSecret: '',
+})
+
+export const defaultDatabasePort = (provider: DatabaseProvider): number => {
+  if (provider === 'mysql') return 3306
+  if (provider === 'mssql') return 1433
+  if (provider === 'sqlite') return 0
+  return 5432
+}
+
+export const defaultDatabaseConfig = (): DatabaseConnectionConfig => ({
+  provider: 'postgres',
+  host: '',
+  port: 5432,
+  database: '',
+  username: '',
+  password: '',
+  sslMode: 'require',
+  timeoutMs: 15000,
 })
 
 export function parseHttpConfig(raw: Json | null | undefined): HttpConnectionConfig {
@@ -223,6 +255,33 @@ export function parsePaymentConfig(raw: Json | null | undefined): PaymentConnect
   }
 }
 
+export function parseDatabaseConfig(raw: Json | null | undefined): DatabaseConnectionConfig {
+  const base = defaultDatabaseConfig()
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base
+  const obj = raw as Record<string, unknown>
+  const providerRaw = String(obj.provider ?? 'postgres')
+  const provider: DatabaseProvider =
+    providerRaw === 'mysql'
+      ? 'mysql'
+      : providerRaw === 'mssql'
+        ? 'mssql'
+        : providerRaw === 'sqlite'
+          ? 'sqlite'
+          : 'postgres'
+  const sslMode: DatabaseSslMode = obj.sslMode === 'disable' ? 'disable' : 'require'
+  const portRaw = Number(obj.port)
+  return {
+    provider,
+    host: String(obj.host ?? ''),
+    port: Number.isFinite(portRaw) && portRaw > 0 ? portRaw : defaultDatabasePort(provider),
+    database: String(obj.database ?? ''),
+    username: String(obj.username ?? ''),
+    password: String(obj.password ?? ''),
+    sslMode,
+    timeoutMs: Number(obj.timeoutMs ?? 15000) || 15000,
+  }
+}
+
 export function toHttpJson(config: HttpConnectionConfig): Json {
   return {
     baseUrl: config.baseUrl.trim(),
@@ -267,17 +326,32 @@ export function toPaymentJson(config: PaymentConnectionConfig): Json {
   }
 }
 
+export function toDatabaseJson(config: DatabaseConnectionConfig): Json {
+  return {
+    provider: config.provider,
+    host: config.host.trim(),
+    port: config.port,
+    database: config.database.trim(),
+    username: config.username.trim(),
+    password: config.password,
+    sslMode: config.sslMode,
+    timeoutMs: config.timeoutMs,
+  }
+}
+
 export function connectionConfigToJson(
   kind: ConnectionKind,
   configs: {
     http: HttpConnectionConfig
     email: EmailConnectionConfig
     payment: PaymentConnectionConfig
+    database: DatabaseConnectionConfig
   },
 ): Json {
   if (kind === 'http') return toHttpJson(configs.http)
   if (kind === 'email') return toEmailJson(configs.email)
-  return toPaymentJson(configs.payment)
+  if (kind === 'payment') return toPaymentJson(configs.payment)
+  return toDatabaseJson(configs.database)
 }
 
 export function summarizeConnection(kind: ConnectionKind, config: Json): string[] {
@@ -311,6 +385,28 @@ export function summarizeConnection(kind: ConnectionKind, config: Json): string[
       c.sandbox ? 'Mode: sandbox' : 'Mode: live',
       c.passphrase ? 'Passphrase: set' : 'Passphrase: —',
     ]
+  }
+
+  if (kind === 'database') {
+    const c = parseDatabaseConfig(config)
+    const providerLabel =
+      c.provider === 'mysql'
+        ? 'MySQL'
+        : c.provider === 'mssql'
+          ? 'SQL Server (MSSQL)'
+          : c.provider === 'sqlite'
+            ? 'SQLite'
+            : 'PostgreSQL'
+    return [
+      `Provider: ${providerLabel}`,
+      c.provider === 'sqlite'
+        ? `File: ${c.database || '—'}`
+        : `Host: ${c.host || '—'}:${c.port}`,
+      c.provider === 'sqlite' ? null : `Database: ${c.database || '—'}`,
+      c.provider === 'sqlite' ? null : c.username ? `Username: ${c.username}` : 'Username: —',
+      c.provider === 'sqlite' ? null : `SSL: ${c.sslMode === 'require' ? 'Required' : 'Disabled'}`,
+      `Timeout: ${c.timeoutMs}ms`,
+    ].filter(Boolean) as string[]
   }
 
   const c = parseEmailConfig(config)
@@ -373,6 +469,43 @@ export const PAYMENT_PROVIDER_OPTIONS: Array<{ value: PaymentProvider; label: st
     label: 'Custom notify',
     hint: 'Your gateway POSTs to FlowForge /payment/notify with a shared secret or HMAC',
   },
+]
+
+export const DATABASE_PROVIDER_OPTIONS: Array<{
+  value: DatabaseProvider
+  label: string
+  hint: string
+  defaultPort: number
+}> = [
+  {
+    value: 'postgres',
+    label: 'PostgreSQL',
+    hint: 'Supabase, Neon, RDS, and other Postgres hosts. Requires PHP pdo_pgsql on the API host',
+    defaultPort: 5432,
+  },
+  {
+    value: 'mysql',
+    label: 'MySQL',
+    hint: 'MySQL or MariaDB. Requires PHP pdo_mysql on the API host',
+    defaultPort: 3306,
+  },
+  {
+    value: 'mssql',
+    label: 'SQL Server (MSSQL)',
+    hint: 'Microsoft SQL Server / Azure SQL. Requires PHP pdo_sqlsrv (or dblib) on the API host',
+    defaultPort: 1433,
+  },
+  {
+    value: 'sqlite',
+    label: 'SQLite',
+    hint: 'Local .sqlite file on the API host (path must be under the server allowlist). Ideal for demos',
+    defaultPort: 0,
+  },
+]
+
+export const DATABASE_SSL_OPTIONS: Array<{ value: DatabaseSslMode; label: string; hint: string }> = [
+  { value: 'require', label: 'Require SSL', hint: 'Encrypt the connection (recommended for remote hosts)' },
+  { value: 'disable', label: 'Disable SSL', hint: 'Only for trusted private networks' },
 ]
 
 export const VARIABLE_TYPE_OPTIONS: VariableType[] = [

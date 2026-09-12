@@ -14,11 +14,21 @@ import {
 } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import { dispatchWebhook, isFlowForgeApiConfigured } from '@/shared/lib/flowforgeApi'
+import { publicChatUrl } from '@/shared/lib/publicChatUrls'
 import { useDesignerStore } from '@/features/designer/store/designerStore'
-import { nodeTypeLabel, type DesignerEdge, type DesignerNode } from '@/features/designer/model/flowSchema'
+import {
+  getStepOutputVariables,
+  nodeTypeLabel,
+  readSetVariableAssignments,
+  type DesignerEdge,
+  type DesignerNode,
+} from '@/features/designer/model/flowSchema'
 import { suggestNextSteps } from '@/features/designer/model/flowSuggestions'
 import { buildConnectionsMap } from '@/features/connections/connectionValidation'
+import { reconcileStepConnections } from '@/features/connections/bindMissingStepConnections'
 import { listChatbotConnections } from '@/features/connections/connectionApi'
+import { listChatbotIntegrations } from '@/features/integrations/integrationApi'
+import { fetchInstalledEntities } from '@/features/entities/entityApi'
 import { LinearFlowView } from '@/features/designer/views/LinearFlowView'
 import { CanvasFlowView } from '@/features/designer/views/CanvasFlowView'
 import { StepInspector } from '@/features/designer/inspector/StepInspector'
@@ -37,6 +47,7 @@ import { MediaLibraryPanel, useChatbotMedia } from '@/features/designer/MediaLib
 import { mediaKeyFromFilename } from '@/features/designer/model/chatbotMedia'
 import { chatbotTemplatesQueryKey, fetchChatbotTemplates, publishedTemplatesFromRows } from '@/features/templates/templateApi'
 import { DesignerCollabPanel } from '@/features/designer/DesignerCollabPanel'
+import { DesignerAsidePanel } from '@/features/designer/DesignerAsidePanel'
 import { instanceFeatureEnabled } from '@/shared/types/database'
 import {
   dbRowsToDesignerEdges,
@@ -141,6 +152,7 @@ export function DesignerPage() {
   const autosaveTimer = useRef<number | null>(null)
   const savingRef = useRef(false)
   const rehydrateFromServerRef = useRef(false)
+  const autoBoundConnectionsRef = useRef<string | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [asideTopPx, setAsideTopPx] = useState(APP_HEADER_PX + 168)
   const [draftUpdatedAt, setDraftUpdatedAt] = useState<string | null>(null)
@@ -168,6 +180,8 @@ export function DesignerPage() {
   const addNode = useDesignerStore((s) => s.addNode)
   const setMediaKeys = useDesignerStore((s) => s.setMediaKeys)
   const setTemplateKeys = useDesignerStore((s) => s.setTemplateKeys)
+  const setInstalledEntityIds = useDesignerStore((s) => s.setInstalledEntityIds)
+  const setInstalledIntegrationIds = useDesignerStore((s) => s.setInstalledIntegrationIds)
   const undo = useDesignerStore((s) => s.undo)
   const redo = useDesignerStore((s) => s.redo)
 
@@ -217,6 +231,18 @@ export function DesignerPage() {
     queryFn: () => listChatbotConnections(chatbotId!),
   })
 
+  const installedEntities = useQuery({
+    queryKey: ['chatbot-entities', chatbotId],
+    enabled: !!chatbotId,
+    queryFn: () => fetchInstalledEntities(chatbotId!),
+  })
+
+  const installedIntegrations = useQuery({
+    queryKey: ['chatbot-integrations', chatbotId],
+    enabled: !!chatbotId,
+    queryFn: () => listChatbotIntegrations(chatbotId!),
+  })
+
   const mediaQuery = useChatbotMedia(instance.id, chatbotId)
   const templatesQuery = useQuery({
     queryKey: chatbotId ? chatbotTemplatesQueryKey(chatbotId) : ['chatbot-templates', 'none'],
@@ -228,6 +254,38 @@ export function DesignerPage() {
     if (!connections.data) return
     useDesignerStore.getState().setConnections(buildConnectionsMap(connections.data))
   }, [connections.data])
+
+  // Import strips connectionIds; when a clear Demo Lab / sole connection exists, bind steps.
+  useEffect(() => {
+    if (!hydrated || !chatbotId || !connections.data) return
+    const fingerprint = `${chatbotId}:${connections.data
+      .map((c) => c.id)
+      .sort()
+      .join(',')}`
+    if (autoBoundConnectionsRef.current === fingerprint) return
+
+    const state = useDesignerStore.getState()
+    if (state.nodes.length === 0) return
+    const reconciled = reconcileStepConnections(
+      state.nodes,
+      state.edges,
+      connections.data.map((c) => ({ id: c.id, name: c.name, kind: c.kind })),
+    )
+    autoBoundConnectionsRef.current = fingerprint
+    if (!reconciled.changed) return
+    state.setNodesAndEdges(reconciled.nodes, reconciled.edges)
+    state.setConnections(buildConnectionsMap(connections.data))
+  }, [hydrated, chatbotId, connections.data])
+
+  useEffect(() => {
+    if (!installedEntities.isFetched) return
+    setInstalledEntityIds((installedEntities.data ?? []).map((e) => e.id))
+  }, [installedEntities.data, installedEntities.isFetched, setInstalledEntityIds])
+
+  useEffect(() => {
+    if (!installedIntegrations.isFetched) return
+    setInstalledIntegrationIds((installedIntegrations.data ?? []).map((i) => i.id))
+  }, [installedIntegrations.data, installedIntegrations.isFetched, setInstalledIntegrationIds])
 
   useEffect(() => {
     if (!mediaQuery.isFetched) return
@@ -250,6 +308,7 @@ export function DesignerPage() {
   useEffect(() => {
     setHydrated(false)
     rehydrateFromServerRef.current = false
+    autoBoundConnectionsRef.current = null
   }, [chatbotId])
 
   useEffect(() => {
@@ -261,23 +320,66 @@ export function DesignerPage() {
     if (hydrated && sameFlow && !rehydrateFromServerRef.current) {
       setLastSavedAt(new Date(flowBundle.data.flow.updated_at))
       setDraftUpdatedAt(flowBundle.data.flow.updated_at)
+      // Connections often resolve after the first hydrate — still bind/prune once.
+      if (connections.data?.length && chatbotId) {
+        const fingerprint = `${chatbotId}:${connections.data
+          .map((c) => c.id)
+          .sort()
+          .join(',')}`
+        if (autoBoundConnectionsRef.current !== fingerprint) {
+          const state = useDesignerStore.getState()
+          const reconciled = reconcileStepConnections(
+            state.nodes,
+            state.edges,
+            connections.data.map((c) => ({ id: c.id, name: c.name, kind: c.kind })),
+          )
+          autoBoundConnectionsRef.current = fingerprint
+          if (reconciled.changed) {
+            state.setNodesAndEdges(reconciled.nodes, reconciled.edges)
+            state.setConnections(buildConnectionsMap(connections.data))
+          }
+        }
+      }
       return
     }
     rehydrateFromServerRef.current = false
     const mapped = mapDbToDesigner(flowBundle.data.nodes, flowBundle.data.edges)
+    let nodes = mapped.nodes
+    let edges = mapped.edges
+    let rebounded = false
+    if (connections.data?.length) {
+      const reconciled = reconcileStepConnections(
+        mapped.nodes,
+        mapped.edges,
+        connections.data.map((c) => ({ id: c.id, name: c.name, kind: c.kind })),
+      )
+      nodes = reconciled.nodes
+      edges = reconciled.edges
+      rebounded = reconciled.changed
+      autoBoundConnectionsRef.current = `${chatbotId}:${connections.data
+        .map((c) => c.id)
+        .sort()
+        .join(',')}`
+    } else {
+      autoBoundConnectionsRef.current = null
+    }
     setFlow({
       flowId: incomingId,
-      nodes: mapped.nodes,
-      edges: mapped.edges,
+      nodes,
+      edges,
       globalVariables: flowBundle.data.globalVariables,
     })
     if (connections.data) {
       useDesignerStore.getState().setConnections(buildConnectionsMap(connections.data))
     }
+    // setFlow clears dirty; re-mark so autosave persists rebound connectionIds / pruned steps.
+    if (rebounded) {
+      useDesignerStore.getState().setNodesAndEdges(nodes, edges)
+    }
     setLastSavedAt(new Date(flowBundle.data.flow.updated_at))
     setDraftUpdatedAt(flowBundle.data.flow.updated_at)
     setHydrated(true)
-  }, [flowBundle.data, setFlow, hydrated, connections.data])
+  }, [flowBundle.data, setFlow, hydrated, connections.data, chatbotId])
 
   useEffect(() => {
     if (!hydrated) return
@@ -433,22 +535,21 @@ export function DesignerPage() {
         label: e.label ?? null,
       }))
       const stepVars = merged.nodes
-        .map((n) => {
-          const key =
-            typeof n.config.outputVariable === 'string'
-              ? n.config.outputVariable
-              : typeof n.config.variableKey === 'string'
-                ? n.config.variableKey
-                : ''
-          if (!key.trim()) return null
-          if (!['question', 'http', 'operation', 'set_variable', 'entity'].includes(n.type)) return null
-          return {
-            key: key.trim(),
-            value_type: 'string',
-            source_node_key: n.key,
-          }
+        .flatMap((n) => {
+          if (!['question', 'http', 'database', 'operation', 'set_variable', 'entity', 'sign_in'].includes(n.type)) return []
+          const keys = getStepOutputVariables(n)
+          const setRows =
+            n.type === 'set_variable' ? readSetVariableAssignments(n.config) : []
+          return keys.map((key) => {
+            const assign = setRows.find((row) => row.variableKey.trim() === key)
+            return {
+              key,
+              value_type: assign?.valueType ?? 'string',
+              source_node_key: n.key,
+            }
+          })
         })
-        .filter(Boolean)
+        .filter((row, index, all) => all.findIndex((other) => other.key === row.key) === index)
 
       const expected = expectedUpdatedAt ?? server.updatedAt
       const { data: savedAt, error } = await supabase.rpc('save_flow_draft', {
@@ -768,9 +869,8 @@ export function DesignerPage() {
   const stagingPublicUrl = useMemo(() => {
     const slug = (chatbot.data?.public_slug ?? '').trim()
     if (!slug || stagingStatus?.kind !== 'live') return null
-    const basename = (import.meta.env.BASE_URL as string).replace(/\/$/, '')
-    return `${window.location.origin}${basename}/c/${slug}?env=staging`
-  }, [chatbot.data?.public_slug, stagingStatus?.kind])
+    return publicChatUrl(instance.slug, slug, { query: 'env=staging' })
+  }, [chatbot.data?.public_slug, stagingStatus?.kind, instance.slug])
 
   const canPublish =
     editable &&
@@ -815,7 +915,7 @@ export function DesignerPage() {
           </div>
         ) : null}
         <div className="flex flex-wrap gap-1.5">
-          {(['message', 'question', 'http', 'email', 'integration', 'handoff', 'transfer', 'condition', 'loop', 'set_variable', 'operation', 'entity'] as FlowNodeType[]).map(
+          {(['message', 'question', 'button', 'http', 'database', 'email', 'integration', 'handoff', 'transfer', 'sign_in', 'condition', 'switch', 'skip_to', 'loop', 'set_variable', 'operation', 'entity'] as FlowNodeType[]).map(
             (t) => (
               <Button key={t} size="sm" variant="secondary" onClick={() => addNode(t, selectedNodeId)}>
                 + {nodeTypeLabel(t)}
@@ -827,13 +927,13 @@ export function DesignerPage() {
     ) : null
 
   const inspectorCard = (
-    <Card
-      className={cn(
-        'h-fit',
-        canvasFullscreen
-          ? 'flex h-full max-h-full flex-col overflow-y-auto'
-          : 'lg:sticky lg:top-[var(--ff-designer-aside-top,5rem)] lg:max-h-[calc(100vh-var(--ff-designer-aside-top,7.5rem)-1.5rem)] lg:overflow-y-auto',
-      )}
+    <DesignerAsidePanel
+      panelId="inspector"
+      title="Step"
+      subtitle={selected ? `${selected.label} · ${nodeTypeLabel(selected.type)}` : 'Select a step to configure'}
+      defaultOpen
+      widthClass="lg:w-80"
+      className={canvasFullscreen ? 'h-full max-h-full' : undefined}
     >
       {selected ? (
         <StepInspector
@@ -857,9 +957,9 @@ export function DesignerPage() {
           }
         />
       ) : (
-        <p className="text-sm text-[var(--color-ink-muted)]">Select a step to configure it.</p>
+        <p className="text-sm text-[var(--color-ink-muted)]">Select a step in the flow to configure it.</p>
       )}
-    </Card>
+    </DesignerAsidePanel>
   )
 
   const canvasView = (
@@ -1147,8 +1247,8 @@ export function DesignerPage() {
         className={cn(
           'grid gap-4',
           instanceFeatureEnabled(instance, 'collaborative_editing')
-            ? 'lg:grid-cols-[280px_minmax(0,1fr)_320px_minmax(240px,280px)]'
-            : 'lg:grid-cols-[280px_minmax(0,1fr)_320px]',
+            ? 'lg:grid-cols-[280px_minmax(0,1fr)_auto_auto]'
+            : 'lg:grid-cols-[280px_minmax(0,1fr)_auto]',
         )}
       >
         <ProblemsPanel
@@ -1196,7 +1296,7 @@ export function DesignerPage() {
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_auto]">
                 <div className="min-h-0 min-w-0">{canvasView}</div>
                 <div className="min-h-0 overflow-hidden">{inspectorCard}</div>
               </div>

@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useRef, useState } from 'react'
-import { Database, Download, LayoutTemplate, Settings2, Workflow } from 'lucide-react'
+import { Database, Download, LayoutTemplate, Radio, Settings2, Workflow } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { downloadJson } from '@/shared/lib/downloadJson'
 import {
@@ -19,6 +19,7 @@ import { fetchChatbotTestScenarios } from '@/features/designer/preview/testScena
 const tabs = [
   { end: true, suffix: '', label: 'Settings', icon: Settings2 },
   { end: false, suffix: '/design', label: 'Design', icon: Workflow },
+  { end: false, suffix: '/test', label: 'Test', icon: Radio },
   { end: false, suffix: '/templates', label: 'Templates', icon: LayoutTemplate },
   { end: false, suffix: '/data', label: 'Data', icon: Database },
 ] as const

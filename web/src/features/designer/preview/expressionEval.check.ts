@@ -3,6 +3,7 @@
  */
 import { format } from 'date-fns'
 import {
+  collectPathRefs,
   interpolateTemplate,
   parseJsonValue,
   resolveExpressionValue,
@@ -143,6 +144,33 @@ assert(interpolateTemplate('{{media.logo_png.filename}}', mediaObjCtx) === 'logo
 assert(interpolateTemplate('x {{media.logo_png}}', mediaObjCtx) === 'x https://cdn.example/logo.png', 'media object as url')
 const preview = interpolateTemplate('Hi {{renderFile(media.logo_png)}}', { ...mediaObjCtx, embedMedia: true })
 assert(preview.startsWith('Hi <<ff:file:'), `renderFile embed got ${preview}`)
+const ytEmbed = interpolateTemplate(
+  '{{embed("https://www.youtube.com/watch?v=dQw4w9WgXcQ")}}',
+  { ...ctx, embedMedia: true },
+)
+assert(ytEmbed.startsWith('<<ff:embed:'), `embed youtube got ${ytEmbed}`)
+const xEmbed = interpolateTemplate('{{embed("https://x.com/demo/status/1234567890123456789")}}', {
+  ...ctx,
+  embedMedia: true,
+})
+assert(xEmbed.startsWith('<<ff:embed:'), `embed x got ${xEmbed}`)
+assert(
+  interpolateTemplate('{{embed("https://www.youtube.com/watch?v=dQw4w9WgXcQ")}}', ctx) ===
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  'embed without chat context returns URL',
+)
+assert(
+  JSON.stringify(collectPathRefs('{{embed("https://www.youtube.com/watch?v=dQw4w9WgXcQ")}}')) === '[]',
+  'embed URL expression has no path refs',
+)
+assert(
+  JSON.stringify(collectPathRefs('{{embed(vars.video_url)}}')) === '["vars.video_url"]',
+  'embed var still collects path ref',
+)
+assert(
+  JSON.stringify(collectPathRefs('Hi {{parseJson(vars.jsonStr).n}}')) === '["vars.jsonStr"]',
+  'parseJson still collects path ref',
+)
 assert(interpolateTemplate('{{media.logo_png.type}}', mediaObjCtx) === 'image', 'media type')
 
 assert(resolveExpressionValue('{{startsWith("FlowForge", "Flow")}}', ctx) === true, 'startsWith')

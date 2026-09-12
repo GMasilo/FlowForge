@@ -13,6 +13,7 @@ import {
   type DocumentFormat,
   type DocumentLayout,
   type DocumentOrientation,
+  type DocumentTableColumn,
   type ShopCartValue,
 } from '@/features/templates/templateModel'
 
@@ -52,6 +53,11 @@ export type FilledDocument = {
   body: string
   footer: string
   fields: FilledDocumentField[]
+  /** Multi-row table from tableRowsSource + tableColumns (Excel-friendly). */
+  table: {
+    headers: string[]
+    rows: string[][]
+  } | null
   cart: {
     currency: string
     subtotal: string
@@ -82,9 +88,12 @@ function imageUrlFromValue(value: unknown): string | null {
     return null
   }
   const file = parseConversationFileValue(value)
+  if (file?.dataUrl) return file.dataUrl
   if (file?.url) return file.url
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const rec = value as Record<string, unknown>
+    const dataUrl = typeof rec.dataUrl === 'string' ? rec.dataUrl.trim() : ''
+    if (dataUrl.startsWith('data:image/')) return dataUrl
     const url = typeof rec.url === 'string' ? rec.url.trim() : ''
     if (url && (/^https?:\/\//i.test(url) || url.startsWith('blob:') || url.startsWith('data:image/'))) {
       return url
@@ -133,6 +142,96 @@ function cartSnapshot(cart: ShopCartValue | null): FilledDocument['cart'] {
   }
 }
 
+function readPath(row: unknown, path: string): unknown {
+  const parts = path.split('.').map((p) => p.trim()).filter(Boolean)
+  if (!parts.length) return undefined
+  let cur: unknown = row
+  for (const part of parts) {
+    if (cur == null) return undefined
+    if (Array.isArray(cur)) {
+      const idx = Number(part)
+      if (!Number.isInteger(idx) || idx < 0 || idx >= cur.length) return undefined
+      cur = cur[idx]
+      continue
+    }
+    if (typeof cur !== 'object') return undefined
+    cur = (cur as Record<string, unknown>)[part]
+  }
+  return cur
+}
+
+/** Coerce eval result into a plain array of row values. */
+export function coerceTableRowsSource(value: unknown): unknown[] {
+  if (value == null) return []
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    try {
+      return coerceTableRowsSource(JSON.parse(trimmed))
+    } catch {
+      return trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+    }
+  }
+  if (Array.isArray(value)) return value
+  if (typeof value === 'object') {
+    const rec = value as Record<string, unknown>
+    if (Array.isArray(rec.items)) return rec.items
+    if (Array.isArray(rec.rows)) return rec.rows
+    if (Array.isArray(rec.data)) return rec.data
+  }
+  return []
+}
+
+function inferColumns(rows: unknown[]): DocumentTableColumn[] {
+  const firstObj = rows.find((row) => row && typeof row === 'object' && !Array.isArray(row)) as
+    | Record<string, unknown>
+    | undefined
+  if (firstObj) {
+    return Object.keys(firstObj).map((key) => ({ key, label: key }))
+  }
+  const firstArr = rows.find((row) => Array.isArray(row)) as unknown[] | undefined
+  if (firstArr?.length) {
+    return firstArr.map((_, i) => ({ key: String(i), label: `Column ${i + 1}` }))
+  }
+  return [{ key: '0', label: 'Value' }]
+}
+
+export function buildFilledTable(
+  source: unknown,
+  columns: DocumentTableColumn[],
+): FilledDocument['table'] {
+  const rows = coerceTableRowsSource(source)
+  if (!rows.length) return null
+  const cols =
+    columns.filter((c) => c.key.trim() || c.label.trim()).length > 0
+      ? columns
+          .filter((c) => c.key.trim() || c.label.trim())
+          .map((c) => ({
+            key: c.key.trim() || c.label.trim(),
+            label: c.label.trim() || c.key.trim(),
+          }))
+      : inferColumns(rows)
+  if (!cols.length) return null
+
+  const headers = cols.map((c) => c.label || c.key)
+  const outRows = rows.map((row) =>
+    cols.map((col, colIdx) => {
+      if (Array.isArray(row)) {
+        const idx = Number(col.key)
+        if (Number.isInteger(idx) && idx >= 0 && idx < row.length) {
+          return stringifyValue(row[idx])
+        }
+        return stringifyValue(row[colIdx] ?? '')
+      }
+      if (row && typeof row === 'object') {
+        return stringifyValue(readPath(row, col.key))
+      }
+      return colIdx === 0 ? stringifyValue(row) : ''
+    }),
+  )
+  return { headers, rows: outRows }
+}
+
 export function fillDocumentSnapshot(
   content: DocumentContent,
   evalText: (source: string) => string,
@@ -151,6 +250,9 @@ export function fillDocumentSnapshot(
       }
       return { label, text: evalText(f.value), imageUrl: null }
     })
+  const tableSource = content.tableRowsSource.trim()
+    ? evalValue(content.tableRowsSource)
+    : null
   return {
     format,
     filename,
@@ -160,6 +262,7 @@ export function fillDocumentSnapshot(
     body: evalText(content.body),
     footer: evalText(content.footer),
     fields,
+    table: tableSource != null ? buildFilledTable(tableSource, content.tableColumns) : null,
     cart: content.includeCart || content.blocks.some((b) => b.type === 'cart') ? cartSnapshot(findCartInVars(vars)) : null,
     layout: content.layout === 'page' ? 'page' : 'flow',
     orientation: content.orientation === 'landscape' ? 'landscape' : 'portrait',
@@ -256,6 +359,19 @@ export function parseFilledDocument(raw: unknown): FilledDocument | null {
     : []
   const cartRaw =
     rec.cart && typeof rec.cart === 'object' && !Array.isArray(rec.cart) ? (rec.cart as Record<string, unknown>) : null
+  const tableRaw =
+    rec.table && typeof rec.table === 'object' && !Array.isArray(rec.table)
+      ? (rec.table as Record<string, unknown>)
+      : null
+  const table =
+    tableRaw && Array.isArray(tableRaw.headers) && Array.isArray(tableRaw.rows)
+      ? {
+          headers: tableRaw.headers.map((h) => String(h ?? '')),
+          rows: tableRaw.rows.map((row) =>
+            Array.isArray(row) ? row.map((cell) => String(cell ?? '')) : [String(row ?? '')],
+          ),
+        }
+      : null
   const blocks = Array.isArray(rec.blocks)
     ? rec.blocks
         .map((item) => {
@@ -306,6 +422,7 @@ export function parseFilledDocument(raw: unknown): FilledDocument | null {
     body: typeof rec.body === 'string' ? rec.body : '',
     footer: typeof rec.footer === 'string' ? rec.footer : '',
     fields,
+    table,
     layout: rec.layout === 'page' ? 'page' : ('flow' as DocumentLayout),
     orientation: (rec.orientation === 'landscape' ? 'landscape' : 'portrait') as DocumentOrientation,
     blocks,

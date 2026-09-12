@@ -7,6 +7,7 @@ require_once __DIR__ . '/lib/Security.php';
 require_once __DIR__ . '/lib/RateLimiter.php';
 require_once __DIR__ . '/lib/HttpClient.php';
 require_once __DIR__ . '/lib/Mailer.php';
+require_once __DIR__ . '/lib/DatabaseClient.php';
 require_once __DIR__ . '/lib/SupabaseRest.php';
 require_once __DIR__ . '/lib/PlatformMail.php';
 
@@ -33,7 +34,7 @@ function flowforge_bootstrap(array $methods = ['POST']): array
     Security::onlyMethods($methods);
 
     $user = Auth::requireUser($config);
-    RateLimiter::hit($config, $user['sub']);
+    RateLimiter::hit($config, (string) ($user['token_id'] ?? $user['sub']));
 
     return ['config' => $config, 'user' => $user];
 }
@@ -84,7 +85,7 @@ function flowforge_finalize_auth(array $config, array $body): array
     }
 
     $user = Auth::requireUser($config);
-    RateLimiter::hit($config, $user['sub']);
+    RateLimiter::hit($config, (string) ($user['token_id'] ?? $user['sub']));
     return ['user' => $user, 'anon' => false];
 }
 

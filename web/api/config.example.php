@@ -56,6 +56,12 @@ return [
     // Example: ['api.example.com', 'hooks.zapier.com']
     'http_host_allowlist' => [],
 
+    // Absolute directories (or files) SQLite Database connections may open on this API host.
+    // Empty = SQLite connections are rejected. Demo suite uses …/flowforge/demo/data
+    'sqlite_path_allowlist' => [
+        // __DIR__ . '/../demo/data',
+    ],
+
     // Optional absolute URL of this API, used as PayFast notify_url.
     // Example: 'https://gkjtt.co.za/flowforge/api'
     'public_api_url' => 'https://gkjtt.co.za/flowforge/api',

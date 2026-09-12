@@ -1,5 +1,5 @@
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
-import { getStepOutputVariable } from '@/features/designer/model/flowSchema'
+import { getStepOutputVariable, nodeTypeLabel, readSetVariableAssignments } from '@/features/designer/model/flowSchema'
 import {
   buildPublishedGraph,
   parsePublishedGraph,
@@ -11,7 +11,6 @@ import { supabase } from '@/shared/lib/supabase'
 import type { Json, VariableType } from '@/shared/types/database'
 import { collectStoreImageFilenames, templatesExprMap } from '@/features/templates/templateModel'
 import { instanceFileUrl, isFlowForgeApiConfigured } from '@/shared/lib/flowforgeApi'
-import { nodeTypeLabel } from '@/features/designer/model/flowSchema'
 
 export type TransferSourceOption = {
   /** Stored mapping source, e.g. `{{vars.email}}`. */
@@ -91,7 +90,7 @@ export function listTransferSourceOptions(args: {
     }
 
     if (n.type === 'integration') {
-      const key = String(n.config.resultVariable ?? '').trim()
+      const key = String(n.config.outputVariable ?? n.config.resultVariable ?? '').trim()
       if (key) add(`{{vars.${key}}}`, key, `from ${n.key}`)
     }
 
@@ -162,12 +161,14 @@ export function listTransferTargetOptions(args: {
       const key = String(cfg.outputVariable ?? '').trim()
       if (key) add(key, key, `step ${n.key}`)
     } else if (n.type === 'set_variable') {
-      const key = String(cfg.variableKey ?? '').trim()
-      if (key) add(key, key, `step ${n.key}`)
+      for (const row of readSetVariableAssignments(cfg)) {
+        const key = row.variableKey.trim()
+        if (key) add(key, key, `step ${n.key}`)
+      }
     }
 
     if (n.type === 'integration') {
-      const key = String(cfg.resultVariable ?? '').trim()
+      const key = String(cfg.outputVariable ?? cfg.resultVariable ?? '').trim()
       if (key) add(key, key, `step ${n.key}`)
     }
 
@@ -200,6 +201,8 @@ export type TransferStepConfig = {
   message: string
   passAllVariables: boolean
   variableMappings: TransferVariableMapping[]
+  /** When true, transfer back to {{vars._transferred_from}} instead of a fixed chatbot. */
+  returnToPrevious: boolean
 }
 
 export type TransferEntrySettings = {
@@ -225,6 +228,7 @@ export function parseTransferConfig(config: Record<string, unknown> | undefined 
     message: String(raw.message ?? ''),
     passAllVariables: raw.passAllVariables === true,
     variableMappings: mappings,
+    returnToPrevious: raw.returnToPrevious === true,
   }
 }
 
@@ -366,10 +370,15 @@ export function findStartNodeId(
   const key = (startNodeKey ?? '').trim()
   if (key) {
     const hit = nodes.find((n) => n.key === key)
-    if (hit) return hit.id
+    if (hit) {
+      if (hit.type === 'end') {
+        throw new Error('Cannot start transfer on an End step')
+      }
+      return hit.id
+    }
   }
   const incoming = new Set(edges.map((e) => e.target))
-  const root = nodes.find((n) => !incoming.has(n.id)) ?? nodes[0]
+  const root = nodes.find((n) => !incoming.has(n.id) && n.type !== 'end') ?? nodes.find((n) => n.type !== 'end') ?? nodes[0]
   return root?.id ?? null
 }
 
@@ -406,6 +415,7 @@ export function applyGraphTransfer(args: {
     phase: currentId ? { kind: 'typing' } : { kind: 'finished' },
     loopStack: [],
     otpChallenge: null,
+    signInAttempts: null,
     captchaChallenge: null,
     mediaCatalog: catalog,
     media: mediaExprMap(catalog),
@@ -564,10 +574,18 @@ export async function executeChatbotTransfer(args: {
   name: string
 }> {
   const config = parseTransferConfig(args.node.config)
-  if (!config.targetChatbotId) {
+  let targetChatbotId = config.targetChatbotId
+  if (config.returnToPrevious) {
+    const prev = String(args.state.vars._transferred_from ?? '').trim()
+    if (!prev) {
+      throw new Error('Cannot return: no previous chatbot on this conversation')
+    }
+    targetChatbotId = prev
+  }
+  if (!targetChatbotId) {
     throw new Error('Select a target chatbot on the Transfer step')
   }
-  if (config.targetChatbotId === args.fromChatbotId) {
+  if (targetChatbotId === args.fromChatbotId) {
     throw new Error('Cannot transfer to the same chatbot')
   }
 
@@ -576,13 +594,20 @@ export async function executeChatbotTransfer(args: {
     throw new Error('Organisation required for transfer')
   }
   const target = await fetchTargetChatbotGraph({
-    chatbotId: config.targetChatbotId,
+    chatbotId: targetChatbotId,
     instanceId: args.instanceId,
     environment: env,
     preferDraft: args.mode === 'preview',
   })
 
   const required = parseTransferEntrySettings(target.settings).requiredVariables
+  const startKey = config.startNodeKey.trim()
+  if (startKey) {
+    const startNode = target.graph.nodes.find((n) => n.key === startKey)
+    if (startNode?.type === 'end') {
+      throw new Error('Cannot start transfer on an End step')
+    }
+  }
   const { vars: mapped, providedKeys } = buildTransferVariables({
     config,
     sourceVars: args.state.vars,
@@ -594,6 +619,23 @@ export async function executeChatbotTransfer(args: {
 
   const missing = missingRequiredTransferVariables(required, mapped, providedKeys)
   if (missing.length) {
+    if (args.mode === 'public' && args.sessionId) {
+      try {
+        await supabase.rpc('append_conversation_event', {
+          p_session_id: args.sessionId,
+          p_kind: 'session.transfer_failed',
+          p_node_key: args.node.key,
+          p_payload: {
+            reason: 'missing_required_variables',
+            missing,
+            target_chatbot_id: targetChatbotId,
+            return_to_previous: config.returnToPrevious,
+          } as Json,
+        })
+      } catch {
+        /* best-effort analytics */
+      }
+    }
     throw new Error(`Missing required transfer variables: ${missing.join(', ')}`)
   }
 
@@ -601,7 +643,7 @@ export async function executeChatbotTransfer(args: {
     if (!args.sessionId) throw new Error('Session required for transfer')
     await transferPublicConversation({
       sessionId: args.sessionId,
-      targetChatbotId: config.targetChatbotId,
+      targetChatbotId,
       startNodeKey: config.startNodeKey || null,
       variables: mapped,
       fromNodeKey: args.node.key,
@@ -631,7 +673,7 @@ export async function executeChatbotTransfer(args: {
           instanceFileUrl({
             kind: 'media',
             instanceId: args.instanceId,
-            chatbotId: config.targetChatbotId,
+            chatbotId: targetChatbotId,
             filename,
           }),
         )
@@ -663,19 +705,20 @@ export async function executeChatbotTransfer(args: {
       finishedAt: now,
       durationMs: 0,
       inputs: {
-        targetChatbotId: config.targetChatbotId,
+        targetChatbotId,
         startNodeKey: config.startNodeKey || null,
+        returnToPrevious: config.returnToPrevious,
       },
       processed: { mappedKeys: Object.keys(mapped) },
-      outputs: { chatbotId: config.targetChatbotId, name: target.name },
+      outputs: { chatbotId: targetChatbotId, name: target.name },
       savedAs: null,
     },
   ]
 
   return {
-    state: { ...nextState, runs },
+    state: { ...nextState, runs, chatbotId: targetChatbotId },
     graph: target.graph,
-    chatbotId: config.targetChatbotId,
+    chatbotId: targetChatbotId,
     name: target.name,
   }
 }

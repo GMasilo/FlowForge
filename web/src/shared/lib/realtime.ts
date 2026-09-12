@@ -54,6 +54,35 @@ export function subscribeInbox(
   return channel
 }
 
+export function subscribeChatbotStagingSessions(
+  chatbotId: string,
+  onChange: () => void,
+): RealtimeChannel {
+  const channel = supabase
+    .channel(`chatbot:${chatbotId}:staging-sessions`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'conversation_sessions',
+        filter: `chatbot_id=eq.${chatbotId}`,
+      },
+      () => onChange(),
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'conversation_events',
+      },
+      () => onChange(),
+    )
+    .subscribe()
+  return channel
+}
+
 /** Live updates for agent online/away/offline presence on an instance. */
 export function subscribeAgentPresence(
   instanceId: string,

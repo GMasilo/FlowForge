@@ -1,7 +1,9 @@
 import type { FlowNodeType, QuestionAnswerType } from '@/shared/types/database'
 import {
   QUESTION_ANSWER_TYPE_OPTIONS,
+  answerTypeUsesChoices,
   getStepOutputVariable,
+  getStepOutputVariables,
   readFormFields,
   slugFormFieldKey,
   type DesignerEdge,
@@ -69,8 +71,7 @@ function takenVariables(nodes: DesignerNode[], exceptNodeId?: string): Set<strin
   const taken = new Set<string>()
   for (const n of nodes) {
     if (n.id === exceptNodeId) continue
-    const key = getStepOutputVariable(n)
-    if (key) taken.add(key)
+    for (const key of getStepOutputVariables(n)) taken.add(key)
     if (n.type === 'question' && String(n.config.answerType ?? '') === 'form') {
       for (const field of readFormFields(n.config)) taken.add(field.key)
     }
@@ -1048,6 +1049,32 @@ export function suggestNextSteps(args: {
       label: 'Continue',
       reason: 'A shared step after both branches',
       score: 0.55,
+    })
+  }
+
+  if (previous?.type === 'switch') {
+    push({
+      type: 'message',
+      label: 'Continue',
+      reason: 'A shared step after all switch cases',
+      score: 0.55,
+    })
+  }
+
+  if (previous?.type === 'question' && answerTypeUsesChoices(String(previous.config.answerType ?? ''))) {
+    push({
+      type: 'switch',
+      label: 'Switch on answer',
+      reason: 'Route by the choice the visitor picked',
+      score: 0.62,
+      seed: {
+        label: 'Switch',
+        config: {
+          value: previous.config.outputVariable
+            ? `{{vars.${String(previous.config.outputVariable)}}}`
+            : `{{steps.${previous.key}}}`,
+        },
+      },
     })
   }
 

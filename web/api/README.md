@@ -2,20 +2,87 @@
 
 Base URL: `https://gkjtt.co.za/flowforge/api/`
 
-## Endpoints
+## OpenAPI & Postman
+
+The Platform API (`/v1`) is a **read API for chatbot-rich data**: organisations, chatbots, published flow JSON, export packs, media, templates, entities, conversations (transcripts), and analytics.
+
+Runtime helpers (HTTP proxy, SMTP, payments, SCIM, file upload) stay on their existing paths and are not this contract.
+
+| Resource | URL |
+|----------|-----|
+| Interactive docs (Redoc) | `GET /docs` |
+| OpenAPI JSON | `GET /openapi.json` |
+| Postman Collection v2.1 | `GET /postman.json` |
+| Postman Environment | `GET /postman-environment.json` |
+
+**Auth:** Organisation owners/admins create a long-lived Platform API token on Admin → Security (`ffpat_…`, shown once). Send `Authorization: Bearer <token>`. The PHP API verifies the token and reads the database with the configured service_role key. Never send anon/service_role from the client. Session JWTs from `/docs/api` still work but expire.
+
+**Postman:** File → Import → `openapi.json`, **or** import `postman.json` plus the environment. Set `baseUrl` and paste a Platform API token (or a session JWT) into `accessToken`. Then `GET /v1/me`.
+
+In-app guide: `/docs/api`. Regenerating committed copies for the SPA:
+
+```bash
+php web/api/tools/export-openapi.php
+```
+
+## Platform data API (`/v1`)
+
+JWT or a long-lived `ffpat_` organisation token required. API tokens only see that organisation.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/v1/me` | User + organisation roles |
+| GET | `/v1/organisations` | List organisations |
+| GET | `/v1/organisations/{id}` | Organisation profile |
+| GET | `/v1/organisations/{id}/chatbots` | List chatbots |
+| GET | `/v1/organisations/{id}/conversations` | List sessions |
+| GET | `/v1/organisations/{id}/analytics` | Volume, completion, drop-off |
+| GET | `/v1/chatbots/{id}` | Chatbot + settings |
+| GET | `/v1/chatbots/{id}/flow` | Published (or `?environment=staging`) graph JSON |
+| GET | `/v1/chatbots/{id}/export` | Designer pack (`flowforge.chatbotFlow`) |
+| GET | `/v1/chatbots/{id}/media` | Media library listing |
+| GET | `/v1/chatbots/{id}/templates` | Templates |
+| GET | `/v1/chatbots/{id}/variables` | Variables |
+| GET | `/v1/chatbots/{id}/entities` | Entity schemas |
+| GET | `/v1/chatbots/{id}/entities/{entityId}/records` | Entity records |
+| GET | `/v1/chatbots/{id}/conversations` | Sessions for one bot |
+| GET | `/v1/chatbots/{id}/analytics` | Chatbot analytics |
+| GET | `/v1/conversations/{id}` | Session + variables |
+| GET | `/v1/conversations/{id}/events` | Transcript |
+| GET | `/v1/conversations/{id}/files` | Uploads for the session |
+
+Query params on lists: `limit`, `offset`. Conversations also accept `status`, `environment`, `from`, `to`. Analytics: `days` (default 30), `environment`.
+
+## Runtime endpoints
+
+These are used internally by designer/public chat (not the Platform data contract):
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/health` | none | Liveness |
-| POST | `/http/execute` | Supabase JWT | Proxy outbound HTTP using a connection config |
-| POST | `/email/send` | Supabase JWT | Send email via SMTP connection config |
-| POST | `/email/test` | Supabase JWT | Verify SMTP host + auth (no message sent) |
-| POST | `/email/invite` | Supabase JWT | Send organisation invite email (platform SMTP) |
-| POST | `/url/preview` | Supabase JWT | Fetch public URL title/description for link previews |
-| POST | `/file/upload` | JWT (media) or `session_id` (conversation) | Store instance files; creates folders on demand |
+| GET/POST | `/auth/check` | optional Bearer | Diagnose JWT / JWKS config |
+| POST | `/http/execute` | JWT or `session_id` | Proxy outbound HTTP using a connection |
+| POST | `/database/execute` | JWT or `session_id` | Run parameterized SQL via a database connection (Postgres / MySQL / MSSQL) |
+| POST | `/email/send` | JWT or `session_id` | Send email via SMTP connection |
+| POST | `/email/test` | JWT | Verify SMTP host + auth (no message sent) |
+| POST | `/email/invite` | JWT | Send organisation invite email |
+| POST | `/email/invite-member` | JWT | Add member/invite and send email |
+| POST | `/email/invite-resend` | JWT | Resend a pending invite |
+| POST | `/url/preview` | JWT | Fetch public URL title/description for link previews |
+| POST | `/file/upload` | JWT (media) or `session_id` (conversation) | Store instance files |
 | GET | `/file/get` | none (media) / JWT or `session_id` (conversation) | Stream a stored instance file |
 | GET | `/file/list` | JWT | List media or conversation files for a chatbot |
 | POST | `/file/delete` | JWT (editor+) | Delete a stored instance file |
+| POST | `/file/purge` | JWT (owner/admin) | Delete all files for a chatbot |
+| POST | `/webhooks/dispatch` | JWT | Fan-out an event to organisation webhooks |
+| POST | `/webhooks/emit_session` | `session_id` | Emit conversation completed/failed webhooks |
+| POST | `/payment/start` | JWT or `session_id` | Create a payment intent / checkout |
+| POST | `/payment/notify` | gateway signature | PayFast ITN / custom notify |
+| POST | `/payment/status` | JWT or `session_id` | Poll payment intent status |
+| GET | `/chat/appearance` | none | Public embed branding for a slug |
+| POST | `/integration/execute` | JWT or `session_id` | Run a connected integration action |
+| GET/POST | `/alerts/run` | `alerts_cron_secret` | Evaluate alert rules (cron) |
+| * | `/scim/v2/*` | SCIM token | SCIM 2.0 Users provisioning |
 
 All authenticated JSON requests require:
 
@@ -68,7 +135,23 @@ List query: `GET /file/list?kind=media&instance_id=…&chatbot_id=…` (JWT). De
    If `files/` is not writable, uploads fall back to `storage/files`. If `storage/` is not writable, rate limiting falls back to the system temp dir.
 6. Needs PHP 8.1+, `curl`, OpenSSL. PHP `upload_max_filesize` and `post_max_size` must be at least `files_max_bytes` (default 10 MiB).
 
+## HTTP mock / tests
+
+Hosted mock upstream (for Sign-in / HTTP connections via `/http/execute`):
+
+**`https://gkjtt.co.za/flowforge/api/test`** — e.g. `POST …/test/auth/login`
+
+Harness sources (`run.php`, scenarios) stay blocked; only the mock router is public. Details: [`test/README.md`](test/README.md).
+
+```bash
+# Local mock + CLI
+php -S 127.0.0.1:8099 web/api/test/mock-upstream.php
+php web/api/test/run.php
+php web/api/test/run.php --base=https://gkjtt.co.za/flowforge/api/test
+```
+
 ## Frontend env
+
 
 ```env
 VITE_FLOWFORGE_API_URL=https://gkjtt.co.za/flowforge/api

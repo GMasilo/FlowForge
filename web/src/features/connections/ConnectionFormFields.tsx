@@ -3,9 +3,13 @@ import {
   EMAIL_ENCRYPTION_OPTIONS,
   HTTP_AUTH_OPTIONS,
   PAYMENT_PROVIDER_OPTIONS,
+  DATABASE_PROVIDER_OPTIONS,
+  DATABASE_SSL_OPTIONS,
+  defaultDatabasePort,
   type EmailConnectionConfig,
   type HttpConnectionConfig,
   type PaymentConnectionConfig,
+  type DatabaseConnectionConfig,
 } from '@/features/connections/connectionConfig'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
@@ -445,6 +449,160 @@ export function PaymentConnectionFields({ value, onChange, disabled }: PaymentFi
           </p>
         </div>
       )}
+    </div>
+  )
+}
+
+interface DatabaseFieldsProps {
+  value: DatabaseConnectionConfig
+  onChange: (next: DatabaseConnectionConfig) => void
+  disabled?: boolean
+}
+
+export function DatabaseConnectionFields({ value, onChange, disabled }: DatabaseFieldsProps) {
+  function patch(partial: Partial<DatabaseConnectionConfig>) {
+    onChange({ ...value, ...partial })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label>Database provider</Label>
+        <Select
+          value={value.provider}
+          disabled={disabled}
+          onChange={(e) => {
+            const provider = e.target.value as DatabaseConnectionConfig['provider']
+            const prevDefault = defaultDatabasePort(value.provider)
+            patch({
+              provider,
+              port: value.port === prevDefault ? defaultDatabasePort(provider) : value.port,
+            })
+          }}
+        >
+          {DATABASE_PROVIDER_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </Select>
+        <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+          {DATABASE_PROVIDER_OPTIONS.find((o) => o.value === value.provider)?.hint}
+        </p>
+      </div>
+
+      {value.provider === 'sqlite' ? (
+        <div>
+          <Label>SQLite file path</Label>
+          <Input
+            value={value.database}
+            onChange={(e) => patch({ database: e.target.value, host: '', username: '', password: '' })}
+            placeholder="/var/www/html/gkjt/flowforge/demo/data/demo.sqlite"
+            required
+            disabled={disabled}
+            autoComplete="off"
+          />
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Absolute path on the FlowForge API host. Must be under the server’s SQLite allowlist (see demo suite).
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="sm:col-span-2">
+              <Label>Host</Label>
+              <Input
+                value={value.host}
+                onChange={(e) => patch({ host: e.target.value })}
+                placeholder="db.example.com"
+                required
+                disabled={disabled}
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <Label>Port</Label>
+              <Input
+                type="number"
+                min={1}
+                max={65535}
+                value={value.port}
+                onChange={(e) =>
+                  patch({ port: Number(e.target.value) || defaultDatabasePort(value.provider) })
+                }
+                required
+                disabled={disabled}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>Database name</Label>
+            <Input
+              value={value.database}
+              onChange={(e) => patch({ database: e.target.value })}
+              placeholder="app_production"
+              required
+              disabled={disabled}
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label>Username</Label>
+              <Input
+                value={value.username}
+                onChange={(e) => patch({ username: e.target.value })}
+                required
+                disabled={disabled}
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <Label>Password</Label>
+              <Input
+                type="password"
+                value={value.password}
+                onChange={(e) => patch({ password: e.target.value })}
+                disabled={disabled}
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>SSL</Label>
+            <Select
+              value={value.sslMode}
+              disabled={disabled}
+              onChange={(e) => patch({ sslMode: e.target.value as DatabaseConnectionConfig['sslMode'] })}
+            >
+              {DATABASE_SSL_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              {DATABASE_SSL_OPTIONS.find((o) => o.value === value.sslMode)?.hint}
+            </p>
+          </div>
+        </>
+      )}
+
+      <div>
+        <Label>Timeout (ms)</Label>
+        <Input
+          type="number"
+          min={1000}
+          max={120000}
+          step={1000}
+          value={value.timeoutMs}
+          onChange={(e) => patch({ timeoutMs: Number(e.target.value) || 15000 })}
+          disabled={disabled}
+        />
+      </div>
     </div>
   )
 }

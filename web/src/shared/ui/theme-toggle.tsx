@@ -24,12 +24,16 @@ export function ThemeToggle({ className }: { className?: string }) {
       type="button"
       variant="ghost"
       size="sm"
-      className={className}
+      className={cn('relative overflow-hidden', className)}
       onClick={cycleTheme}
       aria-label={`${LABELS[theme]}. Click to change.`}
       title={LABELS[theme]}
     >
-      <ThemeIcon theme={theme} className="h-4 w-4" />
+      <ThemeIcon
+        key={theme}
+        theme={theme}
+        className="h-4 w-4 animate-[ff-icon-spin-in_0.4s_var(--ease-spring)_both]"
+      />
     </Button>
   )
 }
@@ -62,7 +66,7 @@ export function ThemePicker({ className }: { className?: string }) {
             aria-pressed={active}
             onClick={() => setTheme(opt.value)}
             className={cn(
-              'flex flex-1 items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-all duration-200',
+              'ff-interactive flex flex-1 items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium',
               active
                 ? 'bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] text-[var(--color-accent-fg)] shadow-sm'
                 : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]',

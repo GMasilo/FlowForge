@@ -3,6 +3,8 @@ import type { Json } from '@/shared/types/database'
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
 import {
   remapEntityIds,
+  remapFlowGraphIds,
+  type ChatbotFlowExport,
   type FlowEntityDefExport,
   type FlowEntityExport,
   type FlowGlobalExport,
@@ -11,9 +13,9 @@ import {
 } from '@/features/designer/utils/flowTransfer'
 import {
   createEntity,
-  createStaticRecord,
   ensureEntityPrimaryKey,
   restoreEntity,
+  replaceStaticRecordsFromImport,
   upsertAttribute,
 } from '@/features/entities/entityApi'
 
@@ -113,7 +115,6 @@ export async function applyImportedBundleData(args: {
     const alive = (existingRows ?? []).find((row) => !row.deleted_at)
     const any = alive ?? existingRows?.[0]
     let entityId = any?.id
-    let created = false
 
     if (entityId && any?.deleted_at) {
       await restoreEntity(entityId)
@@ -126,10 +127,9 @@ export async function applyImportedBundleData(args: {
         kind: def.kind,
       })
       entityId = createdEntity.id
-      created = true
     }
 
-    if (!created || !entityId) continue
+    if (!entityId) continue
 
     await ensureEntityPrimaryKey(entityId)
 
@@ -147,10 +147,8 @@ export async function applyImportedBundleData(args: {
         sort_order: attr.sort_order ?? index,
       })
     }
-    if (def.kind === 'static') {
-      for (const [index, values] of (def.records ?? []).entries()) {
-        await createStaticRecord(entityId, values, index)
-      }
+    if (def.kind === 'static' && (def.records?.length ?? 0) > 0) {
+      await replaceStaticRecordsFromImport(entityId, def.records ?? [])
     }
   }
 
@@ -224,11 +222,12 @@ export async function replaceFlowInDb(args: {
   entitiesExport?: FlowEntityExport[]
   /** When set, also refresh chatbot name/description from the import. */
   chatbotMeta?: { name?: string; description?: string | null }
-}) {
+}): Promise<{ nodes: DesignerNode[]; edges: DesignerEdge[] }> {
   const { chatbotId, flowId, edges, globals, chatbotMeta, entitiesExport } = args
 
   const targetEntities = await loadChatbotEntities(chatbotId)
-  const nodes = remapEntityIds(args.nodes, entitiesExport, targetEntities)
+  const entityRemapped = remapEntityIds(args.nodes, entitiesExport, targetEntities)
+  const { nodes, edges: remappedEdges } = remapFlowGraphIds(entityRemapped, edges)
 
   const { error: delEdgesError } = await supabase.from('flow_edges').delete().eq('flow_id', flowId)
   if (delEdgesError) throw delEdgesError
@@ -251,9 +250,9 @@ export async function replaceFlowInDb(args: {
     if (insertNodesError) throw insertNodesError
   }
 
-  if (edges.length) {
+  if (remappedEdges.length) {
     const { error: insertEdgesError } = await supabase.from('flow_edges').insert(
-      edges.map((e) => ({
+      remappedEdges.map((e) => ({
         id: e.id,
         flow_id: flowId,
         source_node_id: e.source,
@@ -315,6 +314,8 @@ export async function replaceFlowInDb(args: {
   }
   const { error: botUpdateError } = await supabase.from('chatbots').update(chatbotPatch).eq('id', chatbotId)
   if (botUpdateError) throw botUpdateError
+
+  return { nodes, edges: remappedEdges }
 }
 
 export function versionCompareHint(fileVersion: number | undefined, localVersion: number | undefined): string | null {
@@ -327,3 +328,146 @@ export function versionCompareHint(fileVersion: number | undefined, localVersion
   }
   return `File and current chatbot are both at flow version v${localVersion}.`
 }
+
+function stripConnectionIdsFromNodes(nodes: DesignerNode[]): DesignerNode[] {
+  return nodes.map((n) => {
+    if (!n.config || typeof n.config !== 'object') return n
+    if (!('connectionId' in n.config)) return n
+    const { connectionId: _ignored, ...rest } = n.config
+    return { ...n, config: rest }
+  })
+}
+
+/** Full flowforge.chatbotFlow pack for marketplace publish. */
+export async function buildMarketplacePackFromChatbot(chatbotId: string): Promise<ChatbotFlowExport> {
+  const { fetchChatbotEntities } = await import('@/features/entities/entityApi')
+  const { fetchChatbotTemplates } = await import('@/features/templates/templateApi')
+  const { fetchChatbotTestScenarios } = await import('@/features/designer/preview/testScenarioApi')
+  const { buildFlowExport } = await import('@/features/designer/utils/flowTransfer')
+
+  const [bundle, entities, entityRows, templateRows, scenarioRows] = await Promise.all([
+    loadFlowBundle(chatbotId),
+    loadChatbotEntities(chatbotId),
+    fetchChatbotEntities(chatbotId),
+    fetchChatbotTemplates(chatbotId),
+    fetchChatbotTestScenarios(chatbotId),
+  ])
+
+  const entityDefs: FlowEntityDefExport[] = entityRows.map((row) => ({
+    id: row.id,
+    key: row.key,
+    name: row.name,
+    description: row.description,
+    kind: row.kind,
+    attributes: row.attributes.map((a) => ({
+      key: a.key,
+      label: a.label,
+      value_type: a.value_type,
+      required: a.required,
+      is_identifier: a.is_identifier,
+      is_unique: a.is_unique,
+      default_value: a.default_value,
+      sort_order: a.sort_order,
+    })),
+    records: (row.static_records ?? []).map((r) =>
+      r.values && typeof r.values === 'object' && !Array.isArray(r.values)
+        ? (r.values as Record<string, unknown>)
+        : {},
+    ),
+  }))
+  const templates: FlowTemplateExport[] = templateRows.map((row) => ({
+    key: row.key,
+    name: row.name,
+    description: row.description,
+    kind: row.kind,
+    content: row.content,
+  }))
+  const testScenarios: FlowTestScenarioExport[] = scenarioRows.map((row) => ({
+    name: row.name,
+    globals:
+      row.globals && typeof row.globals === 'object' && !Array.isArray(row.globals)
+        ? (row.globals as Record<string, unknown>)
+        : {},
+    expected:
+      row.expected && typeof row.expected === 'object' && !Array.isArray(row.expected)
+        ? (row.expected as { variables?: string[]; stepKeys?: string[] })
+        : {},
+  }))
+
+  return buildFlowExport({
+    chatbot: bundle.chatbot,
+    flow: bundle.flow,
+    globals: bundle.globals,
+    nodes: stripConnectionIdsFromNodes(bundle.nodes),
+    edges: bundle.edges,
+    entities,
+    entityDefs,
+    templates,
+    testScenarios,
+  })
+}
+
+export function marketplacePackSummary(pack: unknown): string {
+  if (!pack || typeof pack !== 'object' || Array.isArray(pack)) return 'No pack payload'
+  const p = pack as Record<string, unknown>
+  if (p.kind !== 'flowforge.chatbotFlow') {
+    return typeof p.note === 'string' ? p.note : 'Legacy listing (clone-only)'
+  }
+  const nodes = Array.isArray(p.nodes) ? p.nodes.length : 0
+  const templates = Array.isArray(p.templates) ? p.templates.length : 0
+  const entities = Array.isArray(p.entityDefs)
+    ? p.entityDefs.length
+    : Array.isArray(p.entities)
+      ? p.entities.length
+      : 0
+  return `${nodes} steps · ${templates} templates · ${entities} entities`
+}
+
+/** Install a serialized pack into a new chatbot in the target instance. */
+export async function installFlowPackToInstance(args: {
+  instanceId: string
+  name: string
+  pack: unknown
+  createdBy: string
+}): Promise<{ chatbotId: string; connectionsNeedRebind: boolean }> {
+  const { parseFlowExport } = await import('@/features/designer/utils/flowTransfer')
+  const parsed = parseFlowExport(args.pack)
+  const { data: bot, error: botError } = await supabase
+    .from('chatbots')
+    .insert({
+      instance_id: args.instanceId,
+      name: args.name,
+      description: parsed.meta.chatbotDescription ?? null,
+      created_by: args.createdBy,
+    })
+    .select('id')
+    .single()
+  if (botError) throw botError
+
+  const flowBundle = await loadFlowBundle(bot.id)
+  await applyImportedBundleData({
+    chatbotId: bot.id,
+    templates: parsed.templates,
+    entityDefs: parsed.entityDefs,
+    testScenarios: parsed.testScenarios,
+    createdBy: args.createdBy,
+  })
+  const entitiesExport = parsed.entityDefs?.length
+    ? parsed.entityDefs.map((e) => ({ id: e.id, key: e.key }))
+    : parsed.entities
+  await replaceFlowInDb({
+    chatbotId: bot.id,
+    flowId: flowBundle.flow.id,
+    nodes: stripConnectionIdsFromNodes(parsed.nodes),
+    edges: parsed.edges,
+    globals: parsed.globals,
+    entitiesExport,
+    chatbotMeta: {
+      name: args.name,
+      description: parsed.meta.chatbotDescription ?? null,
+    },
+  })
+
+  return { chatbotId: bot.id, connectionsNeedRebind: true }
+}
+

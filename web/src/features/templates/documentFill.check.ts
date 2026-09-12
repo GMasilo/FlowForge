@@ -190,6 +190,47 @@ assert(Math.abs(mmToPct(29.7, 'x', 'landscape') - 10) < 0.01, '29.7mm is 10% lan
   assert(styledPdf.bytes[0] === 0x25, 'styled pdf')
 }
 
+{
+  const tableContent: DocumentContent = {
+    ...content,
+    format: 'xlsx',
+    filename: 'lines-{{inputs.name}}.xlsx',
+    tableRowsSource: '{{inputs.lines}}',
+    tableColumns: [
+      { key: 'sku', label: 'SKU' },
+      { key: 'name', label: 'Product' },
+      { key: 'qty', label: 'Qty' },
+    ],
+    inputs: [
+      ...content.inputs,
+      { key: 'lines', label: 'Lines', type: 'string', required: false },
+    ],
+  }
+  const tableCtx = {
+    ...ctx,
+    inputs: {
+      ...ctx.inputs,
+      lines: [
+        { sku: 'A1', name: 'Widget', qty: 2 },
+        { sku: 'B2', name: 'Gadget', qty: 1 },
+      ],
+    },
+  }
+  const tableFilled = fillDocumentSnapshot(
+    tableContent,
+    (source) => interpolateTemplate(source, tableCtx),
+    (source) => resolveExpressionValue(source, tableCtx),
+    tableCtx.vars,
+  )
+  assert(tableFilled.table?.headers.join(',') === 'SKU,Product,Qty', `headers ${tableFilled.table?.headers}`)
+  assert(tableFilled.table?.rows.length === 2, 'two data rows')
+  assert(tableFilled.table?.rows[0]?.join('|') === 'A1|Widget|2', `row0 ${tableFilled.table?.rows[0]}`)
+  const tableXlsx = await generateDocumentFile(tableFilled)
+  assert(tableXlsx.bytes.length > 100, 'table xlsx bytes')
+  const tableEmbed = decodeDocumentEmbed(encodeDocumentEmbed(tableFilled).slice('<<ff:doc:'.length, -2))
+  assert(tableEmbed?.table?.rows.length === 2, 'embed keeps table rows')
+}
+
 const xlsxContent: DocumentContent = {
   ...content,
   format: 'xlsx',

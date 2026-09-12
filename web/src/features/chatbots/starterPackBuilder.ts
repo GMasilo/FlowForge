@@ -52,6 +52,13 @@ type Builder = {
     },
   ) => DesignerNode
   condition: (key: string, label: string, left: string, operator: string, right: string) => DesignerNode
+  switchStep: (
+    key: string,
+    label: string,
+    value: string,
+    cases: Array<{ id: string; match: string; label?: string }>,
+  ) => DesignerNode
+  handoff: (key: string, label: string, message: string) => DesignerNode
   end: (key: string, label: string, message: string) => DesignerNode
   link: (from: string, to: string, sourceHandle?: string | null, label?: string | null) => DesignerEdge
   chain: (keys: string[]) => DesignerEdge[]
@@ -173,6 +180,33 @@ export function createPackBuilder(): Builder {
     })
   }
 
+  function switchStep(
+    key: string,
+    label: string,
+    value: string,
+    cases: Array<{ id: string; match: string; label?: string }>,
+  ) {
+    return push({
+      id: id(key),
+      key,
+      type: 'switch',
+      label,
+      config: { ...SHARED, value, cases },
+      position: { x: 80, y: 40 + nodes.length * 100 },
+    })
+  }
+
+  function handoff(key: string, label: string, messageText: string) {
+    return push({
+      id: id(key),
+      key,
+      type: 'handoff',
+      label,
+      config: { ...SHARED, message: messageText, queueId: '' },
+      position: { x: 80, y: 40 + nodes.length * 100 },
+    })
+  }
+
   function end(key: string, label: string, messageText: string) {
     return push({
       id: id(key),
@@ -218,6 +252,8 @@ export function createPackBuilder(): Builder {
     setVar,
     entity,
     condition,
+    switchStep,
+    handoff,
     end,
     link,
     chain,

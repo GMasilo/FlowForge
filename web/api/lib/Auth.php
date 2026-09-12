@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace FlowForge\Api;
 
 /**
- * Verifies Supabase access tokens.
+ * Verifies Supabase session JWTs and long-lived Platform API tokens (`ffpat_…`).
  *
  * Modern Supabase projects issue ES256 user tokens (JWKS).
  * Legacy HS256 tokens are still supported when supabase_jwt_secret is set
@@ -12,8 +12,15 @@ namespace FlowForge\Api;
  */
 final class Auth
 {
+    public const PLATFORM_API_TOKEN_PREFIX = 'ffpat_';
+
+    public static function looksLikePlatformApiToken(string $token): bool
+    {
+        return str_starts_with($token, self::PLATFORM_API_TOKEN_PREFIX) && strlen($token) >= 20;
+    }
+
     /**
-     * @return array{sub: string, email?: string|null, role?: string, claims: array}
+     * @return array{sub: string, email?: string|null, role: string, claims: array, auth?: string, instance_id?: string, token_id?: string}
      */
     public static function requireUser(array $config): array
     {
@@ -36,6 +43,10 @@ final class Auth
         }
 
         $token = $m[1];
+        if (self::looksLikePlatformApiToken($token)) {
+            return self::requirePlatformApiToken($config, $token);
+        }
+
         $diag = self::diagnoseToken($token, $config);
         if (($diag['ok'] ?? false) !== true || !is_array($diag['claims'] ?? null)) {
             Response::error((string) ($diag['error'] ?? 'Invalid or expired token'), (int) ($diag['status'] ?? 401));
@@ -67,6 +78,54 @@ final class Auth
             'email' => isset($claims['email']) ? (string) $claims['email'] : null,
             'role' => $role,
             'claims' => $claims,
+            'auth' => 'session',
+        ];
+    }
+
+    /**
+     * Long-lived org token (`ffpat_…`). PHP then reads PostgREST with service_role.
+     *
+     * @return array{sub: string, email?: string|null, role: string, claims: array, auth: string, instance_id: string, token_id: string}
+     */
+    private static function requirePlatformApiToken(array $config, string $token): array
+    {
+        $rpc = SupabaseRest::rpcAsService($config, 'verify_platform_api_token', ['p_token' => $token]);
+        if (!($rpc['ok'] ?? false)) {
+            $status = (int) ($rpc['status'] ?? 401);
+            if ($status >= 500) {
+                Response::error((string) ($rpc['error'] ?? 'Token verification failed'), 500);
+            }
+            Response::error('Invalid or revoked API token', 401);
+        }
+
+        $data = $rpc['data'] ?? null;
+        if (is_string($data)) {
+            $decoded = json_decode($data, true);
+            $data = is_array($decoded) ? $decoded : null;
+        }
+        if (!is_array($data)) {
+            Response::error('Invalid or revoked API token', 401);
+        }
+
+        $instanceId = (string) ($data['instance_id'] ?? '');
+        $userId = (string) ($data['user_id'] ?? '');
+        $tokenId = (string) ($data['id'] ?? '');
+        if ($instanceId === '' || $userId === '' || $tokenId === '') {
+            Response::error('Invalid or revoked API token', 401);
+        }
+
+        $email = isset($data['email']) && $data['email'] !== null && $data['email'] !== ''
+            ? (string) $data['email']
+            : null;
+
+        return [
+            'sub' => $userId,
+            'email' => $email,
+            'role' => 'authenticated',
+            'claims' => ['auth' => 'api_token'],
+            'auth' => 'api_token',
+            'instance_id' => $instanceId,
+            'token_id' => $tokenId,
         ];
     }
 

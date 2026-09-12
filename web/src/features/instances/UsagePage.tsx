@@ -1,6 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/features/auth/AuthProvider'
+import {
+  formatQuotaCap,
+  ORGANISATION_PLAN_IDS,
+  parseOrganisationPlan,
+  planLimitsFor,
+  type OrganisationPlanId,
+} from '@/features/billing/planCatalog'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import {
   canAdmin,
@@ -8,13 +16,17 @@ import {
   type InstanceUsageMonthly,
 } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
-import { Button } from '@/shared/ui/button'
+import { Button, buttonVariants } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Textarea } from '@/shared/ui/textarea'
 import { FieldError } from '@/shared/ui/field-error'
+import { Select } from '@/shared/ui/select'
+import { PAGE_HELP, SECTION_HELP } from '@/shared/help/pageHelp'
+import { SectionHeading } from '@/shared/ui/help-tooltip'
 import { PageHeader } from '@/shared/ui/page-header'
+import { cn } from '@/shared/lib/utils'
 
 function currentYearMonth(): string {
   const d = new Date()
@@ -22,19 +34,20 @@ function currentYearMonth(): string {
 }
 
 function QuotaBar({ used, max, label }: { used: number; max: number; label: string }) {
-  const pct = max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 0
+  const unlimited = max < 0
+  const pct = !unlimited && max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 0
   return (
     <div>
       <div className="mb-1 flex justify-between text-sm">
         <span className="font-medium text-[var(--color-ink)]">{label}</span>
         <span className="text-[var(--color-ink-muted)]">
-          {used.toLocaleString()} / {max.toLocaleString()}
+          {used.toLocaleString()} / {unlimited ? '∞' : max.toLocaleString()}
         </span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-[var(--color-surface-2)]">
         <div
           className="h-full rounded-full bg-gradient-to-r from-teal-500 to-cyan-500 transition-all"
-          style={{ width: `${pct}%` }}
+          style={{ width: unlimited ? '8%' : `${pct}%` }}
         />
       </div>
     </div>
@@ -43,6 +56,7 @@ function QuotaBar({ used, max, label }: { used: number; max: number; label: stri
 
 export function UsagePage() {
   const { instance, role } = useRequiredInstance()
+  const { isSuperuser } = useAuth()
   const qc = useQueryClient()
   const isAdmin = canAdmin(role)
   const ym = currentYearMonth()
@@ -50,7 +64,13 @@ export function UsagePage() {
   const [quotaConv, setQuotaConv] = useState('')
   const [quotaEmail, setQuotaEmail] = useState('')
   const [quotaHttp, setQuotaHttp] = useState('')
+  const [planDraft, setPlanDraft] = useState<OrganisationPlanId>('business')
   const [error, setError] = useState<string | null>(null)
+  const [planMessage, setPlanMessage] = useState<string | null>(null)
+
+  const plan = parseOrganisationPlan(instance.plan)
+  const catalog = planLimitsFor(plan)
+  const canEditQuotas = isSuperuser || plan === 'enterprise'
 
   const fresh = useQuery({
     queryKey: ['instance-usage-settings', instance.id],
@@ -59,7 +79,7 @@ export function UsagePage() {
       const { data, error: qError } = await supabase
         .from('instances')
         .select(
-          'id, http_host_allowlist, quota_max_conversations_month, quota_max_emails_month, quota_max_http_calls_month',
+          'id, plan, http_host_allowlist, quota_max_conversations_month, quota_max_emails_month, quota_max_http_calls_month, quota_max_chatbots, quota_max_seats, features',
         )
         .eq('id', instance.id)
         .single()
@@ -67,10 +87,14 @@ export function UsagePage() {
       return data as Pick<
         Instance,
         | 'id'
+        | 'plan'
         | 'http_host_allowlist'
         | 'quota_max_conversations_month'
         | 'quota_max_emails_month'
         | 'quota_max_http_calls_month'
+        | 'quota_max_chatbots'
+        | 'quota_max_seats'
+        | 'features'
       >
     },
   })
@@ -97,12 +121,37 @@ export function UsagePage() {
     },
   })
 
+  const seats = useQuery({
+    queryKey: ['instance-seat-count', instance.id],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error: rpcError } = await supabase.rpc('organisation_seat_count', {
+        p_instance_id: instance.id,
+      })
+      if (rpcError) throw rpcError
+      return typeof data === 'number' ? data : Number(data) || 0
+    },
+  })
+
+  const bots = useQuery({
+    queryKey: ['instance-chatbot-count', instance.id],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error: rpcError } = await supabase.rpc('organisation_chatbot_count', {
+        p_instance_id: instance.id,
+      })
+      if (rpcError) throw rpcError
+      return typeof data === 'number' ? data : Number(data) || 0
+    },
+  })
+
   useEffect(() => {
     if (!fresh.data) return
     setAllowlist((fresh.data.http_host_allowlist ?? []).join(', '))
     setQuotaConv(String(fresh.data.quota_max_conversations_month))
     setQuotaEmail(String(fresh.data.quota_max_emails_month))
     setQuotaHttp(String(fresh.data.quota_max_http_calls_month))
+    setPlanDraft(parseOrganisationPlan(fresh.data.plan))
   }, [fresh.data])
 
   const save = useMutation({
@@ -111,16 +160,22 @@ export function UsagePage() {
         .split(/[,\n]/)
         .map((h) => h.trim().toLowerCase())
         .filter(Boolean)
-      const { error: updateError } = await supabase
-        .from('instances')
-        .update({
-          http_host_allowlist: hosts,
-          quota_max_conversations_month: Math.max(0, Number(quotaConv) || 0),
-          quota_max_emails_month: Math.max(0, Number(quotaEmail) || 0),
-          quota_max_http_calls_month: Math.max(0, Number(quotaHttp) || 0),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', instance.id)
+      const patch: {
+        http_host_allowlist: string[]
+        updated_at: string
+        quota_max_conversations_month?: number
+        quota_max_emails_month?: number
+        quota_max_http_calls_month?: number
+      } = {
+        http_host_allowlist: hosts,
+        updated_at: new Date().toISOString(),
+      }
+      if (canEditQuotas) {
+        patch.quota_max_conversations_month = Math.max(0, Number(quotaConv) || 0)
+        patch.quota_max_emails_month = Math.max(0, Number(quotaEmail) || 0)
+        patch.quota_max_http_calls_month = Math.max(0, Number(quotaHttp) || 0)
+      }
+      const { error: updateError } = await supabase.from('instances').update(patch).eq('id', instance.id)
       if (updateError) throw updateError
     },
     onSuccess: async () => {
@@ -131,6 +186,28 @@ export function UsagePage() {
       ])
     },
     onError: (err: Error) => setError(err.message),
+  })
+
+  const setPlan = useMutation({
+    mutationFn: async (next: OrganisationPlanId) => {
+      const { error: rpcError } = await supabase.rpc('set_organisation_plan', {
+        p_instance_id: instance.id,
+        p_plan: next,
+      })
+      if (rpcError) throw rpcError
+    },
+    onSuccess: async () => {
+      setPlanMessage('Plan updated — features and quotas applied.')
+      setError(null)
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['instance-usage-settings', instance.id] }),
+        qc.invalidateQueries({ queryKey: ['instance', instance.id] }),
+      ])
+    },
+    onError: (err: Error) => {
+      setPlanMessage(null)
+      setError(err.message)
+    },
   })
 
   if (!isAdmin) {
@@ -144,13 +221,75 @@ export function UsagePage() {
 
   const row = fresh.data
   const used = usage.data
+  const maxBots = row?.quota_max_chatbots ?? catalog.quotaMaxChatbots
+  const maxSeats = row?.quota_max_seats ?? catalog.quotaMaxSeats
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Usage & quotas"
-        description={`Monthly limits and HTTP host allowlist for ${instance.name}.`}
+        title="Usage & plan"
+        description={`Plan limits and HTTP host allowlist for ${instance.name}.`}
+        help={PAGE_HELP.usage}
       />
+
+      <Card className="space-y-4 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-accent)]">
+              Current plan
+            </p>
+            <h2 className="mt-1 font-[family-name:var(--font-display)] text-xl font-semibold">
+              {catalog.label}
+            </h2>
+            <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+              Features and monthly quotas follow the{' '}
+              <Link to="/pricing" className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline">
+                pricing catalog
+              </Link>
+              .
+            </p>
+          </div>
+          {isSuperuser ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <div>
+                <Label htmlFor="org-plan">Change plan</Label>
+                <Select
+                  id="org-plan"
+                  value={planDraft}
+                  onChange={(e) => setPlanDraft(e.target.value as OrganisationPlanId)}
+                  className="min-w-[10rem]"
+                >
+                  {ORGANISATION_PLAN_IDS.map((id) => (
+                    <option key={id} value={id}>
+                      {planLimitsFor(id).label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <Button
+                type="button"
+                disabled={setPlan.isPending || planDraft === plan}
+                onClick={() => setPlan.mutate(planDraft)}
+              >
+                {setPlan.isPending ? 'Applying…' : 'Apply plan'}
+              </Button>
+            </div>
+          ) : (
+            <Link to="/pricing" className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}>
+              View plans
+            </Link>
+          )}
+        </div>
+        {planMessage ? <p className="text-sm text-teal-800">{planMessage}</p> : null}
+        <ul className="grid gap-2 text-sm text-[var(--color-ink-muted)] sm:grid-cols-2">
+          <li>
+            Chatbots: {bots.data?.toLocaleString() ?? '—'} / {formatQuotaCap(maxBots)}
+          </li>
+          <li>
+            Seats: {seats.data?.toLocaleString() ?? '—'} / {formatQuotaCap(maxSeats)}
+          </li>
+        </ul>
+      </Card>
 
       <Card className="space-y-4">
         <h2 className="text-base font-semibold text-[var(--color-ink)]">This month ({ym})</h2>
@@ -171,7 +310,13 @@ export function UsagePage() {
 
       <Card>
         <form className="space-y-3" onSubmit={onSubmit}>
-          <h2 className="text-base font-semibold text-[var(--color-ink)]">Limits & allowlist</h2>
+          <SectionHeading title="Limits & allowlist" help={SECTION_HELP.httpAllowlist} className="mb-0" />
+          {!canEditQuotas ? (
+            <p className="text-sm text-[var(--color-ink-muted)]">
+              Monthly quotas are fixed by the {catalog.label} plan. Enterprise organisations (or platform
+              superusers) can customise them.
+            </p>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
               <Label htmlFor="q-conv">Max conversations / month</Label>
@@ -181,6 +326,7 @@ export function UsagePage() {
                 min={0}
                 value={quotaConv}
                 onChange={(e) => setQuotaConv(e.target.value)}
+                disabled={!canEditQuotas}
               />
             </div>
             <div>
@@ -191,6 +337,7 @@ export function UsagePage() {
                 min={0}
                 value={quotaEmail}
                 onChange={(e) => setQuotaEmail(e.target.value)}
+                disabled={!canEditQuotas}
               />
             </div>
             <div>
@@ -201,6 +348,7 @@ export function UsagePage() {
                 min={0}
                 value={quotaHttp}
                 onChange={(e) => setQuotaHttp(e.target.value)}
+                disabled={!canEditQuotas}
               />
             </div>
           </div>

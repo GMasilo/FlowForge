@@ -27,11 +27,12 @@ export function coerceEntityValue(
   if (isBlankEntityValue(raw)) return { ok: true, value: undefined }
 
   switch (type) {
-    case 'string': {
+    case 'string':
+    case 'password': {
       if (typeof raw === 'string') return { ok: true, value: raw }
       if (typeof raw === 'number' && Number.isFinite(raw)) return { ok: true, value: String(raw) }
       if (typeof raw === 'boolean') return { ok: true, value: String(raw) }
-      return { ok: false, error: 'must be a string' }
+      return { ok: false, error: type === 'password' ? 'must be a password string' : 'must be a string' }
     }
     case 'number': {
       if (typeof raw === 'number' && Number.isFinite(raw)) return { ok: true, value: raw }

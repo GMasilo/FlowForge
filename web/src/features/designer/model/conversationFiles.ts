@@ -44,6 +44,8 @@ export type ConversationFileValue = {
   size: number
   key: string
   path?: string
+  /** Inline image payload so PDF/DOCX can embed without a second network fetch. */
+  dataUrl?: string
 }
 
 export function htmlAcceptFor(kind: FileAcceptKind | string | undefined): string {
@@ -74,23 +76,38 @@ export function isAllowedConversationFile(file: Pick<File, 'name'>, accept: File
   return !!ext && EXTS_BY_ACCEPT[accept].includes(ext)
 }
 
+export async function fileToDataUrl(file: Blob): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read file'))
+    reader.readAsDataURL(file)
+  })
+}
+
 export function parseConversationFileValue(raw: unknown): ConversationFileValue | null {
   if (!raw || typeof raw !== 'object') return null
   const rec = raw as Record<string, unknown>
+  const dataUrl =
+    typeof rec.dataUrl === 'string' && rec.dataUrl.trim().startsWith('data:image/')
+      ? rec.dataUrl.trim()
+      : typeof rec.data_url === 'string' && rec.data_url.trim().startsWith('data:image/')
+        ? rec.data_url.trim()
+        : undefined
   const url = typeof rec.url === 'string' ? rec.url.trim() : ''
   const filename =
     (typeof rec.filename === 'string' && rec.filename.trim()) ||
     (typeof rec.originalName === 'string' && rec.originalName.trim()) ||
     (typeof rec.name === 'string' && rec.name.trim()) ||
     ''
-  if (!url || !filename) return null
+  if ((!url && !dataUrl) || !filename) return null
   const originalName =
     (typeof rec.originalName === 'string' && rec.originalName.trim()) || filename
   const mime = typeof rec.mime === 'string' && rec.mime ? rec.mime : mimeFromFilename(filename)
   const size = typeof rec.size === 'number' && Number.isFinite(rec.size) ? rec.size : 0
   const key = typeof rec.key === 'string' && rec.key ? rec.key : mediaKeyFromFilename(filename)
   const path = typeof rec.path === 'string' ? rec.path : undefined
-  return { filename, originalName, url, mime, size, key, path }
+  return { filename, originalName, url: url || dataUrl || '', mime, size, key, path, dataUrl }
 }
 
 export function parseConversationFileList(raw: unknown): ConversationFileValue[] {
@@ -132,6 +149,8 @@ export async function storeAnswerFiles(
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i]!
+    const dataUrl =
+      file.type.startsWith('image/') && file.size <= 1_500_000 ? await fileToDataUrl(file).catch(() => undefined) : undefined
     if (canUpload) {
       const result = await uploadConversationFile({
         instanceId: ctx.instanceId!,
@@ -155,6 +174,7 @@ export async function storeAnswerFiles(
         size: result.size || file.size,
         key: result.key || mediaKeyFromFilename(result.filename),
         path: result.path,
+        dataUrl,
       })
       continue
     }
@@ -166,6 +186,7 @@ export async function storeAnswerFiles(
       mime: file.type || mimeFromFilename(file.name),
       size: file.size,
       key: mediaKeyFromFilename(file.name),
+      dataUrl,
     })
   }
 

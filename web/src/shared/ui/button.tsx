@@ -3,18 +3,18 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/shared/lib/utils'
 
 export const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] active:scale-[0.98]',
+  'inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all duration-300 ease-[var(--ease-spring)] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.96]',
   {
     variants: {
       variant: {
         primary:
-          'bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] text-[var(--color-accent-fg)] shadow-[var(--shadow-lift)] hover:brightness-105',
+          'bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] text-[var(--color-accent-fg)] shadow-[var(--shadow-lift)] hover:brightness-110 hover:shadow-[0_24px_48px_-14px_color-mix(in_oklab,var(--color-accent)_55%,transparent)]',
         secondary:
-          'bg-[var(--color-surface)] text-[var(--color-ink)] border border-[var(--color-border)] shadow-sm hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-surface-2)] hover:shadow-md',
+          'bg-[var(--color-surface)] text-[var(--color-ink)] border border-[var(--color-border)] shadow-sm hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-2)] hover:shadow-lg',
         ghost:
-          'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)] hover:shadow-sm',
+          'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)] hover:shadow-md',
         danger:
-          'bg-gradient-to-br from-rose-500 to-[var(--color-danger)] text-white shadow-[0_10px_24px_-10px_rgb(225_29_72_/_0.55)] hover:brightness-105',
+          'bg-gradient-to-br from-rose-500 to-[var(--color-danger)] text-white shadow-[0_10px_24px_-10px_rgb(225_29_72_/_0.55)] hover:brightness-110 hover:shadow-[0_20px_40px_-12px_rgb(225_29_72_/_0.5)]',
       },
       size: {
         sm: 'h-8 px-3 text-xs',

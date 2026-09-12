@@ -136,7 +136,9 @@ final class HttpClient
         $extra = $connectionConfig['headers'] ?? [];
         if (is_array($extra)) {
             // Support [{key,value}] or {name:value}
-            $isList = array_is_list($extra);
+            $isList = function_exists('array_is_list')
+                ? \array_is_list($extra)
+                : array_keys($extra) === range(0, count($extra) - 1);
             if ($isList) {
                 foreach ($extra as $row) {
                     if (!is_array($row)) {

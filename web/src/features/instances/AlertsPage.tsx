@@ -3,11 +3,13 @@ import { Link, Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { Bell, Plus, Trash2 } from 'lucide-react'
+import { PlanLockedState } from '@/features/billing/PlanLockedState'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { listIntegrations } from '@/features/integrations/integrationApi'
 import {
   canAdmin,
+  instanceFeatureEnabled,
   type AlertDelivery,
   type InstanceAlertRule,
   type InstanceAlertSettings,
@@ -19,6 +21,8 @@ import { Card } from '@/shared/ui/card'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Select } from '@/shared/ui/select'
+import { PAGE_HELP, SECTION_HELP } from '@/shared/help/pageHelp'
+import { SectionHeading, HelpTooltip } from '@/shared/ui/help-tooltip'
 import { PageHeader } from '@/shared/ui/page-header'
 import { FieldError } from '@/shared/ui/field-error'
 import { Badge } from '@/shared/ui/badge'
@@ -36,6 +40,7 @@ const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 
 export function AlertsPage() {
   const { instance, role } = useRequiredInstance()
+  const alertsEnabled = instanceFeatureEnabled(instance, 'alerts')
   const { user } = useAuth()
   const qc = useQueryClient()
   const isAdmin = canAdmin(role)
@@ -50,7 +55,7 @@ export function AlertsPage() {
 
   const rules = useQuery({
     queryKey: ['alert-rules', instance.id],
-    enabled: isAdmin,
+    enabled: isAdmin && alertsEnabled,
     queryFn: async () => {
       const { data, error: qError } = await supabase
         .from('instance_alert_rules')
@@ -64,7 +69,7 @@ export function AlertsPage() {
 
   const settings = useQuery({
     queryKey: ['alert-settings', instance.id],
-    enabled: isAdmin,
+    enabled: isAdmin && alertsEnabled,
     queryFn: async () => {
       const { data, error: qError } = await supabase
         .from('instance_alert_settings')
@@ -78,7 +83,7 @@ export function AlertsPage() {
 
   const deliveries = useQuery({
     queryKey: ['alert-deliveries', instance.id],
-    enabled: isAdmin,
+    enabled: isAdmin && alertsEnabled,
     queryFn: async () => {
       const { data, error: qError } = await supabase
         .from('alert_deliveries')
@@ -259,6 +264,10 @@ export function AlertsPage() {
     onError: (e: Error) => setError(e.message),
   })
 
+  if (!alertsEnabled) {
+    return <PlanLockedState feature="alerts" title="Alerts" />
+  }
+
   if (!isAdmin) {
     return <Navigate to={`/instances/${instance.id}`} replace />
   }
@@ -279,12 +288,13 @@ export function AlertsPage() {
         description={`Threshold rules and weekly digests for ${instance.name}. Notifications use ${
           instance.contact_email || 'organisation contact email (set in settings)'
         }.`}
+        help={PAGE_HELP.alerts}
       />
 
       {error ? <FieldError>{error}</FieldError> : null}
 
       <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold text-[var(--color-ink)]">Weekly digest</h2>
+        <SectionHeading title="Weekly digest" help={SECTION_HELP.weeklyDigest} />
         <p className="text-xs text-[var(--color-ink-muted)]">
           Email KPIs to the organisation contact email on the chosen UTC weekday. Optional Slack.
         </p>
@@ -351,10 +361,13 @@ export function AlertsPage() {
       </Card>
 
       <Card className="space-y-3 p-4">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
-          <Plus className="h-4 w-4" />
-          New rule
-        </h2>
+        <div className="flex items-center gap-1.5">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+            <Plus className="h-4 w-4" />
+            New rule
+          </h2>
+          <HelpTooltip content={SECTION_HELP.alertRules} label="Help: New rule" />
+        </div>
         <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" onSubmit={onSubmit}>
           <div className="lg:col-span-2">
             <Label>Name</Label>

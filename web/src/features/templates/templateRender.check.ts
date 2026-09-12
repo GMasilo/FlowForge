@@ -130,4 +130,21 @@ assert('days' in parsed && parsed.days[0]?.closed === true, 'hours parse')
   assert('orientation' in legacy && legacy.orientation === 'portrait', 'legacy document defaults portrait')
 }
 
+{
+  const agreement = parseTemplateContent('agreement', starterTemplateContent('agreement'))
+  assert('format' in agreement && agreement.format === 'pdf', 'agreement starter is PDF')
+  assert(
+    'fields' in agreement && agreement.fields.some((f) => f.as === 'image' && /signature/i.test(f.label)),
+    'agreement has signature field',
+  )
+  assert(
+    'fields' in agreement && agreement.fields.some((f) => /date signed/i.test(f.label)),
+    'agreement has date signed field',
+  )
+  assert(
+    'inputs' in agreement && agreement.inputs.some((i) => i.key === 'signer_name'),
+    'agreement has signer_name input',
+  )
+}
+
 console.log(JSON.stringify({ ok: true, faqChars: faqText.length, cartChars: cartText.length }, null, 2))

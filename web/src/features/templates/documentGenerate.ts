@@ -42,7 +42,21 @@ function xmlEscape(value: string): string {
 
 async function bytesFromImageUrl(url: string): Promise<{ bytes: Uint8Array; png: boolean } | null> {
   try {
-    const res = await fetch(url)
+    if (url.startsWith('data:image/')) {
+      const comma = url.indexOf(',')
+      if (comma < 0) return null
+      const meta = url.slice(0, comma)
+      const payload = url.slice(comma + 1)
+      const binary = meta.includes(';base64')
+        ? atob(payload)
+        : decodeURIComponent(payload)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+      const png = /image\/png/i.test(meta) || (bytes[0] === 0x89 && bytes[1] === 0x50)
+      return bytes.length ? { bytes, png } : null
+    }
+
+    const res = await fetch(url, { credentials: 'include' })
     if (!res.ok) return null
     const buf = new Uint8Array(await res.arrayBuffer())
     if (!buf.length) return null
@@ -311,6 +325,13 @@ async function generatePdf(doc: FilledDocument): Promise<Uint8Array> {
     }
   }
   write(doc.body, 11, font, ink, 12)
+  if (doc.table?.headers.length) {
+    write(doc.table.headers.join('  |  '), 11, bold, ink, 6)
+    for (const row of doc.table.rows) {
+      write(row.join('  |  '), 10, font, ink, 4)
+    }
+    y -= 6
+  }
   if (doc.cart) {
     write('Order', 13, bold, ink, 8)
     for (const item of doc.cart.items) {
@@ -508,6 +529,33 @@ async function generateDocxFlow(doc: FilledDocument): Promise<Uint8Array> {
     )
   }
   pushText(doc.body)
+  if (doc.table?.headers.length) {
+    const tableRows = [
+      new TableRow({
+        children: doc.table.headers.map(
+          (header) =>
+            new TableCell({
+              children: [new Paragraph({ children: [new TextRun({ text: header, bold: true })] })],
+            }),
+        ),
+      }),
+      ...doc.table.rows.map(
+        (row) =>
+          new TableRow({
+            children: doc.table!.headers.map((_, i) =>
+              new TableCell({
+                children: [new Paragraph({ children: [new TextRun({ text: row[i] ?? '' })] })],
+              }),
+            ),
+          }),
+      ),
+    ]
+    children.push(
+      new Table({ width: { size: 9026, type: WidthType.DXA }, rows: tableRows }) as unknown as InstanceType<
+        typeof Paragraph
+      >,
+    )
+  }
   if (doc.cart) {
     pushText('Order', { bold: true, size: 26 })
     for (const item of doc.cart.items) pushText(`${item.name} × ${item.qty}  ${item.lineTotal}`)
@@ -566,6 +614,11 @@ function generateXlsx(doc: FilledDocument): Uint8Array {
       rows.push([])
       rows.push(['Details', doc.body])
     }
+  }
+  if (doc.table?.headers.length) {
+    rows.push([])
+    rows.push(doc.table.headers)
+    for (const row of doc.table.rows) rows.push(row)
   }
   if (doc.cart) {
     rows.push([])

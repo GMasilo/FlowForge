@@ -1,0 +1,3102 @@
+{
+  "kind": "flowforge.chatbotFlow",
+  "version": 1,
+  "exportedAt": "2026-09-12T13:46:29.405Z",
+  "chatbot": {
+    "id": "c3000000-0000-4000-8000-000000000005",
+    "name": "Retail -- Personal shopper & orders",
+    "description": "Northline Market: shop the edit, track orders, book a stylist, start returns, and leave feedback."
+  },
+  "flow": {
+    "id": "f3000000-0000-4000-8000-000000000005",
+    "name": "Main",
+    "version": 1
+  },
+  "globals": [
+    {
+      "key": "brand_name",
+      "label": "Brand",
+      "value_type": "string",
+      "default_value": "Northline Market",
+      "description": "Organisation or product name displayed to visitors."
+    },
+    {
+      "key": "brand_tagline",
+      "label": "Tagline",
+      "value_type": "string",
+      "default_value": "Style meets substance.",
+      "description": "Short slogan shown at the end of the chat."
+    },
+    {
+      "key": "guest_label",
+      "label": "Guest label",
+      "value_type": "string",
+      "default_value": "Shopper",
+      "description": "How we address a visitor before they give their name."
+    },
+    {
+      "key": "support_email",
+      "label": "Support email",
+      "value_type": "string",
+      "default_value": "hello@northline.example",
+      "description": "Contact email for visitor queries."
+    },
+    {
+      "key": "followup_days",
+      "label": "Follow-up days",
+      "value_type": "number",
+      "default_value": 2,
+      "description": "Days until the estimated follow-up date."
+    },
+    {
+      "key": "service_cities",
+      "label": "Service cities",
+      "value_type": "array",
+      "default_value": [
+        "Cape Town",
+        "Johannesburg",
+        "Durban",
+        "Pretoria",
+        "Sandton",
+        "Stellenbosch"
+      ],
+      "description": "City choices for the autocomplete field."
+    },
+    {
+      "key": "demo_lab_base",
+      "label": "Demo lab base URL",
+      "value_type": "string",
+      "default_value": "https://gkjtt.co.za/flowforge/demo",
+      "description": "Internal demo API base (not shown to visitors)."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a3005000-0000-4000-8000-000000000001",
+      "key": "welcome",
+      "type": "message",
+      "label": "Welcome",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{{templates.welcome_msg.text}}",
+        "templateBindings": {
+          "welcome_msg": {
+            "name": "{{vars.guest_label}}"
+          }
+        }
+      },
+      "position": {
+        "x": 80,
+        "y": 40
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000002",
+      "key": "ask_captcha",
+      "type": "question",
+      "label": "Captcha",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Quick check before we personalise your shopping session.",
+        "answerType": "captcha",
+        "answerRequired": true,
+        "outputVariable": "captcha_ok",
+        "captchaKind": "math",
+        "captchaMaxAttempts": 5
+      },
+      "position": {
+        "x": 80,
+        "y": 150
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000003",
+      "key": "ask_confirm",
+      "type": "question",
+      "label": "Confirm demo",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Northline demo store — do not enter live payment details or real delivery addresses for fulfilment.",
+        "answerType": "confirm",
+        "answerRequired": true,
+        "outputVariable": "terms_ok",
+        "confirmLabel": "Shop the demo — continue"
+      },
+      "position": {
+        "x": 80,
+        "y": 260
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000004",
+      "key": "menu_bridge",
+      "type": "message",
+      "label": "Services",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{{templates.main_menu.text}}\n\n{color:muted}Pick one — no long form until you choose.{/color}"
+      },
+      "position": {
+        "x": 80,
+        "y": 370
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000005",
+      "key": "ask_service",
+      "type": "question",
+      "label": "Service",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "What can Northline help with?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "service",
+        "choices": [
+          "Shop the edit",
+          "Track my order",
+          "Book a stylist",
+          "Start a return",
+          "Store feedback"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 480
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000006",
+      "key": "intake_intro",
+      "type": "message",
+      "label": "A few details",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "A light style profile for **{{vars.service}}** — then we continue."
+      },
+      "position": {
+        "x": 80,
+        "y": 590
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000007",
+      "key": "ask_name",
+      "type": "question",
+      "label": "First name",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "What should we call you while you shop?",
+        "answerType": "name",
+        "answerRequired": true,
+        "outputVariable": "visitor_name"
+      },
+      "position": {
+        "x": 80,
+        "y": 700
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000008",
+      "key": "ask_email",
+      "type": "question",
+      "label": "Email",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Email for order updates and receipts?",
+        "answerType": "email",
+        "answerRequired": true,
+        "outputVariable": "email"
+      },
+      "position": {
+        "x": 80,
+        "y": 810
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000009",
+      "key": "ask_color",
+      "type": "question",
+      "label": "Colour",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Favourite colour for styling tips?",
+        "answerType": "color",
+        "answerRequired": true,
+        "outputVariable": "fav_color"
+      },
+      "position": {
+        "x": 80,
+        "y": 920
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000010",
+      "key": "ask_mood",
+      "type": "question",
+      "label": "Shopping mood",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "What is your shopping mood today?",
+        "answerType": "mood",
+        "answerRequired": true,
+        "outputVariable": "mood"
+      },
+      "position": {
+        "x": 80,
+        "y": 1030
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000011",
+      "key": "ask_city",
+      "type": "question",
+      "label": "Store",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Which Northline store is closest?",
+        "answerType": "autocomplete",
+        "answerRequired": true,
+        "outputVariable": "city",
+        "choicesFrom": "{{vars.service_cities}}"
+      },
+      "position": {
+        "x": 80,
+        "y": 1140
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000012",
+      "key": "ask_phone",
+      "type": "question",
+      "label": "Mobile",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Mobile for click-and-collect alerts? (optional)",
+        "answerType": "phone",
+        "answerRequired": false,
+        "outputVariable": "phone"
+      },
+      "position": {
+        "x": 80,
+        "y": 1250
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000013",
+      "key": "set_identity_vars",
+      "type": "set_variable",
+      "label": "Identity variables",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "full_name",
+        "value": "{{trim(coalesce(vars.visitor_name, \"\"))}}",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "full_name",
+            "value": "{{trim(coalesce(vars.visitor_name, \"\"))}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "phone",
+            "value": "{{coalesce(vars.phone, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "country",
+            "value": "{{coalesce(vars.country, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "city",
+            "value": "{{coalesce(vars.city, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "gender",
+            "value": "{{coalesce(vars.gender, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "birthday",
+            "value": "{{coalesce(vars.birthday, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "address",
+            "value": "{{coalesce(vars.address, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "mood",
+            "value": "{{coalesce(vars.mood, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "national_id",
+            "value": "{{coalesce(vars.national_id, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "company",
+            "value": "{{coalesce(vars.company, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "postal_code",
+            "value": "{{coalesce(vars.postal_code, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "priority",
+            "value": "standard",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "summary",
+            "value": "",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "checklist",
+            "value": "[\"Our team reviews your request\",\"You receive confirmation by email\",\"A stylist may follow up\",\"Keep your reference for orders\"]",
+            "valueType": "array"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 1360
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000014",
+      "key": "op_upper_name",
+      "type": "operation",
+      "label": "Uppercase name",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "operation": "upper",
+        "left": "{{vars.visitor_name}}",
+        "right": "",
+        "outputVariable": "visitor_name_upper"
+      },
+      "position": {
+        "x": 80,
+        "y": 1470
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000015",
+      "key": "op_name_len",
+      "type": "operation",
+      "label": "Name length",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "operation": "length",
+        "left": "{{vars.visitor_name}}",
+        "right": "",
+        "outputVariable": "name_len"
+      },
+      "position": {
+        "x": 80,
+        "y": 1580
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000016",
+      "key": "op_email_display",
+      "type": "operation",
+      "label": "Email display",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "operation": "replace",
+        "left": "{{vars.email}}",
+        "right": "@",
+        "replaceWith": " [at] ",
+        "outputVariable": "email_display"
+      },
+      "position": {
+        "x": 80,
+        "y": 1690
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000017",
+      "key": "identity_recap",
+      "type": "message",
+      "label": "Profile ready",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "**Shopper profile · {{titleCase(vars.visitor_name)}}**\n\nStyle vibe: **{{coalesce(vars.mood, \"—\")}}** · favourite colour **{{coalesce(vars.fav_color, \"—\")}}**\nHome store: **{{coalesce(vars.city, \"—\")}}**\nEmail: `{{vars.email_display}}`{{if(empty(vars.phone), \"\", \" · \" + vars.phone)}}\n\n{color:muted}Let us find something you love.{/color}"
+      },
+      "position": {
+        "x": 80,
+        "y": 1800
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000018",
+      "key": "init_signature",
+      "type": "set_variable",
+      "label": "Init signature",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "signature",
+        "value": "",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "signature",
+            "value": "",
+            "valueType": "string"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 1910
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000019",
+      "key": "sw_service",
+      "type": "switch",
+      "label": "Route service",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "value": "{{vars.service}}",
+        "cases": [
+          {
+            "id": "case_shop",
+            "match": "Shop the edit",
+            "label": "Shop"
+          },
+          {
+            "id": "case_track",
+            "match": "Track my order",
+            "label": "Track"
+          },
+          {
+            "id": "case_stylist",
+            "match": "Book a stylist",
+            "label": "Stylist"
+          },
+          {
+            "id": "case_return",
+            "match": "Start a return",
+            "label": "Return"
+          },
+          {
+            "id": "case_feedback",
+            "match": "Store feedback",
+            "label": "Feedback"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 2020
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000038",
+      "key": "http_submit",
+      "type": "http",
+      "label": "Confirm request",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "POST",
+        "path": "/industry/submit",
+        "body": "{\"industry\":\"retail\",\"service\":\"{{vars.service}}\",\"name\":\"{{vars.visitor_name}}\",\"email\":\"{{vars.email}}\",\"phone\":\"{{vars.phone}}\",\"country\":\"{{vars.country}}\",\"city\":\"{{vars.city}}\",\"mood\":\"{{vars.mood}}\",\"priority\":\"{{vars.priority}}\"}",
+        "paramValues": {},
+        "outputVariable": "lab_submit"
+      },
+      "position": {
+        "x": 80,
+        "y": 2130
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000039",
+      "key": "intro_shop",
+      "type": "message",
+      "label": "Shop",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Browse featured collections, then shop the edit."
+      },
+      "position": {
+        "x": 80,
+        "y": 2240
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000040",
+      "key": "list_collections",
+      "type": "entity",
+      "label": "List collections",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "entityId": "b3100000-0000-4000-8000-000000000005",
+        "operation": "list",
+        "recordId": "",
+        "filterAttribute": "",
+        "filterEquals": "",
+        "fieldMap": {},
+        "outputVariable": "featured_collections"
+      },
+      "position": {
+        "x": 80,
+        "y": 2350
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000041",
+      "key": "msg_collections",
+      "type": "message",
+      "label": "Collections",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Featured collections loaded: **{{length(vars.featured_collections)}}** rows."
+      },
+      "position": {
+        "x": 80,
+        "y": 2460
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000042",
+      "key": "ask_shop",
+      "type": "question",
+      "label": "Shop",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Add items from the Northline edit and checkout.",
+        "answerType": "shop",
+        "answerRequired": true,
+        "outputVariable": "cart",
+        "shopTemplateKey": "northline_store"
+      },
+      "position": {
+        "x": 80,
+        "y": 2570
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000043",
+      "key": "ask_payment",
+      "type": "question",
+      "label": "Payment",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Pay for your cart.",
+        "answerType": "payment",
+        "answerRequired": true,
+        "outputVariable": "payment",
+        "paymentAmount": "{{vars.cart.total}}",
+        "paymentItemName": "Northline Market",
+        "paymentBuyerEmail": "{{vars.email}}",
+        "paymentBuyerName": "{{vars.visitor_name}}"
+      },
+      "position": {
+        "x": 80,
+        "y": 2680
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000044",
+      "key": "done_shop",
+      "type": "message",
+      "label": "Paid",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Cart total **{{vars.cart.total}} {{vars.cart.currency}}** - payment `{{coalesce(vars.payment.reference, \"demo\")}}`."
+      },
+      "position": {
+        "x": 80,
+        "y": 2790
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000052",
+      "key": "intro_track",
+      "type": "message",
+      "label": "Track",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Look up a demo order (try NL-45821)."
+      },
+      "position": {
+        "x": 80,
+        "y": 2900
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000053",
+      "key": "track_ref",
+      "type": "question",
+      "label": "Reference",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Order reference?",
+        "answerType": "text",
+        "answerRequired": true,
+        "outputVariable": "order_ref"
+      },
+      "position": {
+        "x": 80,
+        "y": 3010
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000054",
+      "key": "track_otp",
+      "type": "question",
+      "label": "Verification",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Enter the verification code (any 6 digits for this demo).",
+        "answerType": "otp",
+        "answerRequired": true,
+        "outputVariable": "otp_ok",
+        "otpSubject": "Northline order code",
+        "otpLength": 6
+      },
+      "position": {
+        "x": 80,
+        "y": 3120
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000055",
+      "key": "http_order",
+      "type": "http",
+      "label": "GET order",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "GET",
+        "path": "/retail/orders/{{vars.order_ref}}",
+        "body": "",
+        "paramValues": {},
+        "outputVariable": "order"
+      },
+      "position": {
+        "x": 80,
+        "y": 3230
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000056",
+      "key": "done_track",
+      "type": "message",
+      "label": "Status",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "**{{vars.order_ref}}**: **{{vars.order.data.status}}** - ETA **{{coalesce(vars.order.data.eta, \"n/a\")}}** - **{{coalesce(vars.order.data.amount, \"?\")}} {{coalesce(vars.order.data.currency, \"\")}}**."
+      },
+      "position": {
+        "x": 80,
+        "y": 3340
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000063",
+      "key": "intro_stylist",
+      "type": "message",
+      "label": "Stylist",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Book a personal styling session."
+      },
+      "position": {
+        "x": 80,
+        "y": 3450
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000064",
+      "key": "stylist_occasion",
+      "type": "question",
+      "label": "Occasion",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "What is the occasion?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "occasion",
+        "choices": [
+          "Work wardrobe",
+          "Weekend reset",
+          "Event / wedding",
+          "Gift editing"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 3560
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000065",
+      "key": "stylist_rank",
+      "type": "question",
+      "label": "Priorities",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Rank what matters most.",
+        "answerType": "ranking",
+        "answerRequired": true,
+        "outputVariable": "style_priorities",
+        "choices": [
+          "Fit",
+          "Colour",
+          "Budget",
+          "Trends",
+          "Sustainability"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 3670
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000066",
+      "key": "stylist_when",
+      "type": "question",
+      "label": "Slot",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Preferred stylist appointment?",
+        "answerType": "appointment",
+        "answerRequired": true,
+        "outputVariable": "stylist_at"
+      },
+      "position": {
+        "x": 80,
+        "y": 3780
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000067",
+      "key": "stylist_budget",
+      "type": "question",
+      "label": "Budget",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Rough spend budget?",
+        "answerType": "currency",
+        "answerRequired": true,
+        "outputVariable": "budget"
+      },
+      "position": {
+        "x": 80,
+        "y": 3890
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000068",
+      "key": "done_stylist",
+      "type": "message",
+      "label": "Booked",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Stylist for **{{vars.occasion}}** on **{{prettify(vars.stylist_at)}}** - top priority **{{first(vars.style_priorities)}}** - budget **{{vars.budget}}**."
+      },
+      "position": {
+        "x": 80,
+        "y": 4000
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000076",
+      "key": "intro_return",
+      "type": "message",
+      "label": "Return",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Start a return within the demo window."
+      },
+      "position": {
+        "x": 80,
+        "y": 4110
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000077",
+      "key": "ret_ref",
+      "type": "question",
+      "label": "Order",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Order reference to return?",
+        "answerType": "text",
+        "answerRequired": true,
+        "outputVariable": "return_ref"
+      },
+      "position": {
+        "x": 80,
+        "y": 4220
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000078",
+      "key": "ret_days",
+      "type": "question",
+      "label": "Days since purchase",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "How many days since purchase?",
+        "answerType": "number",
+        "answerRequired": true,
+        "outputVariable": "days_since_purchase"
+      },
+      "position": {
+        "x": 80,
+        "y": 4330
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000079",
+      "key": "ret_reason",
+      "type": "question",
+      "label": "Reason",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Why are you returning?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "return_reason",
+        "choices": [
+          "Wrong size",
+          "Not as described",
+          "Changed mind",
+          "Damaged",
+          "Other"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 4440
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000080",
+      "key": "cond_return",
+      "type": "condition",
+      "label": "Within 30 days?",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "left": "{{vars.days_since_purchase}}",
+        "operator": "lte",
+        "right": "30"
+      },
+      "position": {
+        "x": 80,
+        "y": 4550
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000081",
+      "key": "msg_return_ok",
+      "type": "message",
+      "label": "Eligible",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:success}**Within 30 days**{/color} -- return for **{{vars.return_ref}}** (**{{vars.return_reason}}**) can proceed."
+      },
+      "position": {
+        "x": 80,
+        "y": 4660
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000082",
+      "key": "msg_return_late",
+      "type": "message",
+      "label": "Outside window",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:warning}**Outside the 30-day window**{/color} ({{vars.days_since_purchase}} days). A specialist would advise next steps."
+      },
+      "position": {
+        "x": 80,
+        "y": 4770
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000083",
+      "key": "done_return",
+      "type": "message",
+      "label": "Return done",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Return flow complete for **{{vars.return_ref}}**."
+      },
+      "position": {
+        "x": 80,
+        "y": 4880
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000094",
+      "key": "intro_feedback",
+      "type": "message",
+      "label": "Feedback",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "How was your Northline experience?"
+      },
+      "position": {
+        "x": 80,
+        "y": 4990
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000095",
+      "key": "ask_nps",
+      "type": "question",
+      "label": "NPS",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "How likely are you to recommend Northline? (0-10)",
+        "answerType": "nps",
+        "answerRequired": true,
+        "outputVariable": "nps"
+      },
+      "position": {
+        "x": 80,
+        "y": 5100
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000096",
+      "key": "ask_comments",
+      "type": "question",
+      "label": "Comments",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Anything else we should know?",
+        "answerType": "long_text",
+        "answerRequired": false,
+        "outputVariable": "preferences"
+      },
+      "position": {
+        "x": 80,
+        "y": 5210
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000097",
+      "key": "done_feedback",
+      "type": "message",
+      "label": "Thanks",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "NPS **{{vars.nps}}** -- thank you for the feedback."
+      },
+      "position": {
+        "x": 80,
+        "y": 5320
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000103",
+      "key": "set_ref_vars",
+      "type": "set_variable",
+      "label": "Set reference",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "reference",
+        "value": "{{coalesce(vars.lab_submit.submission_id, \"pending\")}}",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "reference",
+            "value": "{{coalesce(vars.lab_submit.submission_id, \"pending\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "followup_on",
+            "value": "{{formatDate(dateAdd(utcNow(), coalesce(vars.followup_days, 2), \"days\"), \"EEE d MMM\")}}",
+            "valueType": "string"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 5430
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000104",
+      "key": "set_summary_vars",
+      "type": "set_variable",
+      "label": "Set summary",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "summary",
+        "value": "{{if(empty(vars.summary), vars.service + \" in \" + coalesce(vars.city, \"your area\"), vars.summary)}}",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "summary",
+            "value": "{{if(empty(vars.summary), vars.service + \" in \" + coalesce(vars.city, \"your area\"), vars.summary)}}",
+            "valueType": "string"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 5540
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000105",
+      "key": "http_email_sink",
+      "type": "http",
+      "label": "Notify inbox",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "POST",
+        "path": "/email/sink",
+        "body": "{\"to\":\"{{vars.email}}\",\"subject\":\"Northline Market: {{vars.service}}\",\"body\":\"Thanks {{vars.visitor_name}} -- we logged your {{vars.service}} request. Ref {{vars.reference}}.\"}",
+        "paramValues": {},
+        "outputVariable": "email_sink"
+      },
+      "position": {
+        "x": 80,
+        "y": 5650
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000106",
+      "key": "send_email",
+      "type": "email",
+      "label": "Send confirmation",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "templateKey": "followup_email",
+        "to": "{{vars.email}}",
+        "subject": "",
+        "body": "{{templates.followup_email.html}}",
+        "paramValues": {},
+        "templateBindings": {
+          "followup_email": {
+            "name": "{{vars.full_name}}",
+            "brand": "{{vars.brand_name}}",
+            "service": "{{vars.service}}",
+            "reference": "{{vars.reference}}",
+            "city": "{{vars.city}}",
+            "followup": "{{vars.followup_on}}",
+            "summary": "{{vars.summary}}",
+            "support": "{{vars.support_email}}"
+          }
+        }
+      },
+      "position": {
+        "x": 80,
+        "y": 5760
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000107",
+      "key": "save_enquiry",
+      "type": "entity",
+      "label": "Save enquiry",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "entityId": "b3200000-0000-4000-8000-000000000005",
+        "operation": "create",
+        "recordId": "",
+        "filterAttribute": "",
+        "filterEquals": "",
+        "fieldMap": {
+          "name": "{{vars.visitor_name}}",
+          "email": "{{vars.email}}",
+          "phone": "{{coalesce(vars.phone, \"\")}}",
+          "country": "{{coalesce(vars.country, \"\")}}",
+          "city": "{{coalesce(vars.city, \"\")}}",
+          "service": "{{vars.service}}",
+          "summary": "{{vars.summary}}",
+          "priority": "{{vars.priority}}",
+          "mood": "{{coalesce(vars.mood, \"\")}}",
+          "reference": "{{vars.reference}}",
+          "followup_on": "{{vars.followup_on}}"
+        },
+        "outputVariable": "enquiry"
+      },
+      "position": {
+        "x": 80,
+        "y": 5870
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000108",
+      "key": "loop_next",
+      "type": "loop",
+      "label": "Next steps",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "collection": "{{vars.checklist}}",
+        "itemVariable": "check_item",
+        "indexVariable": "check_index"
+      },
+      "position": {
+        "x": 80,
+        "y": 5980
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000109",
+      "key": "msg_check_item",
+      "type": "message",
+      "label": "Checklist item",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{{vars.check_index + 1}}. {{vars.check_item}}"
+      },
+      "position": {
+        "x": 80,
+        "y": 6090
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000110",
+      "key": "ask_doc_sign",
+      "type": "question",
+      "label": "Sign pack",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Please sign so we can stamp your confirmation pack.",
+        "answerType": "signature",
+        "answerRequired": true,
+        "outputVariable": "signature"
+      },
+      "position": {
+        "x": 80,
+        "y": 6200
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000111",
+      "key": "wrap",
+      "type": "message",
+      "label": "Confirmation",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "## Thanks, {{titleCase(vars.visitor_name)}} ✓\n\n**Service:** {{vars.service}}\n**Reference:** `{{vars.reference}}`\n**Follow-up:** around {{vars.followup_on}}\n\n📍 {{coalesce(vars.city, \"Your area\")}}, {{coalesce(vars.country, \"\")}}\n📱 {{coalesce(vars.phone, \"—\")}}\n📧 `{{vars.email_display}}`\n\n{color:accent}Thank you for shopping with us!{/color}\n\n---\n\n{{templates.order_receipt.text}}\n\n{{templates.pack_document.file}}",
+        "templateBindings": {
+          "order_receipt": {
+            "name": "{{vars.visitor_name}}",
+            "service": "{{vars.service}}",
+            "city": "{{vars.city}}",
+            "order_id": "{{coalesce(vars.enquiry.id, vars.reference, \"demo\")}}"
+          },
+          "pack_document": {
+            "name": "{{vars.visitor_name}}",
+            "email": "{{vars.email}}",
+            "phone": "{{vars.phone}}",
+            "country": "{{vars.country}}",
+            "city": "{{vars.city}}",
+            "service": "{{vars.service}}",
+            "priority": "{{vars.priority}}",
+            "mood": "{{vars.mood}}",
+            "reference": "{{vars.reference}}",
+            "followup": "{{vars.followup_on}}",
+            "summary": "{{vars.summary}}",
+            "signature": "{{vars.signature}}",
+            "brand": "{{vars.brand_name}}",
+            "support": "{{vars.support_email}}"
+          }
+        }
+      },
+      "position": {
+        "x": 80,
+        "y": 6310
+      }
+    },
+    {
+      "id": "a3005000-0000-4000-8000-000000000112",
+      "key": "end",
+      "type": "end",
+      "label": "Goodbye",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "message": "Thanks for exploring **{{vars.brand_name}}**.\n\n{{coalesce(vars.brand_tagline, \"\")}}\n\n{color:muted}Restart the chat to try another service.{/color}"
+      },
+      "position": {
+        "x": 80,
+        "y": 6420
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e3005000-0000-4000-8000-000000000020",
+      "source": "a3005000-0000-4000-8000-000000000001",
+      "target": "a3005000-0000-4000-8000-000000000002",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000021",
+      "source": "a3005000-0000-4000-8000-000000000002",
+      "target": "a3005000-0000-4000-8000-000000000003",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000022",
+      "source": "a3005000-0000-4000-8000-000000000003",
+      "target": "a3005000-0000-4000-8000-000000000004",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000023",
+      "source": "a3005000-0000-4000-8000-000000000004",
+      "target": "a3005000-0000-4000-8000-000000000005",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000024",
+      "source": "a3005000-0000-4000-8000-000000000005",
+      "target": "a3005000-0000-4000-8000-000000000006",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000025",
+      "source": "a3005000-0000-4000-8000-000000000006",
+      "target": "a3005000-0000-4000-8000-000000000007",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000026",
+      "source": "a3005000-0000-4000-8000-000000000007",
+      "target": "a3005000-0000-4000-8000-000000000008",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000027",
+      "source": "a3005000-0000-4000-8000-000000000008",
+      "target": "a3005000-0000-4000-8000-000000000009",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000028",
+      "source": "a3005000-0000-4000-8000-000000000009",
+      "target": "a3005000-0000-4000-8000-000000000010",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000029",
+      "source": "a3005000-0000-4000-8000-000000000010",
+      "target": "a3005000-0000-4000-8000-000000000011",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000030",
+      "source": "a3005000-0000-4000-8000-000000000011",
+      "target": "a3005000-0000-4000-8000-000000000012",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000031",
+      "source": "a3005000-0000-4000-8000-000000000012",
+      "target": "a3005000-0000-4000-8000-000000000013",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000032",
+      "source": "a3005000-0000-4000-8000-000000000013",
+      "target": "a3005000-0000-4000-8000-000000000014",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000033",
+      "source": "a3005000-0000-4000-8000-000000000014",
+      "target": "a3005000-0000-4000-8000-000000000015",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000034",
+      "source": "a3005000-0000-4000-8000-000000000015",
+      "target": "a3005000-0000-4000-8000-000000000016",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000035",
+      "source": "a3005000-0000-4000-8000-000000000016",
+      "target": "a3005000-0000-4000-8000-000000000017",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000036",
+      "source": "a3005000-0000-4000-8000-000000000017",
+      "target": "a3005000-0000-4000-8000-000000000018",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000037",
+      "source": "a3005000-0000-4000-8000-000000000018",
+      "target": "a3005000-0000-4000-8000-000000000019",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000045",
+      "source": "a3005000-0000-4000-8000-000000000039",
+      "target": "a3005000-0000-4000-8000-000000000040",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000046",
+      "source": "a3005000-0000-4000-8000-000000000040",
+      "target": "a3005000-0000-4000-8000-000000000041",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000047",
+      "source": "a3005000-0000-4000-8000-000000000041",
+      "target": "a3005000-0000-4000-8000-000000000042",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000048",
+      "source": "a3005000-0000-4000-8000-000000000042",
+      "target": "a3005000-0000-4000-8000-000000000043",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000049",
+      "source": "a3005000-0000-4000-8000-000000000043",
+      "target": "a3005000-0000-4000-8000-000000000044",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000050",
+      "source": "a3005000-0000-4000-8000-000000000019",
+      "target": "a3005000-0000-4000-8000-000000000039",
+      "sourceHandle": "case_shop",
+      "label": "Shop the edit"
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000051",
+      "source": "a3005000-0000-4000-8000-000000000044",
+      "target": "a3005000-0000-4000-8000-000000000038",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000057",
+      "source": "a3005000-0000-4000-8000-000000000052",
+      "target": "a3005000-0000-4000-8000-000000000053",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000058",
+      "source": "a3005000-0000-4000-8000-000000000053",
+      "target": "a3005000-0000-4000-8000-000000000054",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000059",
+      "source": "a3005000-0000-4000-8000-000000000054",
+      "target": "a3005000-0000-4000-8000-000000000055",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000060",
+      "source": "a3005000-0000-4000-8000-000000000055",
+      "target": "a3005000-0000-4000-8000-000000000056",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000061",
+      "source": "a3005000-0000-4000-8000-000000000019",
+      "target": "a3005000-0000-4000-8000-000000000052",
+      "sourceHandle": "case_track",
+      "label": "Track my order"
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000062",
+      "source": "a3005000-0000-4000-8000-000000000056",
+      "target": "a3005000-0000-4000-8000-000000000038",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000069",
+      "source": "a3005000-0000-4000-8000-000000000063",
+      "target": "a3005000-0000-4000-8000-000000000064",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000070",
+      "source": "a3005000-0000-4000-8000-000000000064",
+      "target": "a3005000-0000-4000-8000-000000000065",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000071",
+      "source": "a3005000-0000-4000-8000-000000000065",
+      "target": "a3005000-0000-4000-8000-000000000066",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000072",
+      "source": "a3005000-0000-4000-8000-000000000066",
+      "target": "a3005000-0000-4000-8000-000000000067",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000073",
+      "source": "a3005000-0000-4000-8000-000000000067",
+      "target": "a3005000-0000-4000-8000-000000000068",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000074",
+      "source": "a3005000-0000-4000-8000-000000000019",
+      "target": "a3005000-0000-4000-8000-000000000063",
+      "sourceHandle": "case_stylist",
+      "label": "Book a stylist"
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000075",
+      "source": "a3005000-0000-4000-8000-000000000068",
+      "target": "a3005000-0000-4000-8000-000000000038",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000084",
+      "source": "a3005000-0000-4000-8000-000000000076",
+      "target": "a3005000-0000-4000-8000-000000000077",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000085",
+      "source": "a3005000-0000-4000-8000-000000000077",
+      "target": "a3005000-0000-4000-8000-000000000078",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000086",
+      "source": "a3005000-0000-4000-8000-000000000078",
+      "target": "a3005000-0000-4000-8000-000000000079",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000087",
+      "source": "a3005000-0000-4000-8000-000000000079",
+      "target": "a3005000-0000-4000-8000-000000000080",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000088",
+      "source": "a3005000-0000-4000-8000-000000000080",
+      "target": "a3005000-0000-4000-8000-000000000081",
+      "sourceHandle": "true",
+      "label": "Eligible"
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000089",
+      "source": "a3005000-0000-4000-8000-000000000080",
+      "target": "a3005000-0000-4000-8000-000000000082",
+      "sourceHandle": "false",
+      "label": "Late"
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000090",
+      "source": "a3005000-0000-4000-8000-000000000081",
+      "target": "a3005000-0000-4000-8000-000000000083",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000091",
+      "source": "a3005000-0000-4000-8000-000000000082",
+      "target": "a3005000-0000-4000-8000-000000000083",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000092",
+      "source": "a3005000-0000-4000-8000-000000000019",
+      "target": "a3005000-0000-4000-8000-000000000076",
+      "sourceHandle": "case_return",
+      "label": "Start a return"
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000093",
+      "source": "a3005000-0000-4000-8000-000000000083",
+      "target": "a3005000-0000-4000-8000-000000000038",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000098",
+      "source": "a3005000-0000-4000-8000-000000000094",
+      "target": "a3005000-0000-4000-8000-000000000095",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000099",
+      "source": "a3005000-0000-4000-8000-000000000095",
+      "target": "a3005000-0000-4000-8000-000000000096",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000100",
+      "source": "a3005000-0000-4000-8000-000000000096",
+      "target": "a3005000-0000-4000-8000-000000000097",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000101",
+      "source": "a3005000-0000-4000-8000-000000000019",
+      "target": "a3005000-0000-4000-8000-000000000094",
+      "sourceHandle": "case_feedback",
+      "label": "Store feedback"
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000102",
+      "source": "a3005000-0000-4000-8000-000000000097",
+      "target": "a3005000-0000-4000-8000-000000000038",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000113",
+      "source": "a3005000-0000-4000-8000-000000000038",
+      "target": "a3005000-0000-4000-8000-000000000103",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000114",
+      "source": "a3005000-0000-4000-8000-000000000103",
+      "target": "a3005000-0000-4000-8000-000000000104",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000115",
+      "source": "a3005000-0000-4000-8000-000000000104",
+      "target": "a3005000-0000-4000-8000-000000000105",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000116",
+      "source": "a3005000-0000-4000-8000-000000000105",
+      "target": "a3005000-0000-4000-8000-000000000106",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000117",
+      "source": "a3005000-0000-4000-8000-000000000106",
+      "target": "a3005000-0000-4000-8000-000000000107",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000118",
+      "source": "a3005000-0000-4000-8000-000000000107",
+      "target": "a3005000-0000-4000-8000-000000000108",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000119",
+      "source": "a3005000-0000-4000-8000-000000000108",
+      "target": "a3005000-0000-4000-8000-000000000109",
+      "sourceHandle": "body",
+      "label": "Each"
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000120",
+      "source": "a3005000-0000-4000-8000-000000000109",
+      "target": "a3005000-0000-4000-8000-000000000110",
+      "sourceHandle": null,
+      "label": "Then"
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000121",
+      "source": "a3005000-0000-4000-8000-000000000110",
+      "target": "a3005000-0000-4000-8000-000000000111",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000122",
+      "source": "a3005000-0000-4000-8000-000000000111",
+      "target": "a3005000-0000-4000-8000-000000000112",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3005000-0000-4000-8000-000000000123",
+      "source": "a3005000-0000-4000-8000-000000000019",
+      "target": "a3005000-0000-4000-8000-000000000038",
+      "sourceHandle": "default",
+      "label": "Default"
+    }
+  ],
+  "entities": [
+    {
+      "id": "b3100000-0000-4000-8000-000000000005",
+      "key": "featured_collections"
+    },
+    {
+      "id": "b3200000-0000-4000-8000-000000000005",
+      "key": "shopper_requests"
+    }
+  ],
+  "entityDefs": [
+    {
+      "id": "b3100000-0000-4000-8000-000000000005",
+      "key": "featured_collections",
+      "name": "Featured collections",
+      "description": "Static collection catalog",
+      "kind": "static",
+      "attributes": [
+        {
+          "key": "id",
+          "label": "Id",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": true,
+          "is_unique": true,
+          "sort_order": -1,
+          "default_value": null
+        },
+        {
+          "key": "code",
+          "label": "Code",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": true,
+          "sort_order": 0,
+          "default_value": null
+        },
+        {
+          "key": "name",
+          "label": "Name",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 1,
+          "default_value": null
+        },
+        {
+          "key": "theme",
+          "label": "Theme",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 2,
+          "default_value": null
+        }
+      ],
+      "records": [
+        {
+          "id": "31111111-1111-4111-8111-111111111501",
+          "code": "WORK",
+          "name": "Workday Edit",
+          "theme": "Office"
+        },
+        {
+          "id": "31111111-1111-4111-8111-111111111502",
+          "code": "WEEK",
+          "name": "Weekend Linen",
+          "theme": "Leisure"
+        },
+        {
+          "id": "31111111-1111-4111-8111-111111111503",
+          "code": "GIFT",
+          "name": "Gift Under R500",
+          "theme": "Gifting"
+        }
+      ]
+    },
+    {
+      "id": "b3200000-0000-4000-8000-000000000005",
+      "key": "shopper_requests",
+      "name": "Shopper requests",
+      "description": "Logged Northline shopper requests",
+      "kind": "dynamic",
+      "attributes": [
+        {
+          "key": "id",
+          "label": "Id",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": true,
+          "is_unique": true,
+          "sort_order": -1,
+          "default_value": null
+        },
+        {
+          "key": "name",
+          "label": "Name",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 0,
+          "default_value": null
+        },
+        {
+          "key": "email",
+          "label": "Email",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 1,
+          "default_value": null
+        },
+        {
+          "key": "phone",
+          "label": "Phone",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 2,
+          "default_value": null
+        },
+        {
+          "key": "country",
+          "label": "Country",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 3,
+          "default_value": null
+        },
+        {
+          "key": "city",
+          "label": "City",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 4,
+          "default_value": null
+        },
+        {
+          "key": "service",
+          "label": "Service",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 5,
+          "default_value": null
+        },
+        {
+          "key": "summary",
+          "label": "Summary",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 6,
+          "default_value": null
+        },
+        {
+          "key": "priority",
+          "label": "Priority",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 7,
+          "default_value": null
+        },
+        {
+          "key": "mood",
+          "label": "Mood",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 8,
+          "default_value": null
+        },
+        {
+          "key": "reference",
+          "label": "Reference",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 9,
+          "default_value": null
+        },
+        {
+          "key": "followup_on",
+          "label": "Follow-up on",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 10,
+          "default_value": null
+        }
+      ],
+      "records": []
+    }
+  ],
+  "templates": [
+    {
+      "key": "welcome_msg",
+      "name": "Welcome",
+      "kind": "message",
+      "description": "Opening copy",
+      "content": {
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Guest name",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "text": "Hi from **Northline Market**.\n\nWhat can I help you with?\n\n{color:muted}{{formatDate(utcNow(), \"EEEE, d MMMM yyyy\")}}{/color}"
+      }
+    },
+    {
+      "key": "main_menu",
+      "name": "Services menu",
+      "kind": "menu",
+      "description": "Service overview with hints",
+      "content": {
+        "inputs": [],
+        "title": "How can I help?",
+        "items": [
+          {
+            "label": "Shop the edit",
+            "description": "Browse this week's edit",
+            "value": "Shop the edit"
+          },
+          {
+            "label": "Track my order",
+            "description": "Check your order status",
+            "value": "Track my order"
+          },
+          {
+            "label": "Book a stylist",
+            "description": "Personal styling session",
+            "value": "Book a stylist"
+          },
+          {
+            "label": "Start a return",
+            "description": "Initiate a return",
+            "value": "Start a return"
+          },
+          {
+            "label": "Store feedback",
+            "description": "Share your experience",
+            "value": "Store feedback"
+          }
+        ]
+      }
+    },
+    {
+      "key": "hours_main",
+      "name": "Opening hours",
+      "kind": "hours",
+      "description": "Hours card",
+      "content": {
+        "inputs": [],
+        "timezone": "Africa/Johannesburg",
+        "note": "Flagship store and click-and-collect hours (demo).",
+        "days": [
+          {
+            "day": "Monday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Tuesday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Wednesday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Thursday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Friday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Saturday",
+            "open": "08:00",
+            "close": "13:00",
+            "closed": false
+          },
+          {
+            "day": "Sunday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": true
+          }
+        ]
+      }
+    },
+    {
+      "key": "help_faq",
+      "name": "FAQ",
+      "kind": "faq",
+      "description": "FAQ with intro",
+      "content": {
+        "inputs": [
+          {
+            "key": "brand",
+            "label": "Brand",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "title": "FAQ",
+        "intro": "Quick answers about {{coalesce(inputs.brand, \"Northline Market\")}}:",
+        "items": [
+          {
+            "question": "Are orders real?",
+            "answer": "No — this is a demonstration. Try order reference NL-45821 when tracking."
+          },
+          {
+            "question": "How do I track an order?",
+            "answer": "Choose Track my order from the menu and enter a demo reference such as NL-45821."
+          }
+        ]
+      }
+    },
+    {
+      "key": "terms_of_use",
+      "name": "Terms",
+      "kind": "legal",
+      "description": "Demo terms",
+      "content": {
+        "inputs": [],
+        "title": "Shopper demo terms",
+        "body": "Demo only. Do not enter live payment credentials or real addresses for fulfilment."
+      }
+    },
+    {
+      "key": "followup_email",
+      "name": "Follow-up email",
+      "kind": "email",
+      "description": "Confirmation email HTML with reference",
+      "content": {
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Name",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "brand",
+            "label": "Brand",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "service",
+            "label": "Service",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "reference",
+            "label": "Reference",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "city",
+            "label": "City",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "followup",
+            "label": "Follow-up date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "summary",
+            "label": "Summary",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "support",
+            "label": "Support email",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "subject": "Northline Market: your {{coalesce(inputs.service, \"request\")}} · ref {{coalesce(inputs.reference, \"pending\")}}",
+        "html": "<!DOCTYPE html>\n<html><body style=\"margin:0;background:#f1f5f9;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;\">\n  <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f1f5f9;padding:28px 0;\">\n    <tr><td align=\"center\">\n      <table role=\"presentation\" width=\"580\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 12px 40px rgba(15,23,42,.08);\">\n        <tr>\n          <td style=\"background:linear-gradient(135deg,#0f766e,#0891b2);padding:32px 36px;color:#ffffff;\">\n            <p style=\"margin:0;font-size:11px;letter-spacing:.2em;text-transform:uppercase;opacity:.88;\">{{coalesce(inputs.brand, \"Northline Market\")}}</p>\n            <h1 style=\"margin:10px 0 0;font-size:24px;font-weight:650;letter-spacing:-.02em;\">You're all set, {{titleCase(inputs.name)}}</h1>\n            <p style=\"margin:10px 0 0;font-size:14px;opacity:.9;\">{{formatDate(utcNow(), \"EEEE, d MMMM yyyy · HH:mm\")}}</p>\n          </td>\n        </tr>\n        <tr>\n          <td style=\"padding:28px 36px 8px;color:#334155;font-size:15px;line-height:1.65;\">\n            <p style=\"margin:0 0 14px;\">We have logged your <strong>{{coalesce(inputs.service, \"service\")}}</strong> request.</p>\n            <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;margin:0 0 18px;\">\n              <tr>\n                <td style=\"padding:16px 18px;\">\n                  <p style=\"margin:0 0 6px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;\">Reference</p>\n                  <p style=\"margin:0;font-size:18px;font-weight:650;color:#0f172a;font-family:ui-monospace,Consolas,monospace;\">{{coalesce(inputs.reference, \"pending\")}}</p>\n                </td>\n              </tr>\n              <tr>\n                <td style=\"padding:0 18px 16px;\">\n                  <p style=\"margin:0;font-size:13px;color:#64748b;\">City · {{coalesce(inputs.city, \"—\")}} · Follow-up around {{coalesce(inputs.followup, \"soon\")}}</p>\n                </td>\n              </tr>\n            </table>\n            <p style=\"margin:0 0 12px;\">{{coalesce(inputs.summary, \"A member of the team will use the details you shared in this chat.\")}}</p>\n            <p style=\"margin:0 0 18px;color:#64748b;font-size:13px;\">Need help? Reply to this email or write to <a href=\"mailto:{{coalesce(inputs.support, \"\")}}\" style=\"color:#0d9488;\">{{coalesce(inputs.support, \"support\")}}</a>.</p>\n          </td>\n        </tr>\n        <tr>\n          <td style=\"padding:0 36px 28px;\">\n            <p style=\"margin:0;padding:14px 16px;border-radius:12px;background:linear-gradient(90deg,#ecfdf5,#e0f2fe);color:#0f766e;font-size:13px;line-height:1.5;\">\n              This is a demonstration confirmation from <strong>{{coalesce(inputs.brand, \"Northline Market\")}}</strong> — thank you for trying the assistant.\n            </p>\n          </td>\n        </tr>\n      </table>\n    </td></tr>\n  </table>\n</body></html>"
+      }
+    },
+    {
+      "key": "order_receipt",
+      "name": "Receipt",
+      "kind": "receipt",
+      "description": "Shop receipt with expressions",
+      "content": {
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Name",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "service",
+            "label": "Service",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "city",
+            "label": "City",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "order_id",
+            "label": "Order id",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "title": "Northline Market receipt",
+        "intro": "Thanks **{{titleCase(inputs.name)}}** — {{coalesce(inputs.service, \"your request\")}} in {{coalesce(inputs.city, \"your area\")}}.\n\nReference: **{{coalesce(inputs.order_id, \"pending\")}}**",
+        "footer": "Demo receipt · Northline Market · FlowForge"
+      }
+    },
+    {
+      "key": "pack_document",
+      "name": "Document pack",
+      "kind": "document",
+      "description": "Formatted A4 PDF with field cells and signature",
+      "content": {
+        "format": "pdf",
+        "filename": "{{slugify(coalesce(inputs.name, \"visitor\"))}}-retail-pack.pdf",
+        "title": "Northline Market – confirmation pack",
+        "intro": "Prepared for **{{titleCase(inputs.name)}}** on {{formatDate(utcNow(), \"EEEE, d MMMM yyyy\")}}.",
+        "body": "This pack confirms your {{coalesce(inputs.service, \"enquiry\")}} with {{coalesce(inputs.brand, \"Northline Market\")}}.\n\n{{if(empty(inputs.summary), \"\", inputs.summary)}}\n\n{{if(empty(inputs.followup), \"\", \"We aim to follow up around \" + inputs.followup + \".\")}}\n\nQuestions? {{coalesce(inputs.support, \"hello@northline.example\")}}",
+        "footer": "© Northline Market · generated by FlowForge",
+        "fields": [
+          {
+            "label": "Full name",
+            "value": "{{titleCase(inputs.name)}}",
+            "as": "text"
+          },
+          {
+            "label": "Email",
+            "value": "{{inputs.email}}",
+            "as": "text"
+          },
+          {
+            "label": "Cell",
+            "value": "{{coalesce(inputs.phone, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Country",
+            "value": "{{coalesce(inputs.country, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "City",
+            "value": "{{coalesce(inputs.city, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Service",
+            "value": "{{coalesce(inputs.service, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Priority",
+            "value": "{{coalesce(inputs.priority, \"standard\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Reference",
+            "value": "{{coalesce(inputs.reference, \"pending\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Follow-up",
+            "value": "{{coalesce(inputs.followup, \"soon\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Summary",
+            "value": "{{coalesce(inputs.summary, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Signature",
+            "value": "{{inputs.signature}}",
+            "as": "image"
+          }
+        ],
+        "includeCart": true,
+        "layout": "page",
+        "orientation": "portrait",
+        "blocks": [
+          {
+            "id": "hdr",
+            "type": "heading",
+            "x": 8,
+            "y": 5,
+            "w": 84,
+            "h": 8,
+            "page": 1,
+            "text": "Northline Market confirmation",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 20,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f766e",
+            "fill": "#ecfdf5"
+          },
+          {
+            "id": "sub",
+            "type": "text",
+            "x": 8,
+            "y": 14,
+            "w": 84,
+            "h": 7,
+            "page": 1,
+            "text": "Prepared for {{titleCase(inputs.name)}} · {{formatDate(utcNow(), \"EEEE, d MMMM yyyy\")}}",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 10,
+            "fontFamily": "times",
+            "bold": false,
+            "color": "#475569",
+            "fill": ""
+          },
+          {
+            "id": "div1",
+            "type": "divider",
+            "x": 8,
+            "y": 22,
+            "w": 84,
+            "h": 0.4,
+            "page": 1,
+            "text": "",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#99f6e4",
+            "fill": ""
+          },
+          {
+            "id": "name",
+            "type": "field",
+            "x": 8,
+            "y": 25,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Full name",
+            "value": "{{titleCase(inputs.name)}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "cell",
+            "type": "field",
+            "x": 52,
+            "y": 25,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Cell",
+            "value": "{{coalesce(inputs.phone, \"—\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "email",
+            "type": "field",
+            "x": 8,
+            "y": 34,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Email",
+            "value": "{{inputs.email}}",
+            "align": "left",
+            "fontSize": 10,
+            "fontFamily": "courier",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "city",
+            "type": "field",
+            "x": 52,
+            "y": 34,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "City / area",
+            "value": "{{coalesce(inputs.city, \"—\")}}, {{coalesce(inputs.country, \"\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "service",
+            "type": "field",
+            "x": 8,
+            "y": 43,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Service",
+            "value": "{{coalesce(inputs.service, \"—\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f766e",
+            "fill": "#ecfdf5"
+          },
+          {
+            "id": "ref",
+            "type": "field",
+            "x": 52,
+            "y": 43,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Reference",
+            "value": "{{coalesce(inputs.reference, \"pending\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "courier",
+            "bold": true,
+            "color": "#0f766e",
+            "fill": "#ecfdf5"
+          },
+          {
+            "id": "prio",
+            "type": "field",
+            "x": 8,
+            "y": 52,
+            "w": 40,
+            "h": 6,
+            "page": 1,
+            "text": "",
+            "label": "Priority",
+            "value": "{{coalesce(inputs.priority, \"standard\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#9a3412",
+            "fill": "#fff7ed"
+          },
+          {
+            "id": "follow",
+            "type": "field",
+            "x": 52,
+            "y": 52,
+            "w": 40,
+            "h": 6,
+            "page": 1,
+            "text": "",
+            "label": "Follow-up",
+            "value": "{{coalesce(inputs.followup, \"soon\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#9a3412",
+            "fill": "#fff7ed"
+          },
+          {
+            "id": "div2",
+            "type": "divider",
+            "x": 8,
+            "y": 60,
+            "w": 84,
+            "h": 0.35,
+            "page": 1,
+            "text": "",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#cbd5e1",
+            "fill": ""
+          },
+          {
+            "id": "notes",
+            "type": "text",
+            "x": 8,
+            "y": 63,
+            "w": 84,
+            "h": 10,
+            "page": 1,
+            "text": "{{if(empty(inputs.summary), \"No additional notes.\", \"Notes: \" + inputs.summary)}}",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "times",
+            "bold": false,
+            "color": "#334155",
+            "fill": ""
+          },
+          {
+            "id": "sig",
+            "type": "image",
+            "x": 8,
+            "y": 75,
+            "w": 46,
+            "h": 14,
+            "page": 1,
+            "text": "",
+            "label": "Signature",
+            "value": "{{inputs.signature}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#ffffff"
+          },
+          {
+            "id": "cart",
+            "type": "cart",
+            "x": 56,
+            "y": 75,
+            "w": 36,
+            "h": 14,
+            "page": 1,
+            "text": "",
+            "label": "Order (if any)",
+            "value": "",
+            "align": "left",
+            "fontSize": 9,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "foot",
+            "type": "text",
+            "x": 8,
+            "y": 92,
+            "w": 84,
+            "h": 4,
+            "page": 1,
+            "text": "© Northline Market · demo pack · FlowForge",
+            "label": "",
+            "value": "",
+            "align": "center",
+            "fontSize": 8,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#94a3b8",
+            "fill": ""
+          }
+        ],
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Full name",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "email",
+            "label": "Email",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "phone",
+            "label": "Cell",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "country",
+            "label": "Country",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "city",
+            "label": "City",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "service",
+            "label": "Service",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "priority",
+            "label": "Priority",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "mood",
+            "label": "Mood",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "reference",
+            "label": "Reference",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "followup",
+            "label": "Follow-up date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "summary",
+            "label": "Summary",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "signature",
+            "label": "Signature",
+            "type": "file",
+            "required": false
+          },
+          {
+            "key": "brand",
+            "label": "Brand",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "support",
+            "label": "Support email",
+            "type": "string",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "northline_store",
+      "name": "Northline edit",
+      "kind": "cart",
+      "description": "Northline edit catalog for shop + payment.",
+      "content": {
+        "storeName": "Northline edit",
+        "intro": "Curated pieces from this week's edit -- shipping and VAT included at checkout (demo).",
+        "currency": "ZAR",
+        "categories": [
+          {
+            "id": "cat_wear",
+            "name": "Wear"
+          },
+          {
+            "id": "cat_home",
+            "name": "Home"
+          }
+        ],
+        "products": [
+          {
+            "id": "prod_linen",
+            "sku": "NL-LIN",
+            "name": "Weekend linen shirt",
+            "description": "Relaxed fit",
+            "price": 899,
+            "categoryId": "cat_wear",
+            "stock": 28,
+            "image": ""
+          },
+          {
+            "id": "prod_denim",
+            "sku": "NL-DNM",
+            "name": "Workday denim",
+            "description": "Mid wash",
+            "price": 1299,
+            "categoryId": "cat_wear",
+            "stock": 18,
+            "image": ""
+          },
+          {
+            "id": "prod_candle",
+            "sku": "NL-CND",
+            "name": "Studio candle",
+            "description": "Cedar / citrus",
+            "price": 320,
+            "categoryId": "cat_home",
+            "stock": 45,
+            "image": ""
+          },
+          {
+            "id": "prod_tote",
+            "sku": "NL-TOT",
+            "name": "Market tote",
+            "description": "Canvas",
+            "price": 450,
+            "categoryId": "cat_home",
+            "stock": 30,
+            "image": ""
+          }
+        ],
+        "fees": [
+          {
+            "id": "fee_ship",
+            "name": "Shipping / handling",
+            "kind": "fixed",
+            "amount": 45
+          },
+          {
+            "id": "fee_vat",
+            "name": "VAT",
+            "kind": "percent",
+            "amount": 15
+          }
+        ]
+      }
+    }
+  ],
+  "testScenarios": [],
+  "connectionHints": [
+    {
+      "name": "Demo Lab HTTP",
+      "kind": "http",
+      "baseUrl": "https://gkjtt.co.za/flowforge/demo",
+      "note": "Required for lookups, quotes, submit, and email sink."
+    },
+    {
+      "name": "Demo Lab SQLite",
+      "kind": "database",
+      "note": "Optional -- SQLite file on the demo host (see CONNECTIONS.md)."
+    }
+  ]
+}

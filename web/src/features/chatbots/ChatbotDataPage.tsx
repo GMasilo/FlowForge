@@ -9,6 +9,7 @@ import type { DesignerNode } from '@/features/designer/model/flowSchema'
 import { ChatbotSubNav } from '@/features/chatbots/ChatbotSubNav'
 import { EntitiesPanel } from '@/features/entities/EntitiesPanel'
 import { ChatbotConnectionsPanel } from '@/features/connections/ChatbotConnectionsPanel'
+import { ChatbotIntegrationsPanel } from '@/features/integrations/ChatbotIntegrationsPanel'
 import { TestScenariosPanel } from '@/features/chatbots/TestScenariosPanel'
 import { listChatbotConnections } from '@/features/connections/connectionApi'
 import {
@@ -17,6 +18,7 @@ import {
 } from '@/features/chatbots/dataInventory'
 import { Badge } from '@/shared/ui/badge'
 import { Card } from '@/shared/ui/card'
+import { SECTION_HELP } from '@/shared/help/pageHelp'
 import { CollapsibleSection } from '@/shared/ui/collapsible-section'
 import { Input } from '@/shared/ui/input'
 import { cn } from '@/shared/lib/utils'
@@ -61,11 +63,13 @@ function CopyChip({ value }: { value: string }) {
 function DataSection({
   title,
   description,
+  help,
   entries,
   designHref,
 }: {
   title: string
   description: string
+  help?: string
   entries: DataInventoryEntry[]
   designHref: string
 }) {
@@ -73,6 +77,7 @@ function DataSection({
     <CollapsibleSection
       title={title}
       description={description}
+      help={help}
       defaultOpen={false}
       badge={
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
@@ -208,7 +213,7 @@ export function ChatbotDataPage() {
         <div>
           <h1 className="text-2xl font-semibold">{bot.name}</h1>
           <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-            Entities, variables, step outputs, and connections used by this chatbot
+            Entities, variables, step outputs, connections, and integrations used by this chatbot
           </p>
         </div>
         <ChatbotSubNav instanceId={instance.id} chatbotId={bot.id} />
@@ -216,6 +221,7 @@ export function ChatbotDataPage() {
 
       {chatbotId ? <EntitiesPanel chatbotId={chatbotId} /> : null}
       {chatbotId ? <ChatbotConnectionsPanel chatbotId={chatbotId} /> : null}
+      {chatbotId ? <ChatbotIntegrationsPanel chatbotId={chatbotId} /> : null}
       {chatbotId ? <TestScenariosPanel chatbotId={chatbotId} /> : null}
 
       <div className="flex flex-wrap items-center gap-3">
@@ -249,6 +255,7 @@ export function ChatbotDataPage() {
           <DataSection
             title="Global variables"
             description="Defined on Settings · available everywhere as {{vars.key}}"
+            help={SECTION_HELP.globalVariables}
             entries={inventory.globals.filter(matches)}
             designHref={designHref}
           />

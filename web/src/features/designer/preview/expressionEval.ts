@@ -25,7 +25,7 @@ import {
   format,
   formatDistanceToNow,
 } from 'date-fns'
-import { formatMediaForText, renderFileValue } from '../model/chatbotMedia'
+import { formatMediaForText, fileValueFromUnknown, renderFileValue } from '../model/chatbotMedia'
 import {
   documentContentFromExpr,
   encodeDocumentEmbed,
@@ -41,6 +41,25 @@ import {
   type ReceiptContent,
   type TemplateBindingMap,
 } from '@/features/templates/templateModel'
+import {
+  encodeHoursEmbed,
+  hoursEmbedFromTemplate,
+  hoursEmbedPlainSummary,
+  type HoursEmbedPayload,
+} from '@/features/templates/hoursEmbed'
+import {
+  encodeSocialEmbed,
+  isSocialEmbedExprValue,
+  parseSocialEmbedUrl,
+  socialEmbedExprValue,
+  socialEmbedPlainSummary,
+  SOCIAL_EMBED_PROVIDERS_HINT,
+} from '@/features/chat/socialEmbed'
+import {
+  clearChatCookie,
+  readChatCookie,
+  writeChatCookie,
+} from '@/features/chat/chatCookies'
 
 export type ExprContext = {
   vars: Record<string, unknown>
@@ -53,6 +72,28 @@ export type ExprContext = {
   templateBindings?: TemplateBindingMap
   /** When true, media files in chat templates become inline previews. */
   embedMedia?: boolean
+  /** Scopes cookie()/setCookie()/clearCookie() to this chatbot. */
+  chatbotId?: string | null
+}
+
+/**
+ * Active chatbot for cookie()/setCookie()/clearCookie() when ExprContext.chatbotId
+ * is omitted (most interpolate/resolve call sites). Bound by the preview runtime.
+ */
+let ambientExpressionChatbotId: string | null = null
+
+export function setExpressionChatbotId(chatbotId: string | null | undefined): void {
+  ambientExpressionChatbotId = String(chatbotId ?? '').trim() || null
+}
+
+export function getExpressionChatbotId(): string | null {
+  return ambientExpressionChatbotId
+}
+
+function cookieChatbotId(ctx?: ExprContext): string | null {
+  const fromCtx = String(ctx?.chatbotId ?? '').trim()
+  if (fromCtx) return fromCtx
+  return ambientExpressionChatbotId
 }
 
 export type ExprResult =
@@ -112,6 +153,15 @@ export const EXPRESSION_FUNCTION_DOCS: Array<{
   { name: 'dateAdd', insert: '{{dateAdd(vars., 1, "days")}}', hint: 'Add time to a date' },
   { name: 'dateDiff', insert: '{{dateDiff(vars., vars., "days")}}', hint: 'Difference between dates' },
   { name: 'renderFile', insert: '{{renderFile(media.)}}', hint: 'Show an image/file preview in chat' },
+  {
+    name: 'embed',
+    insert: '{{embed("https://www.youtube.com/watch?v=")}}',
+    hint: `Embed ${SOCIAL_EMBED_PROVIDERS_HINT} (or media / hours / files)`,
+  },
+  { name: 'cookie', insert: '{{cookie("name")}}', hint: 'Read a saved cookie for this chatbot' },
+  { name: 'setCookie', insert: '{{setCookie("name", vars.)}}', hint: 'Save a cookie for this chatbot only' },
+  { name: 'clearCookie', insert: '{{clearCookie("name")}}', hint: 'Delete a cookie for this chatbot' },
+  { name: 'setVar', insert: '{{setVar("name", vars.)}}', hint: 'Set a flow variable (side effect; prefer On run for silent use)' },
 ]
 
 type TokKind =
@@ -500,7 +550,68 @@ function titleCase(value: unknown): string {
     .replace(/(^|[^\p{L}\p{N}]+)(\p{L})/gu, (_, sep: string, ch: string) => sep + ch.toUpperCase())
 }
 
-function callFunction(name: string, args: unknown[]): unknown {
+function isHoursTemplateValue(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && (value as { kind?: unknown }).kind === 'hours'
+}
+
+const FF_HOURS_EMBED_MARK = '__ffHoursEmbed'
+
+function isHoursEmbedExprValue(value: unknown): value is HoursEmbedPayload & { [FF_HOURS_EMBED_MARK]?: true } {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && (value as Record<string, unknown>)[FF_HOURS_EMBED_MARK] === true
+}
+
+function hoursEmbedExprValue(payload: HoursEmbedPayload): Record<string, unknown> {
+  return { [FF_HOURS_EMBED_MARK]: true, ...payload }
+}
+
+/**
+ * Embed rich content in chat:
+ * - YouTube / X / Vimeo / Spotify / TikTok URLs → player / post iframe
+ * - media files, opening-hours templates, downloadable files (fallback)
+ */
+function embedValue(value: unknown): unknown {
+  if (value == null) return null
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return ''
+    if (
+      trimmed.includes('<<ff:embed:') ||
+      trimmed.includes('<<ff:file:') ||
+      trimmed.includes('<<ff:doc:') ||
+      trimmed.includes('<<ff:hours:')
+    ) {
+      return trimmed
+    }
+    const social = parseSocialEmbedUrl(trimmed)
+    if (social) return socialEmbedExprValue(social)
+    const file = fileValueFromUnknown(trimmed)
+    if (file?.url) return renderFileValue(file)
+    throw new Error(
+      `embed: unsupported URL (supported: ${SOCIAL_EMBED_PROVIDERS_HINT}, or a media file URL)`,
+    )
+  }
+  if (isSocialEmbedExprValue(value)) return value
+  if (isHoursEmbedExprValue(value)) return value
+  if (isHoursTemplateValue(value)) {
+    return hoursEmbedExprValue(hoursEmbedFromTemplate(value))
+  }
+  if (isDocumentExprValue(value)) return value
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const rec = value as Record<string, unknown>
+    if ((rec.kind === 'document' || rec.kind === 'agreement') && rec.file != null && isDocumentExprValue(rec.file)) {
+      return rec.file
+    }
+    if (typeof rec.url === 'string') {
+      const social = parseSocialEmbedUrl(rec.url)
+      if (social) return socialEmbedExprValue(social)
+    }
+  }
+  const file = fileValueFromUnknown(value)
+  if (file?.url) return renderFileValue(file)
+  throw new Error(`embed: expected a ${SOCIAL_EMBED_PROVIDERS_HINT} URL, media file, or template`)
+}
+
+function callFunction(name: string, args: unknown[], ctx?: ExprContext): unknown {
   const n = name.toLowerCase()
   switch (n) {
     case 'parsejson':
@@ -738,13 +849,54 @@ function callFunction(name: string, args: unknown[]): unknown {
       return args.some(truthy)
     case 'null':
       return null
+    case 'setvar': {
+      const key = asString(args[0]).trim()
+      if (!key) throw new Error('setVar: varName is required')
+      const value = args.length >= 2 ? args[1] : null
+      if (ctx) ctx.vars[key] = value
+      return value
+    }
     case 'renderfile':
     case 'render_file':
     case 'file':
       return renderFileValue(args[0])
+    case 'embed':
+    case 'embedmedia':
+    case 'embed_media':
+      return embedValue(args[0])
+    case 'cookie':
+    case 'getcookie': {
+      const key = asString(args[0]).trim()
+      if (!key) throw new Error('cookie: name is required')
+      return readChatCookie(key, cookieChatbotId(ctx))
+    }
+    case 'setcookie': {
+      const key = asString(args[0]).trim()
+      if (!key) throw new Error('setCookie: name is required')
+      const value = args[1] == null ? '' : asString(args[1])
+      const daysRaw = args.length >= 3 ? asFiniteNumber(args[2]) : null
+      const days = daysRaw == null ? 365 : daysRaw
+      return writeChatCookie(key, value, days, cookieChatbotId(ctx))
+    }
+    case 'clearcookie':
+    case 'deletecookie':
+    case 'removecookie': {
+      const key = asString(args[0]).trim()
+      if (!key) throw new Error('clearCookie: name is required')
+      return clearChatCookie(key, cookieChatbotId(ctx))
+    }
     default:
       throw new Error(`Unknown function "${name}"`)
   }
+}
+
+/** Public entry for designer actions (Button → Run function) to call expression helpers. */
+export function invokeExpressionFunction(
+  name: string,
+  args: unknown[],
+  ctx?: ExprContext,
+): unknown {
+  return callFunction(name, args, ctx)
 }
 
 class Parser {
@@ -937,7 +1089,7 @@ class Parser {
           while (this.match('comma')) args.push(this.parseExpr())
         }
         this.expect('rparen')
-        return callFunction(name, args)
+        return callFunction(name, args, this.ctx)
       }
       // Path: vars.foo.bar / steps.key.path / media.logo_png
       const path = [name]
@@ -975,6 +1127,12 @@ function resolvePath(parts: string[], ctx: ExprContext): unknown {
       const filled = filledReceiptText(tpl, fillCtx, name)
       const value = field === 'html' ? renderReceiptHtml(filled) : filled
       return rest.length > 1 ? getByPath(value, rest.slice(1)) : value
+    }
+    if (tpl.kind === 'hours' && field === 'text') {
+      if (ctx.embedMedia) {
+        return encodeHoursEmbed(hoursEmbedFromTemplate(tpl))
+      }
+      // Fall through to plain filled string below.
     }
     if (tpl.kind !== 'cart' && field && COPY_STRING_FIELDS.has(field) && typeof tpl[field] === 'string') {
       const filled = filledCopyString(String(tpl[field]), fillCtx, `${name}.${field}`)
@@ -1097,6 +1255,26 @@ function formatDocumentForText(value: unknown, ctx: ExprContext): string | null 
 }
 
 function formatForText(value: unknown, ctx: ExprContext): string {
+  if (isSocialEmbedExprValue(value)) {
+    const payload = {
+      provider: value.provider,
+      url: value.url,
+      id: value.id,
+      title: value.title,
+    }
+    if (ctx.embedMedia) return encodeSocialEmbed(payload)
+    return socialEmbedPlainSummary(payload)
+  }
+  if (isHoursEmbedExprValue(value)) {
+    const payload: HoursEmbedPayload = {
+      title: value.title,
+      timezone: value.timezone,
+      note: value.note,
+      days: value.days,
+    }
+    if (ctx.embedMedia) return encodeHoursEmbed(payload)
+    return hoursEmbedPlainSummary(payload)
+  }
   const document = formatDocumentForText(value, ctx)
   if (document !== null) return document
   const embedded = formatMediaForText(value, ctx.embedMedia === true)
@@ -1160,8 +1338,13 @@ export function collectPathRefs(source: string): string[] {
   while ((m = braceRe.exec(source)) !== null) {
     const inner = m[1]!.trim()
     const fromInner = scanPathLiterals(inner)
-    if (fromInner.length) fromInner.forEach(push)
-    else push(inner)
+    if (fromInner.length) {
+      fromInner.forEach(push)
+    } else if (!looksLikeExpression(inner)) {
+      // Bare {{userName}} / {{otp.code}} — not a function/expression
+      push(inner)
+    }
+    // Expressions with only literals (e.g. embed("https://…")) contribute no path refs.
   }
 
   // Bare expression fields without braces still reference vars./steps./media.

@@ -4,14 +4,17 @@ RewriteEngine On
 RewriteCond %{HTTP:Authorization} .
 RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-# Deny access to config, storage, and instance file blobs (served via /file/get)
-RewriteRule ^(config\.php|config\.example\.php|storage/.*|lib/.*|files/.*)$ - [F,L]
+# Deny access to config, storage, libs, instance file blobs, and test harness sources.
+# Mock upstream routes under test/ are allowed (see test/.htaccess).
+RewriteRule ^(config\.php|config\.example\.php|storage/.*|lib/.*|files/.*|tools/.*)$ - [F,L]
+RewriteRule ^(test/(run\.php|Assert\.php|signInBody\.php|README\.md|scenarios/.*))$ - [F,L]
 
 # Route pretty paths to scripts
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^health/?$ health.php [L,QSA]
 RewriteRule ^auth/check/?$ auth/check.php [L,QSA]
 RewriteRule ^http/execute/?$ http/execute.php [L,QSA]
+RewriteRule ^database/execute/?$ database/execute.php [L,QSA]
 RewriteRule ^email/send/?$ email/send.php [L,QSA]
 RewriteRule ^email/test/?$ email/test.php [L,QSA]
 RewriteRule ^email/invite/?$ email/invite.php [L,QSA]
@@ -28,6 +31,20 @@ RewriteRule ^file/purge/?$ file/purge.php [L,QSA]
 RewriteRule ^payment/start/?$ payment/start.php [L,QSA]
 RewriteRule ^payment/notify/?$ payment/notify.php [L,QSA]
 RewriteRule ^payment/status/?$ payment/status.php [L,QSA]
+RewriteRule ^chat/appearance/?$ chat/appearance.php [L,QSA]
+RewriteRule ^chat/sso_callback/?$ chat/sso_callback.php [L,QSA]
+RewriteRule ^integration/execute/?$ integration/execute.php [L,QSA]
+RewriteRule ^alerts/run/?$ alerts/run.php [L,QSA]
+RewriteRule ^openapi\.json$ openapi.php [L,QSA]
+RewriteRule ^postman\.json$ postman.php [L,QSA]
+RewriteRule ^postman-environment\.json$ postman.php [L,QSA]
+RewriteRule ^docs/?$ docs.php [L,QSA]
+RewriteRule ^v1(/.*)?$ v1.php [L,QSA]
+
+# Remaining pretty paths (SCIM, templates, …) go through the front controller
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [L,QSA]
 
 # Security headers (Apache)
 <IfModule mod_headers.c>

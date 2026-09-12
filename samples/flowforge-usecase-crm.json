@@ -1,0 +1,3931 @@
+{
+  "kind": "flowforge.chatbotFlow",
+  "version": 1,
+  "exportedAt": "2026-09-12T13:46:29.425Z",
+  "chatbot": {
+    "id": "c3000000-0000-4000-8000-000000000007",
+    "name": "CRM -- Sales & customer success assistant",
+    "description": "PulseCRM: look up accounts, capture leads, log tickets, check deals, book meetings, and buy add-ons."
+  },
+  "flow": {
+    "id": "f3000000-0000-4000-8000-000000000007",
+    "name": "Main",
+    "version": 1
+  },
+  "globals": [
+    {
+      "key": "brand_name",
+      "label": "Brand",
+      "value_type": "string",
+      "default_value": "PulseCRM",
+      "description": "Organisation or product name displayed to visitors."
+    },
+    {
+      "key": "brand_tagline",
+      "label": "Tagline",
+      "value_type": "string",
+      "default_value": "Pipeline, people, and follow-through.",
+      "description": "Short slogan shown at the end of the chat."
+    },
+    {
+      "key": "guest_label",
+      "label": "Guest label",
+      "value_type": "string",
+      "default_value": "Rep",
+      "description": "How we address a visitor before they give their name."
+    },
+    {
+      "key": "support_email",
+      "label": "Support email",
+      "value_type": "string",
+      "default_value": "success@pulsecrm.example",
+      "description": "Contact email for visitor queries."
+    },
+    {
+      "key": "followup_days",
+      "label": "Follow-up days",
+      "value_type": "number",
+      "default_value": 1,
+      "description": "Days until the estimated follow-up date."
+    },
+    {
+      "key": "service_cities",
+      "label": "Service cities",
+      "value_type": "array",
+      "default_value": [
+        "Johannesburg",
+        "Cape Town",
+        "Durban",
+        "Sandton",
+        "Pretoria",
+        "Gqeberha"
+      ],
+      "description": "City choices for the autocomplete field."
+    },
+    {
+      "key": "demo_lab_base",
+      "label": "Demo lab base URL",
+      "value_type": "string",
+      "default_value": "https://gkjtt.co.za/flowforge/demo",
+      "description": "Internal demo API base (not shown to visitors)."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a3007000-0000-4000-8000-000000000001",
+      "key": "welcome",
+      "type": "message",
+      "label": "Welcome",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{{templates.welcome_msg.text}}",
+        "templateBindings": {
+          "welcome_msg": {
+            "name": "{{vars.guest_label}}"
+          }
+        }
+      },
+      "position": {
+        "x": 80,
+        "y": 40
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000002",
+      "key": "ask_captcha",
+      "type": "question",
+      "label": "Captcha",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Workspace check before we open CRM records.",
+        "answerType": "captcha",
+        "answerRequired": true,
+        "outputVariable": "captcha_ok",
+        "captchaKind": "math",
+        "captchaMaxAttempts": 5
+      },
+      "position": {
+        "x": 80,
+        "y": 150
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000003",
+      "key": "ask_confirm",
+      "type": "question",
+      "label": "Confirm demo",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "PulseCRM demonstration only — do not enter live customer PII, passwords, or production deal data.",
+        "answerType": "confirm",
+        "answerRequired": true,
+        "outputVariable": "terms_ok",
+        "confirmLabel": "I understand — continue with demo CRM"
+      },
+      "position": {
+        "x": 80,
+        "y": 260
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000004",
+      "key": "menu_bridge",
+      "type": "message",
+      "label": "Services",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{{templates.main_menu.text}}\n\n{color:muted}Pick one — we’ll only ask for extra details after that.{/color}"
+      },
+      "position": {
+        "x": 80,
+        "y": 370
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000005",
+      "key": "ask_service",
+      "type": "question",
+      "label": "Service",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "What would you like to do in PulseCRM?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "service",
+        "choices": [
+          "Look up account",
+          "Capture a lead",
+          "Log a ticket",
+          "Check deal status",
+          "Book a meeting",
+          "CRM add-ons"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 480
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000006",
+      "key": "intake_intro",
+      "type": "message",
+      "label": "A few details",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "A few details for **{{vars.service}}** — then we continue."
+      },
+      "position": {
+        "x": 80,
+        "y": 590
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000007",
+      "key": "ask_name",
+      "type": "question",
+      "label": "Your name",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Your name for CRM activity logs?",
+        "answerType": "name",
+        "answerRequired": true,
+        "outputVariable": "visitor_name"
+      },
+      "position": {
+        "x": 80,
+        "y": 700
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000008",
+      "key": "ask_company",
+      "type": "question",
+      "label": "Company",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Which company / workspace are you representing?",
+        "answerType": "text",
+        "answerRequired": true,
+        "outputVariable": "company"
+      },
+      "position": {
+        "x": 80,
+        "y": 810
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000009",
+      "key": "ask_email",
+      "type": "question",
+      "label": "Work email",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Work email? (try rep@pulsecrm.example for a seeded account)",
+        "answerType": "email",
+        "answerRequired": true,
+        "outputVariable": "email"
+      },
+      "position": {
+        "x": 80,
+        "y": 920
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000010",
+      "key": "ask_phone",
+      "type": "question",
+      "label": "Mobile",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Mobile for meeting reminders?",
+        "answerType": "phone",
+        "answerRequired": true,
+        "outputVariable": "phone"
+      },
+      "position": {
+        "x": 80,
+        "y": 1030
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000011",
+      "key": "ask_city",
+      "type": "question",
+      "label": "Territory",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Primary territory / city?",
+        "answerType": "autocomplete",
+        "answerRequired": true,
+        "outputVariable": "city",
+        "choicesFrom": "{{vars.service_cities}}"
+      },
+      "position": {
+        "x": 80,
+        "y": 1140
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000012",
+      "key": "ask_role",
+      "type": "question",
+      "label": "Role",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Your role in the CRM workspace?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "crm_role",
+        "choices": [
+          "Account executive",
+          "Customer success",
+          "Sales ops",
+          "Support agent",
+          "Admin"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 1250
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000013",
+      "key": "set_identity_vars",
+      "type": "set_variable",
+      "label": "Identity variables",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "full_name",
+        "value": "{{trim(coalesce(vars.visitor_name, \"\"))}}",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "full_name",
+            "value": "{{trim(coalesce(vars.visitor_name, \"\"))}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "phone",
+            "value": "{{coalesce(vars.phone, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "country",
+            "value": "{{coalesce(vars.country, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "city",
+            "value": "{{coalesce(vars.city, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "gender",
+            "value": "{{coalesce(vars.gender, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "birthday",
+            "value": "{{coalesce(vars.birthday, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "address",
+            "value": "{{coalesce(vars.address, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "mood",
+            "value": "{{coalesce(vars.mood, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "national_id",
+            "value": "{{coalesce(vars.national_id, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "company",
+            "value": "{{coalesce(vars.company, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "postal_code",
+            "value": "{{coalesce(vars.postal_code, \"\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "priority",
+            "value": "standard",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "summary",
+            "value": "",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "checklist",
+            "value": "[\"Your CRM activity is logged\",\"You receive a confirmation email\",\"Your account owner may follow up\",\"Keep the reference for the next touch\"]",
+            "valueType": "array"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 1360
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000014",
+      "key": "op_upper_name",
+      "type": "operation",
+      "label": "Uppercase name",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "operation": "upper",
+        "left": "{{vars.visitor_name}}",
+        "right": "",
+        "outputVariable": "visitor_name_upper"
+      },
+      "position": {
+        "x": 80,
+        "y": 1470
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000015",
+      "key": "op_name_len",
+      "type": "operation",
+      "label": "Name length",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "operation": "length",
+        "left": "{{vars.visitor_name}}",
+        "right": "",
+        "outputVariable": "name_len"
+      },
+      "position": {
+        "x": 80,
+        "y": 1580
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000016",
+      "key": "op_email_display",
+      "type": "operation",
+      "label": "Email display",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "operation": "replace",
+        "left": "{{vars.email}}",
+        "right": "@",
+        "replaceWith": " [at] ",
+        "outputVariable": "email_display"
+      },
+      "position": {
+        "x": 80,
+        "y": 1690
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000017",
+      "key": "identity_recap",
+      "type": "message",
+      "label": "Profile ready",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "**Rep on file · {{titleCase(vars.visitor_name)}}**\n\nCompany: **{{coalesce(vars.company, \"—\")}}**\nTerritory: **{{coalesce(vars.city, \"—\")}}**\nRole: **{{coalesce(vars.crm_role, \"—\")}}**\nContact: `{{vars.email_display}}` · {{coalesce(vars.phone, \"—\")}}\n\n{color:muted}Demo CRM only — never paste live secrets here.{/color}"
+      },
+      "position": {
+        "x": 80,
+        "y": 1800
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000018",
+      "key": "init_signature",
+      "type": "set_variable",
+      "label": "Init signature",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "signature",
+        "value": "",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "signature",
+            "value": "",
+            "valueType": "string"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 1910
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000019",
+      "key": "sw_service",
+      "type": "switch",
+      "label": "Route service",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "value": "{{vars.service}}",
+        "cases": [
+          {
+            "id": "case_lookup",
+            "match": "Look up account",
+            "label": "Lookup"
+          },
+          {
+            "id": "case_lead",
+            "match": "Capture a lead",
+            "label": "Lead"
+          },
+          {
+            "id": "case_ticket",
+            "match": "Log a ticket",
+            "label": "Ticket"
+          },
+          {
+            "id": "case_deal",
+            "match": "Check deal status",
+            "label": "Deal"
+          },
+          {
+            "id": "case_meeting",
+            "match": "Book a meeting",
+            "label": "Meeting"
+          },
+          {
+            "id": "case_addons",
+            "match": "CRM add-ons",
+            "label": "Add-ons"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 2020
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000038",
+      "key": "http_submit",
+      "type": "http",
+      "label": "Confirm request",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "POST",
+        "path": "/industry/submit",
+        "body": "{\"industry\":\"crm\",\"service\":\"{{vars.service}}\",\"name\":\"{{vars.visitor_name}}\",\"email\":\"{{vars.email}}\",\"phone\":\"{{vars.phone}}\",\"country\":\"{{vars.country}}\",\"city\":\"{{vars.city}}\",\"mood\":\"{{vars.mood}}\",\"priority\":\"{{vars.priority}}\"}",
+        "paramValues": {},
+        "outputVariable": "lab_submit"
+      },
+      "position": {
+        "x": 80,
+        "y": 2130
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000039",
+      "key": "intro_lookup",
+      "type": "message",
+      "label": "Lookup",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Look up a customer account. Try **rep@pulsecrm.example** after verification."
+      },
+      "position": {
+        "x": 80,
+        "y": 2240
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000040",
+      "key": "lookup_email",
+      "type": "question",
+      "label": "Account email",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Which account email should we search?",
+        "answerType": "email",
+        "answerRequired": true,
+        "outputVariable": "lookup_email"
+      },
+      "position": {
+        "x": 80,
+        "y": 2350
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000041",
+      "key": "lookup_otp",
+      "type": "question",
+      "label": "Verification",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Enter the verification code (any 6 digits for this demo).",
+        "answerType": "otp",
+        "answerRequired": true,
+        "outputVariable": "otp_ok",
+        "otpSubject": "PulseCRM account code",
+        "otpLength": 6
+      },
+      "position": {
+        "x": 80,
+        "y": 2460
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000042",
+      "key": "http_account",
+      "type": "http",
+      "label": "GET account",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "GET",
+        "path": "/crm/accounts",
+        "body": "",
+        "paramValues": {
+          "email": "{{vars.lookup_email}}"
+        },
+        "outputVariable": "crm_account"
+      },
+      "position": {
+        "x": 80,
+        "y": 2570
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000043",
+      "key": "http_pipeline_snapshot",
+      "type": "http",
+      "label": "GET pipeline",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "GET",
+        "path": "/crm/pipeline",
+        "body": "",
+        "paramValues": {},
+        "outputVariable": "crm_pipeline"
+      },
+      "position": {
+        "x": 80,
+        "y": 2680
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000044",
+      "key": "list_segments",
+      "type": "entity",
+      "label": "List segments",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "entityId": "b3100000-0000-4000-8000-000000000007",
+        "operation": "list",
+        "recordId": "",
+        "filterAttribute": "",
+        "filterEquals": "",
+        "fieldMap": {},
+        "outputVariable": "crm_segments"
+      },
+      "position": {
+        "x": 80,
+        "y": 2790
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000045",
+      "key": "cond_found",
+      "type": "condition",
+      "label": "Account found?",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "left": "{{vars.crm_account.data.company}}",
+        "operator": "exists",
+        "right": ""
+      },
+      "position": {
+        "x": 80,
+        "y": 2900
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000046",
+      "key": "msg_account_found",
+      "type": "message",
+      "label": "Account",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:success}**Account on file**{/color}\n\n**{{vars.crm_account.data.company}}** · `{{vars.crm_account.data.account_code}}`\nContact: **{{vars.crm_account.data.contact_name}}** · {{vars.crm_account.data.email}}\nTier: **{{vars.crm_account.data.tier}}** · Owner: **{{vars.crm_account.data.owner}}**\nARR: **{{vars.crm_account.data.arr}}** · Status: **{{vars.crm_account.data.status}}**\n\nPipeline stages online: **{{length(vars.crm_pipeline.data)}}** · local segments: **{{length(vars.crm_segments)}}**"
+      },
+      "position": {
+        "x": 80,
+        "y": 3010
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000047",
+      "key": "msg_account_missing",
+      "type": "message",
+      "label": "Not found",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:warning}**No account for that email**{/color}\n\nTry `rep@pulsecrm.example`, or capture a new lead instead.\nPipeline stages available: **{{length(vars.crm_pipeline.data)}}**."
+      },
+      "position": {
+        "x": 80,
+        "y": 3120
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000048",
+      "key": "done_lookup",
+      "type": "message",
+      "label": "Lookup done",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Account lookup complete for **{{vars.lookup_email}}**."
+      },
+      "position": {
+        "x": 80,
+        "y": 3230
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000061",
+      "key": "intro_lead",
+      "type": "message",
+      "label": "Lead",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Capture and score a new lead for the pipeline."
+      },
+      "position": {
+        "x": 80,
+        "y": 3340
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000062",
+      "key": "lead_source",
+      "type": "question",
+      "label": "Source",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Lead source?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "lead_source",
+        "choices": [
+          "Inbound web",
+          "Event / webinar",
+          "Partner referral",
+          "Outbound",
+          "Other"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 3450
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000063",
+      "key": "lead_form",
+      "type": "question",
+      "label": "Lead details",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Company and contact details",
+        "answerType": "form",
+        "answerRequired": true,
+        "outputVariable": "lead_form",
+        "formFields": [
+          {
+            "key": "company",
+            "label": "Company",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "contact",
+            "label": "Contact name",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "title",
+            "label": "Title",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "need",
+            "label": "What do they need?",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "employees",
+            "label": "Employees (approx)",
+            "type": "number",
+            "required": false
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 3560
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000064",
+      "key": "lead_interest",
+      "type": "question",
+      "label": "Interest",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Rank what matters most for this lead.",
+        "answerType": "ranking",
+        "answerRequired": true,
+        "outputVariable": "lead_interest",
+        "choices": [
+          "Sales pipeline",
+          "Support tickets",
+          "Analytics",
+          "Integrations",
+          "Migration"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 3670
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000065",
+      "key": "lead_budget",
+      "type": "question",
+      "label": "Budget feel",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Rough annual budget interest?",
+        "answerType": "currency",
+        "answerRequired": false,
+        "outputVariable": "lead_budget"
+      },
+      "position": {
+        "x": 80,
+        "y": 3780
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000066",
+      "key": "lead_score",
+      "type": "question",
+      "label": "Fit score",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "How strong is the fit (0–100)?",
+        "answerType": "number",
+        "answerRequired": true,
+        "outputVariable": "lead_score"
+      },
+      "position": {
+        "x": 80,
+        "y": 3890
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000067",
+      "key": "op_lead_band",
+      "type": "operation",
+      "label": "Score band",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "operation": "add",
+        "left": "{{vars.lead_score}}",
+        "right": "0",
+        "outputVariable": "lead_score_n"
+      },
+      "position": {
+        "x": 80,
+        "y": 4000
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000068",
+      "key": "cond_hot",
+      "type": "condition",
+      "label": "Hot lead?",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "left": "{{vars.lead_score}}",
+        "operator": "gte",
+        "right": "75"
+      },
+      "position": {
+        "x": 80,
+        "y": 4110
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000069",
+      "key": "http_lead",
+      "type": "http",
+      "label": "POST lead",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "POST",
+        "path": "/crm/leads",
+        "body": "{\"company\":\"{{vars.lead_form.company}}\",\"contact\":\"{{vars.lead_form.contact}}\",\"title\":\"{{vars.lead_form.title}}\",\"need\":\"{{vars.lead_form.need}}\",\"source\":\"{{vars.lead_source}}\",\"interest\":\"{{vars.lead_interest}}\",\"budget\":\"{{vars.lead_budget}}\",\"score\":\"{{vars.lead_score}}\",\"owner\":\"{{vars.visitor_name}}\",\"email\":\"{{vars.email}}\",\"city\":\"{{vars.city}}\"}",
+        "paramValues": {},
+        "outputVariable": "lead_result"
+      },
+      "position": {
+        "x": 80,
+        "y": 4220
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000070",
+      "key": "msg_hot_lead",
+      "type": "message",
+      "label": "Hot",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:accent}**Hot lead**{/color} — route to AE immediately.\n\n**{{vars.lead_form.company}}** · score **{{vars.lead_score}}**\nLead id: `{{vars.lead_result.lead_id}}` · Owner queue: **{{vars.lead_result.owner}}**\nTop interests: **{{first(vars.lead_interest)}}**"
+      },
+      "position": {
+        "x": 80,
+        "y": 4330
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000071",
+      "key": "msg_warm_lead",
+      "type": "message",
+      "label": "Warm",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:success}**Lead captured**{/color}\n\n**{{vars.lead_form.company}}** · score **{{vars.lead_score}}**\nLead id: `{{vars.lead_result.lead_id}}`\nSource: **{{vars.lead_source}}**"
+      },
+      "position": {
+        "x": 80,
+        "y": 4440
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000072",
+      "key": "done_lead",
+      "type": "message",
+      "label": "Lead done",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Lead **{{vars.lead_result.lead_id}}** is in the pipeline."
+      },
+      "position": {
+        "x": 80,
+        "y": 4550
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000087",
+      "key": "intro_ticket",
+      "type": "message",
+      "label": "Ticket",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Log a customer support ticket against an account."
+      },
+      "position": {
+        "x": 80,
+        "y": 4660
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000088",
+      "key": "ticket_account",
+      "type": "question",
+      "label": "Account",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Which account is affected?",
+        "answerType": "text",
+        "answerRequired": true,
+        "outputVariable": "ticket_account"
+      },
+      "position": {
+        "x": 80,
+        "y": 4770
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000089",
+      "key": "ticket_type",
+      "type": "question",
+      "label": "Type",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Ticket type?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "ticket_type",
+        "choices": [
+          "Billing",
+          "Product bug",
+          "How-to",
+          "Integration",
+          "Data / import",
+          "Other"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 4880
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000090",
+      "key": "ticket_priority",
+      "type": "question",
+      "label": "Priority",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Priority?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "ticket_priority",
+        "choices": [
+          "Low",
+          "Normal",
+          "High",
+          "Critical"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 4990
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000091",
+      "key": "ticket_form",
+      "type": "question",
+      "label": "Details",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Describe the issue",
+        "answerType": "form",
+        "answerRequired": true,
+        "outputVariable": "ticket_form",
+        "formFields": [
+          {
+            "key": "summary",
+            "label": "Summary",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "steps",
+            "label": "Steps to reproduce",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "impact",
+            "label": "Business impact",
+            "type": "string",
+            "required": true
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 5100
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000092",
+      "key": "ticket_file",
+      "type": "question",
+      "label": "Attachment",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Upload a screenshot or log (optional).",
+        "answerType": "file",
+        "answerRequired": false,
+        "outputVariable": "ticket_file",
+        "fileAccept": "any",
+        "maxFiles": 2
+      },
+      "position": {
+        "x": 80,
+        "y": 5210
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000093",
+      "key": "cond_sev",
+      "type": "condition",
+      "label": "High severity?",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "left": "{{vars.ticket_priority}}",
+        "operator": "contains",
+        "right": "High"
+      },
+      "position": {
+        "x": 80,
+        "y": 5320
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000094",
+      "key": "http_ticket",
+      "type": "http",
+      "label": "POST ticket",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "POST",
+        "path": "/crm/tickets",
+        "body": "{\"account\":\"{{vars.ticket_account}}\",\"type\":\"{{vars.ticket_type}}\",\"priority\":\"{{vars.ticket_priority}}\",\"summary\":\"{{vars.ticket_form.summary}}\",\"impact\":\"{{vars.ticket_form.impact}}\",\"reporter\":\"{{vars.visitor_name}}\",\"email\":\"{{vars.email}}\"}",
+        "paramValues": {},
+        "outputVariable": "ticket_result"
+      },
+      "position": {
+        "x": 80,
+        "y": 5430
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000095",
+      "key": "msg_sev_high",
+      "type": "message",
+      "label": "Escalate",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:danger}**{{vars.ticket_priority}} priority**{/color}\n\nTicket `{{vars.ticket_result.ticket_id}}` · SLA **{{vars.ticket_result.sla_hours}}h**\nAccount: **{{vars.ticket_account}}** · {{vars.ticket_form.summary}}"
+      },
+      "position": {
+        "x": 80,
+        "y": 5540
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000096",
+      "key": "msg_sev_normal",
+      "type": "message",
+      "label": "Queued",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{color:success}**Ticket logged**{/color}\n\nTicket `{{vars.ticket_result.ticket_id}}` · SLA **{{vars.ticket_result.sla_hours}}h**\nType: **{{vars.ticket_type}}** · Account: **{{vars.ticket_account}}**"
+      },
+      "position": {
+        "x": 80,
+        "y": 5650
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000097",
+      "key": "done_ticket",
+      "type": "message",
+      "label": "Ticket done",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Support ticket **{{vars.ticket_result.ticket_id}}** recorded."
+      },
+      "position": {
+        "x": 80,
+        "y": 5760
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000111",
+      "key": "intro_deal",
+      "type": "message",
+      "label": "Deal",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Look up a pipeline deal. Try **DEAL-2026-0042**."
+      },
+      "position": {
+        "x": 80,
+        "y": 5870
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000112",
+      "key": "deal_ref",
+      "type": "question",
+      "label": "Deal reference",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Deal reference?",
+        "answerType": "text",
+        "answerRequired": true,
+        "outputVariable": "deal_ref"
+      },
+      "position": {
+        "x": 80,
+        "y": 5980
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000113",
+      "key": "http_deal",
+      "type": "http",
+      "label": "GET deal",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "GET",
+        "path": "/crm/deals/{{vars.deal_ref}}",
+        "body": "",
+        "paramValues": {},
+        "outputVariable": "deal"
+      },
+      "position": {
+        "x": 80,
+        "y": 6090
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000114",
+      "key": "http_products",
+      "type": "http",
+      "label": "GET products",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "GET",
+        "path": "/crm/products",
+        "body": "",
+        "paramValues": {},
+        "outputVariable": "crm_products"
+      },
+      "position": {
+        "x": 80,
+        "y": 6200
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000115",
+      "key": "done_deal",
+      "type": "message",
+      "label": "Deal",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "**{{vars.deal.data.name}}** · `{{vars.deal.data.deal_ref}}`\n\nStage: {color:accent}**{{vars.deal.data.stage}}**{/color}\nAmount: **{{vars.deal.data.amount}} {{vars.deal.data.currency}}** · Close: **{{vars.deal.data.close_date}}**\nAccount: **{{vars.deal.data.company}}** (`{{vars.deal.data.account_code}}`) · Owner **{{vars.deal.data.owner}}**\n\nCatalog add-ons online: **{{length(vars.crm_products.data)}}**"
+      },
+      "position": {
+        "x": 80,
+        "y": 6310
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000122",
+      "key": "intro_meeting",
+      "type": "message",
+      "label": "Meeting",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Book a discovery or QBR meeting."
+      },
+      "position": {
+        "x": 80,
+        "y": 6420
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000123",
+      "key": "meeting_type",
+      "type": "question",
+      "label": "Meeting type",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "What kind of meeting?",
+        "answerType": "choice",
+        "answerRequired": true,
+        "outputVariable": "meeting_type",
+        "choices": [
+          "Discovery call",
+          "Demo",
+          "QBR / success review",
+          "Renewal planning",
+          "Support deep-dive"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 6530
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000124",
+      "key": "meeting_when",
+      "type": "question",
+      "label": "When",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Preferred date and time?",
+        "answerType": "appointment",
+        "answerRequired": true,
+        "outputVariable": "meeting_at"
+      },
+      "position": {
+        "x": 80,
+        "y": 6640
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000125",
+      "key": "meeting_attendees",
+      "type": "question",
+      "label": "Attendees",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Who should attend?",
+        "answerType": "multi_choice",
+        "answerRequired": true,
+        "outputVariable": "meeting_attendees",
+        "choices": [
+          "Economic buyer",
+          "Champion",
+          "Technical evaluator",
+          "Success manager",
+          "Partner"
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 6750
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000126",
+      "key": "meeting_notes",
+      "type": "question",
+      "label": "Agenda",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Agenda notes?",
+        "answerType": "long_text",
+        "answerRequired": false,
+        "outputVariable": "meeting_notes"
+      },
+      "position": {
+        "x": 80,
+        "y": 6860
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000127",
+      "key": "meeting_confirm",
+      "type": "question",
+      "label": "Confirm",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Confirm the calendar hold.",
+        "answerType": "confirm",
+        "answerRequired": true,
+        "outputVariable": "meeting_ok",
+        "confirmLabel": "Yes — book this meeting"
+      },
+      "position": {
+        "x": 80,
+        "y": 6970
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000128",
+      "key": "http_meeting",
+      "type": "http",
+      "label": "POST meeting",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "POST",
+        "path": "/crm/meetings",
+        "body": "{\"type\":\"{{vars.meeting_type}}\",\"when\":\"{{vars.meeting_at}}\",\"attendees\":\"{{vars.meeting_attendees}}\",\"notes\":\"{{vars.meeting_notes}}\",\"organizer\":\"{{vars.visitor_name}}\",\"email\":\"{{vars.email}}\",\"company\":\"{{vars.company}}\"}",
+        "paramValues": {},
+        "outputVariable": "meeting_result"
+      },
+      "position": {
+        "x": 80,
+        "y": 7080
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000129",
+      "key": "done_meeting",
+      "type": "message",
+      "label": "Booked",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "**{{vars.meeting_type}}** on **{{prettify(vars.meeting_at)}}**\nMeeting id: `{{vars.meeting_result.meeting_id}}`\nAttendees: **{{join(vars.meeting_attendees, \", \")}}**"
+      },
+      "position": {
+        "x": 80,
+        "y": 7190
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000139",
+      "key": "intro_addons",
+      "type": "message",
+      "label": "Add-ons",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Browse PulseCRM add-ons and pay the cart total (demo)."
+      },
+      "position": {
+        "x": 80,
+        "y": 7300
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000140",
+      "key": "http_addon_catalog",
+      "type": "http",
+      "label": "GET catalog",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "GET",
+        "path": "/crm/products",
+        "body": "",
+        "paramValues": {},
+        "outputVariable": "addon_catalog"
+      },
+      "position": {
+        "x": 80,
+        "y": 7410
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000141",
+      "key": "msg_addon_hint",
+      "type": "message",
+      "label": "Catalog",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Online catalog has **{{length(vars.addon_catalog.data)}}** add-ons — pick what you need in the store."
+      },
+      "position": {
+        "x": 80,
+        "y": 7520
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000142",
+      "key": "ask_addon_shop",
+      "type": "question",
+      "label": "Shop",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Browse the PulseCRM add-on store and checkout.",
+        "answerType": "shop",
+        "answerRequired": true,
+        "outputVariable": "cart",
+        "shopTemplateKey": "crm_store"
+      },
+      "position": {
+        "x": 80,
+        "y": 7630
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000143",
+      "key": "ask_addon_pay",
+      "type": "question",
+      "label": "Payment",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Pay for your CRM add-ons.",
+        "answerType": "payment",
+        "answerRequired": true,
+        "outputVariable": "payment",
+        "paymentAmount": "{{vars.cart.total}}",
+        "paymentItemName": "PulseCRM add-ons",
+        "paymentBuyerEmail": "{{vars.email}}",
+        "paymentBuyerName": "{{vars.visitor_name}}"
+      },
+      "position": {
+        "x": 80,
+        "y": 7740
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000144",
+      "key": "done_addons",
+      "type": "message",
+      "label": "Paid",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "Add-ons total **{{vars.cart.total}} {{vars.cart.currency}}** — payment `{{coalesce(vars.payment.reference, \"demo\")}}`."
+      },
+      "position": {
+        "x": 80,
+        "y": 7850
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000152",
+      "key": "set_ref_vars",
+      "type": "set_variable",
+      "label": "Set reference",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "reference",
+        "value": "{{coalesce(vars.lab_submit.submission_id, \"pending\")}}",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "reference",
+            "value": "{{coalesce(vars.lab_submit.submission_id, \"pending\")}}",
+            "valueType": "string"
+          },
+          {
+            "variableKey": "followup_on",
+            "value": "{{formatDate(dateAdd(utcNow(), coalesce(vars.followup_days, 2), \"days\"), \"EEE d MMM\")}}",
+            "valueType": "string"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 7960
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000153",
+      "key": "set_summary_vars",
+      "type": "set_variable",
+      "label": "Set summary",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "variableKey": "summary",
+        "value": "{{if(empty(vars.summary), vars.service + \" in \" + coalesce(vars.city, \"your area\"), vars.summary)}}",
+        "valueType": "string",
+        "assignments": [
+          {
+            "variableKey": "summary",
+            "value": "{{if(empty(vars.summary), vars.service + \" in \" + coalesce(vars.city, \"your area\"), vars.summary)}}",
+            "valueType": "string"
+          }
+        ]
+      },
+      "position": {
+        "x": 80,
+        "y": 8070
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000154",
+      "key": "http_email_sink",
+      "type": "http",
+      "label": "Notify inbox",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "method": "POST",
+        "path": "/email/sink",
+        "body": "{\"to\":\"{{vars.email}}\",\"subject\":\"PulseCRM: {{vars.service}}\",\"body\":\"Thanks {{vars.visitor_name}} -- we logged your {{vars.service}} request. Ref {{vars.reference}}.\"}",
+        "paramValues": {},
+        "outputVariable": "email_sink"
+      },
+      "position": {
+        "x": 80,
+        "y": 8180
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000155",
+      "key": "send_email",
+      "type": "email",
+      "label": "Send confirmation",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "connectionId": "",
+        "templateKey": "followup_email",
+        "to": "{{vars.email}}",
+        "subject": "",
+        "body": "{{templates.followup_email.html}}",
+        "paramValues": {},
+        "templateBindings": {
+          "followup_email": {
+            "name": "{{vars.full_name}}",
+            "brand": "{{vars.brand_name}}",
+            "service": "{{vars.service}}",
+            "reference": "{{vars.reference}}",
+            "city": "{{vars.city}}",
+            "followup": "{{vars.followup_on}}",
+            "summary": "{{vars.summary}}",
+            "support": "{{vars.support_email}}"
+          }
+        }
+      },
+      "position": {
+        "x": 80,
+        "y": 8290
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000156",
+      "key": "save_enquiry",
+      "type": "entity",
+      "label": "Save enquiry",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "entityId": "b3200000-0000-4000-8000-000000000007",
+        "operation": "create",
+        "recordId": "",
+        "filterAttribute": "",
+        "filterEquals": "",
+        "fieldMap": {
+          "name": "{{vars.visitor_name}}",
+          "email": "{{vars.email}}",
+          "phone": "{{coalesce(vars.phone, \"\")}}",
+          "country": "{{coalesce(vars.country, \"\")}}",
+          "city": "{{coalesce(vars.city, \"\")}}",
+          "service": "{{vars.service}}",
+          "summary": "{{vars.summary}}",
+          "priority": "{{vars.priority}}",
+          "mood": "{{coalesce(vars.mood, \"\")}}",
+          "reference": "{{vars.reference}}",
+          "followup_on": "{{vars.followup_on}}"
+        },
+        "outputVariable": "enquiry"
+      },
+      "position": {
+        "x": 80,
+        "y": 8400
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000157",
+      "key": "loop_next",
+      "type": "loop",
+      "label": "Next steps",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "collection": "{{vars.checklist}}",
+        "itemVariable": "check_item",
+        "indexVariable": "check_index"
+      },
+      "position": {
+        "x": 80,
+        "y": 8510
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000158",
+      "key": "msg_check_item",
+      "type": "message",
+      "label": "Checklist item",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "{{vars.check_index + 1}}. {{vars.check_item}}"
+      },
+      "position": {
+        "x": 80,
+        "y": 8620
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000159",
+      "key": "ask_doc_sign",
+      "type": "question",
+      "label": "Sign pack",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "prompt": "Please sign so we can stamp your confirmation pack.",
+        "answerType": "signature",
+        "answerRequired": true,
+        "outputVariable": "signature"
+      },
+      "position": {
+        "x": 80,
+        "y": 8730
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000160",
+      "key": "wrap",
+      "type": "message",
+      "label": "Confirmation",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "text": "## Thanks, {{titleCase(vars.visitor_name)}} ✓\n\n**Service:** {{vars.service}}\n**Reference:** `{{vars.reference}}`\n**Follow-up:** around {{vars.followup_on}}\n\n📍 {{coalesce(vars.city, \"Your area\")}}, {{coalesce(vars.country, \"\")}}\n📱 {{coalesce(vars.phone, \"—\")}}\n📧 `{{vars.email_display}}`\n\n{color:accent}Keep the pipeline moving.{/color}\n\n---\n\n{{templates.order_receipt.text}}\n\n{{templates.pack_document.file}}",
+        "templateBindings": {
+          "order_receipt": {
+            "name": "{{vars.visitor_name}}",
+            "service": "{{vars.service}}",
+            "city": "{{vars.city}}",
+            "order_id": "{{coalesce(vars.enquiry.id, vars.reference, \"demo\")}}"
+          },
+          "pack_document": {
+            "name": "{{vars.visitor_name}}",
+            "email": "{{vars.email}}",
+            "phone": "{{vars.phone}}",
+            "country": "{{vars.country}}",
+            "city": "{{vars.city}}",
+            "service": "{{vars.service}}",
+            "priority": "{{vars.priority}}",
+            "mood": "{{vars.mood}}",
+            "reference": "{{vars.reference}}",
+            "followup": "{{vars.followup_on}}",
+            "summary": "{{vars.summary}}",
+            "signature": "{{vars.signature}}",
+            "brand": "{{vars.brand_name}}",
+            "support": "{{vars.support_email}}"
+          }
+        }
+      },
+      "position": {
+        "x": 80,
+        "y": 8840
+      }
+    },
+    {
+      "id": "a3007000-0000-4000-8000-000000000161",
+      "key": "end",
+      "type": "end",
+      "label": "Goodbye",
+      "config": {
+        "runAfter": {
+          "succeeded": true,
+          "failed": false,
+          "skipped": false,
+          "timedOut": false
+        },
+        "delaySeconds": 0,
+        "timeoutSeconds": 0,
+        "message": "Thanks for exploring **{{vars.brand_name}}**.\n\n{{coalesce(vars.brand_tagline, \"\")}}\n\n{color:muted}Restart the chat to try another service.{/color}"
+      },
+      "position": {
+        "x": 80,
+        "y": 8950
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e3007000-0000-4000-8000-000000000020",
+      "source": "a3007000-0000-4000-8000-000000000001",
+      "target": "a3007000-0000-4000-8000-000000000002",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000021",
+      "source": "a3007000-0000-4000-8000-000000000002",
+      "target": "a3007000-0000-4000-8000-000000000003",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000022",
+      "source": "a3007000-0000-4000-8000-000000000003",
+      "target": "a3007000-0000-4000-8000-000000000004",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000023",
+      "source": "a3007000-0000-4000-8000-000000000004",
+      "target": "a3007000-0000-4000-8000-000000000005",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000024",
+      "source": "a3007000-0000-4000-8000-000000000005",
+      "target": "a3007000-0000-4000-8000-000000000006",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000025",
+      "source": "a3007000-0000-4000-8000-000000000006",
+      "target": "a3007000-0000-4000-8000-000000000007",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000026",
+      "source": "a3007000-0000-4000-8000-000000000007",
+      "target": "a3007000-0000-4000-8000-000000000008",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000027",
+      "source": "a3007000-0000-4000-8000-000000000008",
+      "target": "a3007000-0000-4000-8000-000000000009",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000028",
+      "source": "a3007000-0000-4000-8000-000000000009",
+      "target": "a3007000-0000-4000-8000-000000000010",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000029",
+      "source": "a3007000-0000-4000-8000-000000000010",
+      "target": "a3007000-0000-4000-8000-000000000011",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000030",
+      "source": "a3007000-0000-4000-8000-000000000011",
+      "target": "a3007000-0000-4000-8000-000000000012",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000031",
+      "source": "a3007000-0000-4000-8000-000000000012",
+      "target": "a3007000-0000-4000-8000-000000000013",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000032",
+      "source": "a3007000-0000-4000-8000-000000000013",
+      "target": "a3007000-0000-4000-8000-000000000014",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000033",
+      "source": "a3007000-0000-4000-8000-000000000014",
+      "target": "a3007000-0000-4000-8000-000000000015",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000034",
+      "source": "a3007000-0000-4000-8000-000000000015",
+      "target": "a3007000-0000-4000-8000-000000000016",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000035",
+      "source": "a3007000-0000-4000-8000-000000000016",
+      "target": "a3007000-0000-4000-8000-000000000017",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000036",
+      "source": "a3007000-0000-4000-8000-000000000017",
+      "target": "a3007000-0000-4000-8000-000000000018",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000037",
+      "source": "a3007000-0000-4000-8000-000000000018",
+      "target": "a3007000-0000-4000-8000-000000000019",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000049",
+      "source": "a3007000-0000-4000-8000-000000000039",
+      "target": "a3007000-0000-4000-8000-000000000040",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000050",
+      "source": "a3007000-0000-4000-8000-000000000040",
+      "target": "a3007000-0000-4000-8000-000000000041",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000051",
+      "source": "a3007000-0000-4000-8000-000000000041",
+      "target": "a3007000-0000-4000-8000-000000000042",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000052",
+      "source": "a3007000-0000-4000-8000-000000000042",
+      "target": "a3007000-0000-4000-8000-000000000043",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000053",
+      "source": "a3007000-0000-4000-8000-000000000043",
+      "target": "a3007000-0000-4000-8000-000000000044",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000054",
+      "source": "a3007000-0000-4000-8000-000000000044",
+      "target": "a3007000-0000-4000-8000-000000000045",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000055",
+      "source": "a3007000-0000-4000-8000-000000000045",
+      "target": "a3007000-0000-4000-8000-000000000046",
+      "sourceHandle": "true",
+      "label": "Found"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000056",
+      "source": "a3007000-0000-4000-8000-000000000045",
+      "target": "a3007000-0000-4000-8000-000000000047",
+      "sourceHandle": "false",
+      "label": "Missing"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000057",
+      "source": "a3007000-0000-4000-8000-000000000046",
+      "target": "a3007000-0000-4000-8000-000000000048",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000058",
+      "source": "a3007000-0000-4000-8000-000000000047",
+      "target": "a3007000-0000-4000-8000-000000000048",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000059",
+      "source": "a3007000-0000-4000-8000-000000000019",
+      "target": "a3007000-0000-4000-8000-000000000039",
+      "sourceHandle": "case_lookup",
+      "label": "Look up account"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000060",
+      "source": "a3007000-0000-4000-8000-000000000048",
+      "target": "a3007000-0000-4000-8000-000000000038",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000073",
+      "source": "a3007000-0000-4000-8000-000000000061",
+      "target": "a3007000-0000-4000-8000-000000000062",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000074",
+      "source": "a3007000-0000-4000-8000-000000000062",
+      "target": "a3007000-0000-4000-8000-000000000063",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000075",
+      "source": "a3007000-0000-4000-8000-000000000063",
+      "target": "a3007000-0000-4000-8000-000000000064",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000076",
+      "source": "a3007000-0000-4000-8000-000000000064",
+      "target": "a3007000-0000-4000-8000-000000000065",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000077",
+      "source": "a3007000-0000-4000-8000-000000000065",
+      "target": "a3007000-0000-4000-8000-000000000066",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000078",
+      "source": "a3007000-0000-4000-8000-000000000066",
+      "target": "a3007000-0000-4000-8000-000000000067",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000079",
+      "source": "a3007000-0000-4000-8000-000000000067",
+      "target": "a3007000-0000-4000-8000-000000000069",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000080",
+      "source": "a3007000-0000-4000-8000-000000000069",
+      "target": "a3007000-0000-4000-8000-000000000068",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000081",
+      "source": "a3007000-0000-4000-8000-000000000068",
+      "target": "a3007000-0000-4000-8000-000000000070",
+      "sourceHandle": "true",
+      "label": "Hot"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000082",
+      "source": "a3007000-0000-4000-8000-000000000068",
+      "target": "a3007000-0000-4000-8000-000000000071",
+      "sourceHandle": "false",
+      "label": "Warm"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000083",
+      "source": "a3007000-0000-4000-8000-000000000070",
+      "target": "a3007000-0000-4000-8000-000000000072",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000084",
+      "source": "a3007000-0000-4000-8000-000000000071",
+      "target": "a3007000-0000-4000-8000-000000000072",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000085",
+      "source": "a3007000-0000-4000-8000-000000000019",
+      "target": "a3007000-0000-4000-8000-000000000061",
+      "sourceHandle": "case_lead",
+      "label": "Capture a lead"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000086",
+      "source": "a3007000-0000-4000-8000-000000000072",
+      "target": "a3007000-0000-4000-8000-000000000038",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000098",
+      "source": "a3007000-0000-4000-8000-000000000087",
+      "target": "a3007000-0000-4000-8000-000000000088",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000099",
+      "source": "a3007000-0000-4000-8000-000000000088",
+      "target": "a3007000-0000-4000-8000-000000000089",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000100",
+      "source": "a3007000-0000-4000-8000-000000000089",
+      "target": "a3007000-0000-4000-8000-000000000090",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000101",
+      "source": "a3007000-0000-4000-8000-000000000090",
+      "target": "a3007000-0000-4000-8000-000000000091",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000102",
+      "source": "a3007000-0000-4000-8000-000000000091",
+      "target": "a3007000-0000-4000-8000-000000000092",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000103",
+      "source": "a3007000-0000-4000-8000-000000000092",
+      "target": "a3007000-0000-4000-8000-000000000094",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000104",
+      "source": "a3007000-0000-4000-8000-000000000094",
+      "target": "a3007000-0000-4000-8000-000000000093",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000105",
+      "source": "a3007000-0000-4000-8000-000000000093",
+      "target": "a3007000-0000-4000-8000-000000000095",
+      "sourceHandle": "true",
+      "label": "High"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000106",
+      "source": "a3007000-0000-4000-8000-000000000093",
+      "target": "a3007000-0000-4000-8000-000000000096",
+      "sourceHandle": "false",
+      "label": "Normal"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000107",
+      "source": "a3007000-0000-4000-8000-000000000095",
+      "target": "a3007000-0000-4000-8000-000000000097",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000108",
+      "source": "a3007000-0000-4000-8000-000000000096",
+      "target": "a3007000-0000-4000-8000-000000000097",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000109",
+      "source": "a3007000-0000-4000-8000-000000000019",
+      "target": "a3007000-0000-4000-8000-000000000087",
+      "sourceHandle": "case_ticket",
+      "label": "Log a ticket"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000110",
+      "source": "a3007000-0000-4000-8000-000000000097",
+      "target": "a3007000-0000-4000-8000-000000000038",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000116",
+      "source": "a3007000-0000-4000-8000-000000000111",
+      "target": "a3007000-0000-4000-8000-000000000112",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000117",
+      "source": "a3007000-0000-4000-8000-000000000112",
+      "target": "a3007000-0000-4000-8000-000000000113",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000118",
+      "source": "a3007000-0000-4000-8000-000000000113",
+      "target": "a3007000-0000-4000-8000-000000000114",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000119",
+      "source": "a3007000-0000-4000-8000-000000000114",
+      "target": "a3007000-0000-4000-8000-000000000115",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000120",
+      "source": "a3007000-0000-4000-8000-000000000019",
+      "target": "a3007000-0000-4000-8000-000000000111",
+      "sourceHandle": "case_deal",
+      "label": "Check deal status"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000121",
+      "source": "a3007000-0000-4000-8000-000000000115",
+      "target": "a3007000-0000-4000-8000-000000000038",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000130",
+      "source": "a3007000-0000-4000-8000-000000000122",
+      "target": "a3007000-0000-4000-8000-000000000123",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000131",
+      "source": "a3007000-0000-4000-8000-000000000123",
+      "target": "a3007000-0000-4000-8000-000000000124",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000132",
+      "source": "a3007000-0000-4000-8000-000000000124",
+      "target": "a3007000-0000-4000-8000-000000000125",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000133",
+      "source": "a3007000-0000-4000-8000-000000000125",
+      "target": "a3007000-0000-4000-8000-000000000126",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000134",
+      "source": "a3007000-0000-4000-8000-000000000126",
+      "target": "a3007000-0000-4000-8000-000000000127",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000135",
+      "source": "a3007000-0000-4000-8000-000000000127",
+      "target": "a3007000-0000-4000-8000-000000000128",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000136",
+      "source": "a3007000-0000-4000-8000-000000000128",
+      "target": "a3007000-0000-4000-8000-000000000129",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000137",
+      "source": "a3007000-0000-4000-8000-000000000019",
+      "target": "a3007000-0000-4000-8000-000000000122",
+      "sourceHandle": "case_meeting",
+      "label": "Book a meeting"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000138",
+      "source": "a3007000-0000-4000-8000-000000000129",
+      "target": "a3007000-0000-4000-8000-000000000038",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000145",
+      "source": "a3007000-0000-4000-8000-000000000139",
+      "target": "a3007000-0000-4000-8000-000000000140",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000146",
+      "source": "a3007000-0000-4000-8000-000000000140",
+      "target": "a3007000-0000-4000-8000-000000000141",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000147",
+      "source": "a3007000-0000-4000-8000-000000000141",
+      "target": "a3007000-0000-4000-8000-000000000142",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000148",
+      "source": "a3007000-0000-4000-8000-000000000142",
+      "target": "a3007000-0000-4000-8000-000000000143",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000149",
+      "source": "a3007000-0000-4000-8000-000000000143",
+      "target": "a3007000-0000-4000-8000-000000000144",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000150",
+      "source": "a3007000-0000-4000-8000-000000000019",
+      "target": "a3007000-0000-4000-8000-000000000139",
+      "sourceHandle": "case_addons",
+      "label": "CRM add-ons"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000151",
+      "source": "a3007000-0000-4000-8000-000000000144",
+      "target": "a3007000-0000-4000-8000-000000000038",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000162",
+      "source": "a3007000-0000-4000-8000-000000000038",
+      "target": "a3007000-0000-4000-8000-000000000152",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000163",
+      "source": "a3007000-0000-4000-8000-000000000152",
+      "target": "a3007000-0000-4000-8000-000000000153",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000164",
+      "source": "a3007000-0000-4000-8000-000000000153",
+      "target": "a3007000-0000-4000-8000-000000000154",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000165",
+      "source": "a3007000-0000-4000-8000-000000000154",
+      "target": "a3007000-0000-4000-8000-000000000155",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000166",
+      "source": "a3007000-0000-4000-8000-000000000155",
+      "target": "a3007000-0000-4000-8000-000000000156",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000167",
+      "source": "a3007000-0000-4000-8000-000000000156",
+      "target": "a3007000-0000-4000-8000-000000000157",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000168",
+      "source": "a3007000-0000-4000-8000-000000000157",
+      "target": "a3007000-0000-4000-8000-000000000158",
+      "sourceHandle": "body",
+      "label": "Each"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000169",
+      "source": "a3007000-0000-4000-8000-000000000158",
+      "target": "a3007000-0000-4000-8000-000000000159",
+      "sourceHandle": null,
+      "label": "Then"
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000170",
+      "source": "a3007000-0000-4000-8000-000000000159",
+      "target": "a3007000-0000-4000-8000-000000000160",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000171",
+      "source": "a3007000-0000-4000-8000-000000000160",
+      "target": "a3007000-0000-4000-8000-000000000161",
+      "sourceHandle": null,
+      "label": null
+    },
+    {
+      "id": "e3007000-0000-4000-8000-000000000172",
+      "source": "a3007000-0000-4000-8000-000000000019",
+      "target": "a3007000-0000-4000-8000-000000000038",
+      "sourceHandle": "default",
+      "label": "Default"
+    }
+  ],
+  "entities": [
+    {
+      "id": "b3100000-0000-4000-8000-000000000007",
+      "key": "crm_segments"
+    },
+    {
+      "id": "b3200000-0000-4000-8000-000000000007",
+      "key": "crm_activities"
+    }
+  ],
+  "entityDefs": [
+    {
+      "id": "b3100000-0000-4000-8000-000000000007",
+      "key": "crm_segments",
+      "name": "CRM segments",
+      "description": "Static account segments / tiers",
+      "kind": "static",
+      "attributes": [
+        {
+          "key": "id",
+          "label": "Id",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": true,
+          "is_unique": true,
+          "sort_order": -1,
+          "default_value": null
+        },
+        {
+          "key": "code",
+          "label": "Code",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": true,
+          "sort_order": 0,
+          "default_value": null
+        },
+        {
+          "key": "name",
+          "label": "Name",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 1,
+          "default_value": null
+        },
+        {
+          "key": "target_arr",
+          "label": "Target ARR",
+          "value_type": "number",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 2,
+          "default_value": null
+        }
+      ],
+      "records": [
+        {
+          "id": "71111111-1111-4111-8111-111111111701",
+          "code": "STARTER",
+          "name": "Starter",
+          "target_arr": 50000
+        },
+        {
+          "id": "71111111-1111-4111-8111-111111111702",
+          "code": "GROWTH",
+          "name": "Growth",
+          "target_arr": 200000
+        },
+        {
+          "id": "71111111-1111-4111-8111-111111111703",
+          "code": "ENT",
+          "name": "Enterprise",
+          "target_arr": 750000
+        }
+      ]
+    },
+    {
+      "id": "b3200000-0000-4000-8000-000000000007",
+      "key": "crm_activities",
+      "name": "CRM activities",
+      "description": "Logged PulseCRM workspace activities",
+      "kind": "dynamic",
+      "attributes": [
+        {
+          "key": "id",
+          "label": "Id",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": true,
+          "is_unique": true,
+          "sort_order": -1,
+          "default_value": null
+        },
+        {
+          "key": "name",
+          "label": "Name",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 0,
+          "default_value": null
+        },
+        {
+          "key": "email",
+          "label": "Email",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 1,
+          "default_value": null
+        },
+        {
+          "key": "phone",
+          "label": "Phone",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 2,
+          "default_value": null
+        },
+        {
+          "key": "country",
+          "label": "Country",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 3,
+          "default_value": null
+        },
+        {
+          "key": "city",
+          "label": "City",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 4,
+          "default_value": null
+        },
+        {
+          "key": "service",
+          "label": "Service",
+          "value_type": "string",
+          "required": true,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 5,
+          "default_value": null
+        },
+        {
+          "key": "summary",
+          "label": "Summary",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 6,
+          "default_value": null
+        },
+        {
+          "key": "priority",
+          "label": "Priority",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 7,
+          "default_value": null
+        },
+        {
+          "key": "mood",
+          "label": "Mood",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 8,
+          "default_value": null
+        },
+        {
+          "key": "reference",
+          "label": "Reference",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 9,
+          "default_value": null
+        },
+        {
+          "key": "followup_on",
+          "label": "Follow-up on",
+          "value_type": "string",
+          "required": false,
+          "is_identifier": false,
+          "is_unique": false,
+          "sort_order": 10,
+          "default_value": null
+        }
+      ],
+      "records": []
+    }
+  ],
+  "templates": [
+    {
+      "key": "welcome_msg",
+      "name": "Welcome",
+      "kind": "message",
+      "description": "Opening copy",
+      "content": {
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Guest name",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "text": "Hi — I’m your **PulseCRM** workspace assistant.\n\nAccounts, leads, tickets, deals, meetings, and add-ons — what do you need?\n\n{color:muted}{{formatDate(utcNow(), \"EEEE, d MMMM yyyy\")}} · demo CRM{/color}"
+      }
+    },
+    {
+      "key": "main_menu",
+      "name": "Services menu",
+      "kind": "menu",
+      "description": "Service overview with hints",
+      "content": {
+        "inputs": [],
+        "title": "How can I help?",
+        "items": [
+          {
+            "label": "Look up account",
+            "description": "Find a customer on file",
+            "value": "Look up account"
+          },
+          {
+            "label": "Capture a lead",
+            "description": "Qualify a new opportunity",
+            "value": "Capture a lead"
+          },
+          {
+            "label": "Log a ticket",
+            "description": "Open a support case",
+            "value": "Log a ticket"
+          },
+          {
+            "label": "Check deal status",
+            "description": "Track a deal reference",
+            "value": "Check deal status"
+          },
+          {
+            "label": "Book a meeting",
+            "description": "Schedule discovery time",
+            "value": "Book a meeting"
+          },
+          {
+            "label": "CRM add-ons",
+            "description": "Seats, AI, SSO, and success hours",
+            "value": "CRM add-ons"
+          }
+        ]
+      }
+    },
+    {
+      "key": "hours_main",
+      "name": "Opening hours",
+      "kind": "hours",
+      "description": "Hours card",
+      "content": {
+        "inputs": [],
+        "timezone": "Africa/Johannesburg",
+        "note": "Success desk and sales floor hours (demo).",
+        "days": [
+          {
+            "day": "Monday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Tuesday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Wednesday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Thursday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Friday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": false
+          },
+          {
+            "day": "Saturday",
+            "open": "08:00",
+            "close": "13:00",
+            "closed": false
+          },
+          {
+            "day": "Sunday",
+            "open": "08:00",
+            "close": "17:00",
+            "closed": true
+          }
+        ]
+      }
+    },
+    {
+      "key": "help_faq",
+      "name": "FAQ",
+      "kind": "faq",
+      "description": "FAQ with intro",
+      "content": {
+        "inputs": [
+          {
+            "key": "brand",
+            "label": "Brand",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "title": "FAQ",
+        "intro": "Quick answers about {{coalesce(inputs.brand, \"PulseCRM\")}}:",
+        "items": [
+          {
+            "question": "Is this a real CRM?",
+            "answer": "No — this is a PulseCRM demonstration. Do not enter live customer data."
+          },
+          {
+            "question": "How do I look up an account?",
+            "answer": "Choose Look up account and use rep@pulsecrm.example after verification."
+          },
+          {
+            "question": "Where do I check a deal?",
+            "answer": "Choose Check deal status and try reference DEAL-2026-0042."
+          }
+        ]
+      }
+    },
+    {
+      "key": "terms_of_use",
+      "name": "Terms",
+      "kind": "legal",
+      "description": "Demo terms",
+      "content": {
+        "inputs": [],
+        "title": "CRM demo terms",
+        "body": "Demo only. Do not enter real customer PII, passwords, or production pipeline data."
+      }
+    },
+    {
+      "key": "followup_email",
+      "name": "Follow-up email",
+      "kind": "email",
+      "description": "Confirmation email HTML with reference",
+      "content": {
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Name",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "brand",
+            "label": "Brand",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "service",
+            "label": "Service",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "reference",
+            "label": "Reference",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "city",
+            "label": "City",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "followup",
+            "label": "Follow-up date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "summary",
+            "label": "Summary",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "support",
+            "label": "Support email",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "subject": "PulseCRM: your {{coalesce(inputs.service, \"request\")}} · ref {{coalesce(inputs.reference, \"pending\")}}",
+        "html": "<!DOCTYPE html>\n<html><body style=\"margin:0;background:#f1f5f9;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;\">\n  <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f1f5f9;padding:28px 0;\">\n    <tr><td align=\"center\">\n      <table role=\"presentation\" width=\"580\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 12px 40px rgba(15,23,42,.08);\">\n        <tr>\n          <td style=\"background:linear-gradient(135deg,#0f766e,#0891b2);padding:32px 36px;color:#ffffff;\">\n            <p style=\"margin:0;font-size:11px;letter-spacing:.2em;text-transform:uppercase;opacity:.88;\">{{coalesce(inputs.brand, \"PulseCRM\")}}</p>\n            <h1 style=\"margin:10px 0 0;font-size:24px;font-weight:650;letter-spacing:-.02em;\">You're all set, {{titleCase(inputs.name)}}</h1>\n            <p style=\"margin:10px 0 0;font-size:14px;opacity:.9;\">{{formatDate(utcNow(), \"EEEE, d MMMM yyyy · HH:mm\")}}</p>\n          </td>\n        </tr>\n        <tr>\n          <td style=\"padding:28px 36px 8px;color:#334155;font-size:15px;line-height:1.65;\">\n            <p style=\"margin:0 0 14px;\">We have logged your <strong>{{coalesce(inputs.service, \"service\")}}</strong> request.</p>\n            <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;margin:0 0 18px;\">\n              <tr>\n                <td style=\"padding:16px 18px;\">\n                  <p style=\"margin:0 0 6px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;\">Reference</p>\n                  <p style=\"margin:0;font-size:18px;font-weight:650;color:#0f172a;font-family:ui-monospace,Consolas,monospace;\">{{coalesce(inputs.reference, \"pending\")}}</p>\n                </td>\n              </tr>\n              <tr>\n                <td style=\"padding:0 18px 16px;\">\n                  <p style=\"margin:0;font-size:13px;color:#64748b;\">City · {{coalesce(inputs.city, \"—\")}} · Follow-up around {{coalesce(inputs.followup, \"soon\")}}</p>\n                </td>\n              </tr>\n            </table>\n            <p style=\"margin:0 0 12px;\">{{coalesce(inputs.summary, \"A member of the team will use the details you shared in this chat.\")}}</p>\n            <p style=\"margin:0 0 18px;color:#64748b;font-size:13px;\">Need help? Reply to this email or write to <a href=\"mailto:{{coalesce(inputs.support, \"\")}}\" style=\"color:#0d9488;\">{{coalesce(inputs.support, \"support\")}}</a>.</p>\n          </td>\n        </tr>\n        <tr>\n          <td style=\"padding:0 36px 28px;\">\n            <p style=\"margin:0;padding:14px 16px;border-radius:12px;background:linear-gradient(90deg,#ecfdf5,#e0f2fe);color:#0f766e;font-size:13px;line-height:1.5;\">\n              This is a demonstration confirmation from <strong>{{coalesce(inputs.brand, \"PulseCRM\")}}</strong> — thank you for trying the assistant.\n            </p>\n          </td>\n        </tr>\n      </table>\n    </td></tr>\n  </table>\n</body></html>"
+      }
+    },
+    {
+      "key": "order_receipt",
+      "name": "Receipt",
+      "kind": "receipt",
+      "description": "Shop receipt with expressions",
+      "content": {
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Name",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "service",
+            "label": "Service",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "city",
+            "label": "City",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "order_id",
+            "label": "Order id",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "title": "PulseCRM receipt",
+        "intro": "Thanks **{{titleCase(inputs.name)}}** — {{coalesce(inputs.service, \"your request\")}} in {{coalesce(inputs.city, \"your area\")}}.\n\nReference: **{{coalesce(inputs.order_id, \"pending\")}}**",
+        "footer": "Demo receipt · PulseCRM · FlowForge"
+      }
+    },
+    {
+      "key": "pack_document",
+      "name": "Document pack",
+      "kind": "document",
+      "description": "Formatted A4 PDF with field cells and signature",
+      "content": {
+        "format": "pdf",
+        "filename": "{{slugify(coalesce(inputs.name, \"visitor\"))}}-crm-pack.pdf",
+        "title": "PulseCRM – confirmation pack",
+        "intro": "Prepared for **{{titleCase(inputs.name)}}** on {{formatDate(utcNow(), \"EEEE, d MMMM yyyy\")}}.",
+        "body": "This pack confirms your {{coalesce(inputs.service, \"enquiry\")}} with {{coalesce(inputs.brand, \"PulseCRM\")}}.\n\n{{if(empty(inputs.summary), \"\", inputs.summary)}}\n\n{{if(empty(inputs.followup), \"\", \"We aim to follow up around \" + inputs.followup + \".\")}}\n\nQuestions? {{coalesce(inputs.support, \"success@pulsecrm.example\")}}",
+        "footer": "© PulseCRM · generated by FlowForge",
+        "fields": [
+          {
+            "label": "Full name",
+            "value": "{{titleCase(inputs.name)}}",
+            "as": "text"
+          },
+          {
+            "label": "Email",
+            "value": "{{inputs.email}}",
+            "as": "text"
+          },
+          {
+            "label": "Cell",
+            "value": "{{coalesce(inputs.phone, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Country",
+            "value": "{{coalesce(inputs.country, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "City",
+            "value": "{{coalesce(inputs.city, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Service",
+            "value": "{{coalesce(inputs.service, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Priority",
+            "value": "{{coalesce(inputs.priority, \"standard\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Reference",
+            "value": "{{coalesce(inputs.reference, \"pending\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Follow-up",
+            "value": "{{coalesce(inputs.followup, \"soon\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Summary",
+            "value": "{{coalesce(inputs.summary, \"—\")}}",
+            "as": "text"
+          },
+          {
+            "label": "Signature",
+            "value": "{{inputs.signature}}",
+            "as": "image"
+          }
+        ],
+        "includeCart": true,
+        "layout": "page",
+        "orientation": "portrait",
+        "blocks": [
+          {
+            "id": "hdr",
+            "type": "heading",
+            "x": 8,
+            "y": 5,
+            "w": 84,
+            "h": 8,
+            "page": 1,
+            "text": "PulseCRM confirmation",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 20,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f766e",
+            "fill": "#ecfdf5"
+          },
+          {
+            "id": "sub",
+            "type": "text",
+            "x": 8,
+            "y": 14,
+            "w": 84,
+            "h": 7,
+            "page": 1,
+            "text": "Prepared for {{titleCase(inputs.name)}} · {{formatDate(utcNow(), \"EEEE, d MMMM yyyy\")}}",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 10,
+            "fontFamily": "times",
+            "bold": false,
+            "color": "#475569",
+            "fill": ""
+          },
+          {
+            "id": "div1",
+            "type": "divider",
+            "x": 8,
+            "y": 22,
+            "w": 84,
+            "h": 0.4,
+            "page": 1,
+            "text": "",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#99f6e4",
+            "fill": ""
+          },
+          {
+            "id": "name",
+            "type": "field",
+            "x": 8,
+            "y": 25,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Full name",
+            "value": "{{titleCase(inputs.name)}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "cell",
+            "type": "field",
+            "x": 52,
+            "y": 25,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Cell",
+            "value": "{{coalesce(inputs.phone, \"—\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "email",
+            "type": "field",
+            "x": 8,
+            "y": 34,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Email",
+            "value": "{{inputs.email}}",
+            "align": "left",
+            "fontSize": 10,
+            "fontFamily": "courier",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "city",
+            "type": "field",
+            "x": 52,
+            "y": 34,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "City / area",
+            "value": "{{coalesce(inputs.city, \"—\")}}, {{coalesce(inputs.country, \"\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "service",
+            "type": "field",
+            "x": 8,
+            "y": 43,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Service",
+            "value": "{{coalesce(inputs.service, \"—\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": true,
+            "color": "#0f766e",
+            "fill": "#ecfdf5"
+          },
+          {
+            "id": "ref",
+            "type": "field",
+            "x": 52,
+            "y": 43,
+            "w": 40,
+            "h": 7,
+            "page": 1,
+            "text": "",
+            "label": "Reference",
+            "value": "{{coalesce(inputs.reference, \"pending\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "courier",
+            "bold": true,
+            "color": "#0f766e",
+            "fill": "#ecfdf5"
+          },
+          {
+            "id": "prio",
+            "type": "field",
+            "x": 8,
+            "y": 52,
+            "w": 40,
+            "h": 6,
+            "page": 1,
+            "text": "",
+            "label": "Priority",
+            "value": "{{coalesce(inputs.priority, \"standard\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#9a3412",
+            "fill": "#fff7ed"
+          },
+          {
+            "id": "follow",
+            "type": "field",
+            "x": 52,
+            "y": 52,
+            "w": 40,
+            "h": 6,
+            "page": 1,
+            "text": "",
+            "label": "Follow-up",
+            "value": "{{coalesce(inputs.followup, \"soon\")}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#9a3412",
+            "fill": "#fff7ed"
+          },
+          {
+            "id": "div2",
+            "type": "divider",
+            "x": 8,
+            "y": 60,
+            "w": 84,
+            "h": 0.35,
+            "page": 1,
+            "text": "",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#cbd5e1",
+            "fill": ""
+          },
+          {
+            "id": "notes",
+            "type": "text",
+            "x": 8,
+            "y": 63,
+            "w": 84,
+            "h": 10,
+            "page": 1,
+            "text": "{{if(empty(inputs.summary), \"No additional notes.\", \"Notes: \" + inputs.summary)}}",
+            "label": "",
+            "value": "",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "times",
+            "bold": false,
+            "color": "#334155",
+            "fill": ""
+          },
+          {
+            "id": "sig",
+            "type": "image",
+            "x": 8,
+            "y": 75,
+            "w": 46,
+            "h": 14,
+            "page": 1,
+            "text": "",
+            "label": "Signature",
+            "value": "{{inputs.signature}}",
+            "align": "left",
+            "fontSize": 11,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#ffffff"
+          },
+          {
+            "id": "cart",
+            "type": "cart",
+            "x": 56,
+            "y": 75,
+            "w": 36,
+            "h": 14,
+            "page": 1,
+            "text": "",
+            "label": "Order (if any)",
+            "value": "",
+            "align": "left",
+            "fontSize": 9,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#0f172a",
+            "fill": "#f8fafc"
+          },
+          {
+            "id": "foot",
+            "type": "text",
+            "x": 8,
+            "y": 92,
+            "w": 84,
+            "h": 4,
+            "page": 1,
+            "text": "© PulseCRM · demo pack · FlowForge",
+            "label": "",
+            "value": "",
+            "align": "center",
+            "fontSize": 8,
+            "fontFamily": "helvetica",
+            "bold": false,
+            "color": "#94a3b8",
+            "fill": ""
+          }
+        ],
+        "inputs": [
+          {
+            "key": "name",
+            "label": "Full name",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "email",
+            "label": "Email",
+            "type": "string",
+            "required": true
+          },
+          {
+            "key": "phone",
+            "label": "Cell",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "country",
+            "label": "Country",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "city",
+            "label": "City",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "service",
+            "label": "Service",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "priority",
+            "label": "Priority",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "mood",
+            "label": "Mood",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "reference",
+            "label": "Reference",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "followup",
+            "label": "Follow-up date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "summary",
+            "label": "Summary",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "signature",
+            "label": "Signature",
+            "type": "file",
+            "required": false
+          },
+          {
+            "key": "brand",
+            "label": "Brand",
+            "type": "string",
+            "required": false
+          },
+          {
+            "key": "support",
+            "label": "Support email",
+            "type": "string",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "crm_store",
+      "name": "PulseCRM add-ons",
+      "kind": "cart",
+      "description": "PulseCRM add-ons catalog for shop + payment.",
+      "content": {
+        "storeName": "PulseCRM add-ons",
+        "intro": "Seats, AI insights, SSO, and success hours — checkout includes shipping and VAT (demo).",
+        "currency": "ZAR",
+        "categories": [
+          {
+            "id": "cat_capacity",
+            "name": "Capacity"
+          },
+          {
+            "id": "cat_platform",
+            "name": "Platform"
+          }
+        ],
+        "products": [
+          {
+            "id": "prod_seats",
+            "sku": "PC-SEATS",
+            "name": "Extra seats (10-pack)",
+            "description": "Add ten named users",
+            "price": 2400,
+            "categoryId": "cat_capacity",
+            "stock": 40,
+            "image": ""
+          },
+          {
+            "id": "prod_ai",
+            "sku": "PC-AI",
+            "name": "AI insight add-on",
+            "description": "Deal risk & next-best action",
+            "price": 8900,
+            "categoryId": "cat_platform",
+            "stock": 25,
+            "image": ""
+          },
+          {
+            "id": "prod_sso",
+            "sku": "PC-SSO",
+            "name": "SSO / SCIM pack",
+            "description": "Enterprise identity",
+            "price": 12000,
+            "categoryId": "cat_platform",
+            "stock": 15,
+            "image": ""
+          },
+          {
+            "id": "prod_success",
+            "sku": "PC-SUCCESS",
+            "name": "Success hours (5)",
+            "description": "Onboarding & playbooks",
+            "price": 6500,
+            "categoryId": "cat_capacity",
+            "stock": 30,
+            "image": ""
+          }
+        ],
+        "fees": [
+          {
+            "id": "fee_ship",
+            "name": "Shipping / handling",
+            "kind": "fixed",
+            "amount": 45
+          },
+          {
+            "id": "fee_vat",
+            "name": "VAT",
+            "kind": "percent",
+            "amount": 15
+          }
+        ]
+      }
+    }
+  ],
+  "testScenarios": [],
+  "connectionHints": [
+    {
+      "name": "Demo Lab HTTP",
+      "kind": "http",
+      "baseUrl": "https://gkjtt.co.za/flowforge/demo",
+      "note": "Required for lookups, quotes, submit, and email sink."
+    },
+    {
+      "name": "Demo Lab SQLite",
+      "kind": "database",
+      "note": "Optional -- SQLite file on the demo host (see CONNECTIONS.md)."
+    }
+  ]
+}

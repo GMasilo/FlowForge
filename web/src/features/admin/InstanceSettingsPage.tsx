@@ -12,6 +12,8 @@ import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Textarea } from '@/shared/ui/textarea'
 import { FieldError } from '@/shared/ui/field-error'
+import { PAGE_HELP, SECTION_HELP } from '@/shared/help/pageHelp'
+import { SectionHeading } from '@/shared/ui/help-tooltip'
 import { PageHeader } from '@/shared/ui/page-header'
 
 type OrgFormState = {
@@ -123,6 +125,7 @@ export function InstanceSettingsPage() {
       <PageHeader
         title="Organisation"
         description={`Profile, contact, and branding for ${instance.name}.`}
+        help={PAGE_HELP.organisation}
       />
 
       <Card>
@@ -215,7 +218,7 @@ export function InstanceSettingsPage() {
           </div>
 
           <div className="border-t border-[var(--color-border)]/60 pt-4">
-            <h2 className="mb-1 text-sm font-semibold text-[var(--color-ink)]">Workspace branding</h2>
+            <SectionHeading title="Workspace branding" help={SECTION_HELP.workspaceBranding} className="mb-1" />
             <p className="mb-4 text-sm text-[var(--color-ink-muted)]">
               Customize how this organisation appears in the app shell and public chat.
             </p>

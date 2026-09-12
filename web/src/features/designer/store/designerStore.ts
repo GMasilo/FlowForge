@@ -55,6 +55,10 @@ interface DesignerState {
   templateKeys: string[] | null
   /** Template JSON by key. null = not loaded yet. */
   templateContents: Record<string, unknown> | null
+  /** Entity ids installed on this chatbot. null = not loaded yet. */
+  installedEntityIds: string[] | null
+  /** Integration ids installed on this chatbot. null = not loaded yet. */
+  installedIntegrationIds: string[] | null
   canUndo: boolean
   canRedo: boolean
   setFlow: (payload: {
@@ -66,6 +70,8 @@ interface DesignerState {
   setConnections: (connectionsById: Record<string, ConnectionValidationInfo>) => void
   setMediaKeys: (keys: string[] | null) => void
   setTemplateKeys: (keys: string[] | null, contents?: Record<string, unknown> | null) => void
+  setInstalledEntityIds: (ids: string[] | null) => void
+  setInstalledIntegrationIds: (ids: string[] | null) => void
   setViewMode: (mode: DesignerViewMode) => void
   selectNode: (id: string | null) => void
   setPeerLocks: (locks: Record<string, PeerStepLock>) => void
@@ -89,6 +95,8 @@ interface DesignerState {
   moveNodeToIndex: (id: string, toIndex: number) => boolean
   canMoveNode: (id: string) => { up: boolean; down: boolean }
   setEdges: (edges: DesignerEdge[]) => void
+  /** Replace nodes + edges together (e.g. switch case lane edits). */
+  setNodesAndEdges: (nodes: DesignerNode[], edges: DesignerEdge[]) => void
   connect: (edge: Omit<DesignerEdge, 'id'> & { id?: string }) => void
   markClean: () => void
   revalidate: () => void
@@ -135,6 +143,8 @@ function recompute(
   mediaKeys: string[] | null = null,
   templateKeys: string[] | null = null,
   templateContents: Record<string, unknown> | null = null,
+  installedEntityIds: string[] | null = null,
+  installedIntegrationIds: string[] | null = null,
 ) {
   return validateFlow(nodes, edges, {
     globalVariables,
@@ -142,6 +152,8 @@ function recompute(
     mediaKeys,
     templateKeys,
     templateContents,
+    installedEntityIds,
+    installedIntegrationIds,
   })
 }
 
@@ -229,6 +241,8 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   mediaKeys: null,
   templateKeys: null,
   templateContents: null,
+  installedEntityIds: null,
+  installedIntegrationIds: null,
   canUndo: false,
   canRedo: false,
 
@@ -244,7 +258,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       dirtyNodeKeys: [],
       deletedNodeKeys: [],
       selectedNodeId: nodes[0]?.id ?? null,
-      issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
       canUndo: false,
       canRedo: false,
     })
@@ -254,7 +268,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
     const { nodes, edges, globalVariables, mediaKeys, templateKeys } = get()
     set({
       connectionsById,
-      issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
     })
   },
 
@@ -262,7 +276,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
     const { nodes, edges, globalVariables, connectionsById, templateKeys } = get()
     set({
       mediaKeys,
-      issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
     })
   },
 
@@ -272,7 +286,43 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
     set({
       templateKeys,
       templateContents: contents,
-      issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, contents),
+      issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, contents, get().installedEntityIds, get().installedIntegrationIds),
+    })
+  },
+
+  setInstalledEntityIds: (installedEntityIds) => {
+    const { nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys } = get()
+    set({
+      installedEntityIds,
+      issues: recompute(
+        nodes,
+        edges,
+        globalVariables,
+        connectionsById,
+        mediaKeys,
+        templateKeys,
+        get().templateContents,
+        installedEntityIds,
+        get().installedIntegrationIds,
+      ),
+    })
+  },
+
+  setInstalledIntegrationIds: (installedIntegrationIds) => {
+    const { nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys } = get()
+    set({
+      installedIntegrationIds,
+      issues: recompute(
+        nodes,
+        edges,
+        globalVariables,
+        connectionsById,
+        mediaKeys,
+        templateKeys,
+        get().templateContents,
+        get().installedEntityIds,
+        installedIntegrationIds,
+      ),
     })
   },
 
@@ -356,7 +406,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       nodes: nextNodes,
       edges: nextEdges,
       selectedNodeId: nextSelected,
-      issues: recompute(nextNodes, nextEdges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(nextNodes, nextEdges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
     })
   },
 
@@ -373,7 +423,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       nodes: next,
       dirty: true,
       dirtyNodeKeys: keys,
-      issues: recompute(next, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(next, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
       ...captureHistory({ nodes, edges, selectedNodeId }, { coalesceKey: `updateNode:${id}` }),
     })
   },
@@ -484,6 +534,25 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
               },
             ]),
           )
+      } else if (type === 'switch') {
+        const cases = Array.isArray(config.cases)
+          ? (config.cases as Array<{ id?: string }>).map((c) => String(c.id ?? '')).filter(Boolean)
+          : []
+        const handles = [...cases, 'default']
+        nextEdges = edges
+          .filter((e) => !(e.source === afterNodeId && !e.sourceHandle))
+          .concat(
+            { id: newId(), source: afterNodeId, target: id },
+            ...formerTargets.flatMap((target) =>
+              handles.map((handle) => ({
+                id: newId(),
+                source: id,
+                target,
+                sourceHandle: handle,
+                label: 'Then',
+              })),
+            ),
+          )
       } else if (type === 'loop') {
         nextEdges = edges
           .filter((e) => !(e.source === afterNodeId && !e.sourceHandle))
@@ -515,7 +584,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       selectedNodeId: id,
       dirty: true,
       dirtyNodeKeys: addDirtyKeys(dirtyNodeKeys, ...touchKeys),
-      issues: recompute(nextNodes, nextEdges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(nextNodes, nextEdges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
       ...captureHistory({ nodes, edges, selectedNodeId }),
     })
     return id
@@ -605,7 +674,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       dirty: true,
       dirtyNodeKeys: addDirtyKeys(dirtyNodeKeys, ...neighborKeys),
       deletedNodeKeys: addDirtyKeys(deletedNodeKeys, ...removedKeys),
-      issues: recompute(nextNodes, nextEdges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(nextNodes, nextEdges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
       ...captureHistory({ nodes, edges, selectedNodeId }),
     })
   },
@@ -627,12 +696,10 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
     const { clipboard } = get()
     if (!clipboard || clipboard.type === 'end') return null
     return get().runHistoryBatch(() => {
-      const id = get().addNode(clipboard.type, afterNodeId ?? null)
-      get().updateNode(id, {
+      return get().addNode(clipboard.type, afterNodeId ?? null, {
         label: clipboard.label,
         config: structuredClone(clipboard.config),
       })
-      return id
     })
   },
 
@@ -653,7 +720,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       edges: next,
       dirty: true,
       dirtyNodeKeys: addDirtyKeys(dirtyNodeKeys, ...(node ? [node.key] : []), ...nodes.map((n) => n.key)),
-      issues: recompute(nodes, next, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(nodes, next, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
       ...captureHistory({ nodes, edges, selectedNodeId }),
     })
     return true
@@ -670,7 +737,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       edges: next,
       dirty: true,
       dirtyNodeKeys: addDirtyKeys(dirtyNodeKeys, ...nodes.map((n) => n.key)),
-      issues: recompute(nodes, next, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(nodes, next, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
       ...captureHistory({ nodes, edges, selectedNodeId }),
     })
     return true
@@ -697,8 +764,35 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       edges,
       dirty: true,
       dirtyNodeKeys: addDirtyKeys(dirtyNodeKeys, ...nodes.map((n) => n.key)),
-      issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
       ...captureHistory({ nodes, edges: prevEdges, selectedNodeId }),
+    })
+  },
+
+  setNodesAndEdges: (nextNodes, nextEdges) => {
+    const { nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, selectedNodeId, dirtyNodeKeys, deletedNodeKeys } =
+      get()
+    const nextIds = new Set(nextNodes.map((n) => n.id))
+    const removedKeys = nodes.filter((n) => !nextIds.has(n.id)).map((n) => n.key)
+    set({
+      nodes: nextNodes,
+      edges: nextEdges,
+      dirty: true,
+      dirtyNodeKeys: addDirtyKeys(dirtyNodeKeys, ...nextNodes.map((n) => n.key), ...nodes.map((n) => n.key)),
+      deletedNodeKeys: addDirtyKeys(deletedNodeKeys, ...removedKeys),
+      selectedNodeId: selectedNodeId && nextNodes.some((n) => n.id === selectedNodeId) ? selectedNodeId : null,
+      issues: recompute(
+        nextNodes,
+        nextEdges,
+        globalVariables,
+        connectionsById,
+        mediaKeys,
+        templateKeys,
+        get().templateContents,
+        get().installedEntityIds,
+        get().installedIntegrationIds,
+      ),
+      ...captureHistory({ nodes, edges, selectedNodeId }),
     })
   },
 
@@ -722,7 +816,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       edges: next,
       dirty: true,
       dirtyNodeKeys: addDirtyKeys(dirtyNodeKeys, source?.key ?? '', target?.key ?? ''),
-      issues: recompute(nodes, next, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(nodes, next, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
       ...captureHistory({ nodes, edges, selectedNodeId }),
     })
   },
@@ -731,7 +825,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
 
   revalidate: () => {
     const { nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys } = get()
-    set({ issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents) })
+    set({ issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds) })
   },
 
   undo: () => {
@@ -746,7 +840,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       selectedNodeId: prev.selectedNodeId,
       dirty: true,
       dirtyNodeKeys: prev.nodes.map((n) => n.key),
-      issues: recompute(prev.nodes, prev.edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(prev.nodes, prev.edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
       canUndo: past.length > 0,
       canRedo: true,
     })
@@ -765,7 +859,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       selectedNodeId: next.selectedNodeId,
       dirty: true,
       dirtyNodeKeys: next.nodes.map((n) => n.key),
-      issues: recompute(next.nodes, next.edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents),
+      issues: recompute(next.nodes, next.edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
       canUndo: true,
       canRedo: future.length > 0,
     })

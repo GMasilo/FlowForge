@@ -8,7 +8,12 @@ export type IntegrationCatalogItem = {
   /** Non-secret config field keys shown in the form */
   configFields: { key: string; label: string; placeholder?: string; type?: 'text' | 'url' }[]
   /** Secret field keys (stored in integration_secrets) */
-  secretFields: { key: string; label: string; placeholder?: string }[]
+  secretFields: {
+    key: string
+    label: string
+    placeholder?: string
+    multiline?: boolean
+  }[]
 }
 
 export const INTEGRATION_CATALOG: IntegrationCatalogItem[] = [
@@ -18,13 +23,27 @@ export const INTEGRATION_CATALOG: IntegrationCatalogItem[] = [
     description: 'Upload and fetch files from OneDrive for Business or personal accounts.',
     category: 'storage',
     configFields: [
-      { key: 'tenant_id', label: 'Tenant ID', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
+      { key: 'tenant_id', label: 'Tenant ID', placeholder: 'Directory (tenant) ID — required for app-only' },
       { key: 'client_id', label: 'Application (client) ID' },
-      { key: 'drive_id', label: 'Default drive ID (optional)' },
+      {
+        key: 'user_principal',
+        label: 'User UPN / ID (app-only)',
+        placeholder: 'user@contoso.com — used when Drive ID is blank',
+      },
+      { key: 'drive_id', label: 'Default drive ID', placeholder: 'Optional if User UPN is set' },
     ],
     secretFields: [
       { key: 'client_secret', label: 'Client secret' },
-      { key: 'refresh_token', label: 'Refresh token (optional if using app-only)' },
+      {
+        key: 'refresh_token',
+        label: 'Refresh token',
+        placeholder: 'Leave blank for app-only (client credentials)',
+      },
+      {
+        key: 'access_token',
+        label: 'Access token (optional)',
+        placeholder: 'Use instead of refresh token for short-lived testing',
+      },
     ],
   },
   {
@@ -37,8 +56,23 @@ export const INTEGRATION_CATALOG: IntegrationCatalogItem[] = [
       { key: 'folder_id', label: 'Default folder ID (optional)' },
     ],
     secretFields: [
-      { key: 'client_secret', label: 'Client secret' },
-      { key: 'refresh_token', label: 'Refresh token' },
+      { key: 'client_secret', label: 'OAuth client secret' },
+      {
+        key: 'refresh_token',
+        label: 'OAuth refresh token',
+        placeholder: 'Required unless using a service account',
+      },
+      {
+        key: 'access_token',
+        label: 'Access token (optional)',
+        placeholder: 'Short-lived; used when refresh token is blank',
+      },
+      {
+        key: 'service_account_json',
+        label: 'Service account JSON (app-only)',
+        placeholder: 'Paste the full Google service account key JSON',
+        multiline: true,
+      },
     ],
   },
   {
@@ -73,7 +107,14 @@ export const INTEGRATION_CATALOG: IntegrationCatalogItem[] = [
       { key: 'client_id', label: 'Application (client) ID' },
       { key: 'site_id', label: 'Site ID' },
     ],
-    secretFields: [{ key: 'client_secret', label: 'Client secret' }],
+    secretFields: [
+      { key: 'client_secret', label: 'Client secret' },
+      {
+        key: 'refresh_token',
+        label: 'Refresh token',
+        placeholder: 'Leave blank for app-only (client credentials)',
+      },
+    ],
   },
   {
     provider: 'slack',
@@ -92,7 +133,14 @@ export const INTEGRATION_CATALOG: IntegrationCatalogItem[] = [
       { key: 'tenant_id', label: 'Tenant ID' },
       { key: 'client_id', label: 'Application (client) ID' },
     ],
-    secretFields: [{ key: 'client_secret', label: 'Client secret' }],
+    secretFields: [
+      { key: 'client_secret', label: 'Client secret' },
+      {
+        key: 'refresh_token',
+        label: 'Refresh token',
+        placeholder: 'Leave blank for app-only (client credentials)',
+      },
+    ],
   },
   {
     provider: 'google_sheets',
@@ -104,8 +152,23 @@ export const INTEGRATION_CATALOG: IntegrationCatalogItem[] = [
       { key: 'spreadsheet_id', label: 'Default spreadsheet ID (optional)' },
     ],
     secretFields: [
-      { key: 'client_secret', label: 'Client secret' },
-      { key: 'refresh_token', label: 'Refresh token' },
+      { key: 'client_secret', label: 'OAuth client secret' },
+      {
+        key: 'refresh_token',
+        label: 'OAuth refresh token',
+        placeholder: 'From Google OAuth consent — required unless using a service account',
+      },
+      {
+        key: 'access_token',
+        label: 'Access token (optional)',
+        placeholder: 'Short-lived; used when refresh token is blank',
+      },
+      {
+        key: 'service_account_json',
+        label: 'Service account JSON (app-only)',
+        placeholder: 'Paste the full Google service account key JSON',
+        multiline: true,
+      },
     ],
   },
   {

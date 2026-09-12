@@ -33,6 +33,8 @@ function assert(cond: unknown, msg: string): asserts cond {
   assert(!isTemplateKindAllowedForAnswerType('email', 'shop'), 'HTML email not in shop prompt')
   assert(!isTemplateKindAllowedForAnswerType('document', 'text'), 'downloadable file is not a chat prompt')
   assert(!isTemplateKindAllowedForAnswerType('document', 'payment'), 'downloadable file not on payment prompt')
+  assert(!isTemplateKindAllowedForAnswerType('agreement', 'text'), 'agreement file is not a chat prompt')
+  assert(!isTemplateKindAllowedForAnswerType('agreement', 'shop'), 'agreement file not on shop prompt')
 }
 
 {

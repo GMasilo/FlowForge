@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { FlowNodeType, QuestionAnswerType, VariableType } from '@/shared/types/database'
 import { collectPathRefs } from '@/features/designer/preview/expressionEval'
+import { buttonAssignedVariableKeys } from '@/features/designer/model/buttonStep'
 
 /** Predecessor outcomes that can gate a step. */
 export const RUN_AFTER_KEYS = ['succeeded', 'failed', 'skipped', 'timedOut'] as const
@@ -58,8 +59,10 @@ export function defaultSharedSettings(): {
   runAfter: RunAfterConfig
   delaySeconds: number
   timeoutSeconds: number
+  /** Silent expressions evaluated when the step runs (not shown in chat). */
+  onRun: string
 } {
-  return { runAfter: { ...DEFAULT_RUN_AFTER }, delaySeconds: 0, timeoutSeconds: 0 }
+  return { runAfter: { ...DEFAULT_RUN_AFTER }, delaySeconds: 0, timeoutSeconds: 0, onRun: '' }
 }
 
 /** True when delay, timeout, or run-after differs from defaults. */
@@ -74,9 +77,19 @@ export function hasCustomStepSettingsForNode(
 ): boolean {
   if (readDelaySeconds(config) > 0) return true
   if (readTimeoutSeconds(config) > 0) return true
+  if (String(config?.runAfterSkipTo ?? '').trim()) return true
+  if (String(config?.onRun ?? '').trim()) return true
   if (isFlowStart) return false
   const ra = readRunAfter(config)
   return ra.failed || ra.skipped || ra.timedOut || ra.succeeded === false
+}
+
+export function readOnRun(config: Record<string, unknown> | undefined | null): string {
+  return String(config?.onRun ?? '').trim()
+}
+
+export function readRunAfterSkipTo(config: Record<string, unknown> | undefined | null): string {
+  return String(config?.runAfterSkipTo ?? '').trim()
 }
 
 export function stepSettingsSummary(config: Record<string, unknown> | undefined | null): string {
@@ -85,6 +98,9 @@ export function stepSettingsSummary(config: Record<string, unknown> | undefined 
   if (delay > 0) parts.push(`Delay ${delay}s`)
   const timeout = readTimeoutSeconds(config)
   if (timeout > 0) parts.push(`Timeout ${timeout}s`)
+  const skipTo = readRunAfterSkipTo(config)
+  if (skipTo) parts.push(`Skip to ${skipTo}`)
+  if (readOnRun(config)) parts.push('On run')
   const ra = readRunAfter(config)
   const after = RUN_AFTER_OPTIONS.filter((o) => ra[o.key]).map((o) => o.label)
   if (after.length && (ra.failed || ra.skipped || ra.timedOut || ra.succeeded === false)) {
@@ -237,6 +253,7 @@ export const variableTypes = [
   'date',
   'array',
   'object',
+  'password',
 ] as const satisfies readonly VariableType[]
 
 export const flowNodeTypes = [
@@ -244,19 +261,83 @@ export const flowNodeTypes = [
   'question',
   'http',
   'email',
+  'database',
   'condition',
+  'switch',
   'loop',
   'set_variable',
   'operation',
   'entity',
+  'integration',
+  'handoff',
+  'transfer',
+  'sign_in',
+  'button',
+  'skip_to',
   'end',
 ] as const satisfies readonly FlowNodeType[]
 
 export const messageConfigSchema = z.object({
   text: z.string().default(''),
+  /** Quick-reply chips shown under this message; flow waits for a pick or free text. */
+  suggestedResponses: z.array(z.string()).optional(),
+  /** Optional template resolving to a string array, e.g. {{vars.options}}. Overrides static list when set. */
+  suggestedResponsesFrom: z.string().optional(),
+  /** When set, stores the visitor's pick (or typed reply) in this variable. */
+  suggestionVariable: z.string().optional(),
   /** Filenames in this chatbot's media library, shown with the message. */
   mediaFiles: z.array(z.string()).optional(),
   /** templateKey → inputKey → expression or literal. */
+  templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
+})
+
+export const buttonOptionSchema = z.object({
+  id: z.string(),
+  label: z.string().default('Continue'),
+  value: z.string().optional().default(''),
+  listeners: z
+    .array(
+      z.object({
+        id: z.string(),
+        event: z.enum(['click', 'hover', 'dblclick', 'focus', 'blur']).default('click'),
+        action: z
+          .enum(['continue', 'emit_event', 'run_function', 'skip_to'])
+          .default('continue'),
+        eventName: z.string().optional().default('button_click'),
+        eventPayload: z.string().optional().default(''),
+        functionName: z.string().optional().default(''),
+        functionArgs: z.string().optional().default(''),
+        functionParams: z.record(z.string(), z.string()).optional().default({}),
+        skipToNodeKey: z.string().optional().default(''),
+      }),
+    )
+    .optional()
+    .default([]),
+})
+
+export const buttonConfigSchema = z.object({
+  /** Optional bot text shown above the buttons. */
+  text: z.string().default(''),
+  buttons: z.array(buttonOptionSchema).default([]),
+  /** Store the clicked / activated value in this variable. */
+  outputVariable: z.string().optional().default(''),
+  /**
+   * When Run after does not match the previous step outcome, jump to this step key
+   * instead of skipping and continuing to the next edge.
+   */
+  runAfterSkipTo: z.string().optional().default(''),
+  /** @deprecated Prefer per-button listeners with action emit_event. */
+  emitEvent: z.boolean().optional(),
+  /** @deprecated Prefer per-button listeners. */
+  eventName: z.string().optional(),
+  /** @deprecated Prefer per-button listeners. */
+  eventPayload: z.string().optional(),
+  /** @deprecated Prefer per-button listeners. */
+  listenEnabled: z.boolean().optional(),
+  /** @deprecated Prefer per-button listeners. */
+  listenEventName: z.string().optional(),
+  /** @deprecated Prefer per-button listeners. */
+  listenValue: z.string().optional(),
   templateBindings: z.record(z.string(), z.record(z.string(), z.string())).optional(),
 })
 
@@ -1013,6 +1094,19 @@ export function formatChoicesJson(choices: string[]): string {
   return JSON.stringify(choices, null, 2)
 }
 
+export function resolveSuggestedResponses(
+  config: Record<string, unknown> | undefined | null,
+  runtime?: { resolve?: (raw: string) => unknown },
+): string[] {
+  const from = String(config?.suggestedResponsesFrom ?? '').trim()
+  if (from && runtime?.resolve) {
+    const resolved = coerceChoiceList(runtime.resolve(from))
+    if (resolved.length) return resolved
+  }
+  const raw = Array.isArray(config?.suggestedResponses) ? (config!.suggestedResponses as unknown[]) : []
+  return coerceChoiceList(raw)
+}
+
 export function resolveQuestionChoices(
   config: Record<string, unknown> | undefined | null,
   runtime?: { resolve?: (raw: string) => unknown },
@@ -1042,6 +1136,14 @@ export const httpConfigSchema = z.object({
   outputVariable: z.string().default(''),
 })
 
+export const databaseConfigSchema = z.object({
+  connectionId: z.string().default(''),
+  operation: z.enum(['query', 'execute']).default('query'),
+  sql: z.string().default(''),
+  paramValues: z.record(z.string(), z.string()).default({}),
+  outputVariable: z.string().default(''),
+})
+
 export const emailConfigSchema = z.object({
   connectionId: z.string().default(''),
   templateKey: z.string().default(''),
@@ -1056,6 +1158,24 @@ export const conditionConfigSchema = z.object({
   left: z.string().default(''),
   operator: z.enum(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'exists']).default('eq'),
   right: z.string().default(''),
+})
+
+export const switchCaseSchema = z.object({
+  id: z.string().min(1),
+  match: z.string().default(''),
+  label: z.string().optional(),
+})
+
+export const switchConfigSchema = z.object({
+  /** Template / expression evaluated once; compared to each case with string equality. */
+  value: z.string().default(''),
+  cases: z.array(switchCaseSchema).default([]),
+})
+
+/** Jump to another step by key (same lookup as Button listener skip_to). */
+export const skipToConfigSchema = z.object({
+  /** Target step key. Empty = continue on the next edge. */
+  targetNodeKey: z.string().default(''),
 })
 
 export const CONDITION_OPERATOR_OPTIONS: Array<{
@@ -1103,11 +1223,80 @@ export const loopConfigSchema = z.object({
   indexVariable: z.string().default('index'),
 })
 
-export const setVariableConfigSchema = z.object({
+export const setVariableAssignmentSchema = z.object({
   variableKey: z.string().default(''),
   value: z.string().default(''),
   valueType: z.enum(variableTypes).default('string'),
 })
+
+export const setVariableConfigSchema = z.object({
+  /** @deprecated Prefer `assignments` — kept in sync with the first row for older packs. */
+  variableKey: z.string().default(''),
+  /** @deprecated Prefer `assignments`. */
+  value: z.string().default(''),
+  /** @deprecated Prefer `assignments`. */
+  valueType: z.enum(variableTypes).default('string'),
+  assignments: z.array(setVariableAssignmentSchema).default([]),
+})
+
+export type SetVariableAssignment = z.infer<typeof setVariableAssignmentSchema>
+
+/** Normalize set_variable config to one or more assignment rows (legacy single fields supported). */
+export function readSetVariableAssignments(
+  config: Record<string, unknown> | null | undefined,
+): SetVariableAssignment[] {
+  const raw = config ?? {}
+  const list = Array.isArray(raw.assignments) ? raw.assignments : []
+  const fromList: SetVariableAssignment[] = []
+  for (const item of list) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const row = item as Record<string, unknown>
+    const valueTypeRaw = String(row.valueType ?? 'string')
+    const valueType = (variableTypes as readonly string[]).includes(valueTypeRaw)
+      ? (valueTypeRaw as (typeof variableTypes)[number])
+      : 'string'
+    fromList.push({
+      variableKey: String(row.variableKey ?? '').trim(),
+      value: String(row.value ?? ''),
+      valueType,
+    })
+  }
+  if (fromList.length) return fromList
+
+  const legacyKey = String(raw.variableKey ?? '').trim()
+  const legacyValue = String(raw.value ?? '')
+  const legacyTypeRaw = String(raw.valueType ?? 'string')
+  const legacyType = (variableTypes as readonly string[]).includes(legacyTypeRaw)
+    ? (legacyTypeRaw as (typeof variableTypes)[number])
+    : 'string'
+  if (legacyKey || legacyValue) {
+    return [{ variableKey: legacyKey, value: legacyValue, valueType: legacyType }]
+  }
+  return [{ variableKey: '', value: '', valueType: 'string' }]
+}
+
+/** Persist assignments and mirror the first row onto legacy fields. */
+export function setVariableConfigFromAssignments(
+  assignments: SetVariableAssignment[],
+): Record<string, unknown> {
+  const rows =
+    assignments.length > 0
+      ? assignments.map((row) => ({
+          variableKey: String(row.variableKey ?? '').trim(),
+          value: String(row.value ?? ''),
+          valueType: (variableTypes as readonly string[]).includes(String(row.valueType))
+            ? row.valueType
+            : 'string',
+        }))
+      : [{ variableKey: '', value: '', valueType: 'string' as const }]
+  const first = rows[0]!
+  return {
+    assignments: rows,
+    variableKey: first.variableKey,
+    value: first.value,
+    valueType: first.valueType,
+  }
+}
 
 export const OPERATION_OPTIONS = [
   {
@@ -1288,10 +1477,14 @@ export const entityConfigSchema = z.object({
 export type EntityFiltersConfig = z.infer<typeof entityFiltersSchema>
 export type EntityFilterClauseConfig = z.infer<typeof entityFilterClauseSchema>
 export type MessageConfig = z.infer<typeof messageConfigSchema>
+export type ButtonConfig = z.infer<typeof buttonConfigSchema>
 export type QuestionConfig = z.infer<typeof questionConfigSchema>
 export type HttpConfig = z.infer<typeof httpConfigSchema>
+export type DatabaseConfig = z.infer<typeof databaseConfigSchema>
 export type EmailConfig = z.infer<typeof emailConfigSchema>
 export type ConditionConfig = z.infer<typeof conditionConfigSchema>
+export type SwitchConfig = z.infer<typeof switchConfigSchema>
+export type SkipToConfig = z.infer<typeof skipToConfigSchema>
 export type LoopConfig = z.infer<typeof loopConfigSchema>
 export type SetVariableConfig = z.infer<typeof setVariableConfigSchema>
 export type OperationConfig = z.infer<typeof operationConfigSchema>
@@ -1302,8 +1495,10 @@ export type NodeConfigMap = {
   message: MessageConfig
   question: QuestionConfig
   http: HttpConfig
+  database: DatabaseConfig
   email: EmailConfig
   condition: ConditionConfig
+  switch: SwitchConfig
   loop: LoopConfig
   set_variable: SetVariableConfig
   operation: OperationConfig
@@ -1337,14 +1532,31 @@ export function defaultConfig(type: FlowNodeType): Record<string, unknown> {
       return { ...questionConfigSchema.parse({}), ...shared }
     case 'http':
       return { ...httpConfigSchema.parse({}), ...shared }
+    case 'database':
+      return { ...databaseConfigSchema.parse({}), ...shared }
     case 'email':
       return { ...emailConfigSchema.parse({}), ...shared }
     case 'condition':
       return { ...conditionConfigSchema.parse({}), ...shared }
+    case 'switch':
+      return {
+        ...switchConfigSchema.parse({
+          value: '',
+          cases: [
+            { id: `case_${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`, match: '', label: 'Case 1' },
+            { id: `case_${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`, match: '', label: 'Case 2' },
+          ],
+        }),
+        ...shared,
+      }
     case 'loop':
       return { ...loopConfigSchema.parse({}), ...shared }
     case 'set_variable':
-      return { ...setVariableConfigSchema.parse({}), ...shared }
+      return {
+        ...setVariableConfigSchema.parse({}),
+        ...setVariableConfigFromAssignments([{ variableKey: '', value: '', valueType: 'string' }]),
+        ...shared,
+      }
     case 'operation':
       return { ...operationConfigSchema.parse({}), ...shared }
     case 'entity':
@@ -1355,8 +1567,8 @@ export function defaultConfig(type: FlowNodeType): Record<string, unknown> {
         provider: '',
         integrationId: '',
         action: '',
-        params: {},
-        resultVariable: '',
+        fieldValues: {},
+        outputVariable: '',
       }
     case 'handoff':
       return {
@@ -1372,7 +1584,73 @@ export function defaultConfig(type: FlowNodeType): Record<string, unknown> {
         message: '',
         passAllVariables: false,
         variableMappings: [],
+        returnToPrevious: false,
       }
+    case 'sign_in':
+      return {
+        ...shared,
+        mode: 'http',
+        prompt: 'Sign in to continue',
+        connectionId: '',
+        emailTemplateId: '',
+        successStatusMin: 200,
+        successStatusMax: 299,
+        userIdPath: 'user.id',
+        tokenPath: 'token',
+        profilePath: 'user',
+        userIdVariable: 'user_id',
+        tokenVariable: 'auth_token',
+        profileVariable: 'user',
+        emailVariable: 'email',
+        requestEmailKey: 'email',
+        requestPasswordKey: 'password',
+        requestBody: '',
+        otpLength: 6,
+        otpMaxAttempts: 5,
+        otpSubject: 'Your sign-in code',
+        otpBody: 'Your verification code is {{otp.code}}.',
+        maxAttempts: 5,
+        entityId: '',
+        entityEmailAttribute: 'email',
+        entityPasswordAttribute: 'password',
+        entityUserIdAttribute: 'id',
+        ssoTemplateKey: '',
+        skipIfSignedIn: true,
+      }
+    case 'button': {
+      const id = `btn_${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`
+      const listenerId = `lst_${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`
+      return {
+        ...buttonConfigSchema.parse({
+          text: '',
+          buttons: [
+            {
+              id,
+              label: 'Continue',
+              value: 'continue',
+              listeners: [
+                {
+                  id: listenerId,
+                  event: 'click',
+                  action: 'continue',
+                  eventName: 'button_click',
+                  eventPayload: '',
+                  functionName: '',
+                  functionArgs: '',
+                  functionParams: {},
+                  skipToNodeKey: '',
+                },
+              ],
+            },
+          ],
+          outputVariable: 'button',
+          runAfterSkipTo: '',
+        }),
+        ...shared,
+      }
+    }
+    case 'skip_to':
+      return { ...skipToConfigSchema.parse({ targetNodeKey: '' }), ...shared }
     case 'end':
       return { ...endConfigSchema.parse({}), ...shared }
   }
@@ -1386,10 +1664,14 @@ export function nodeTypeLabel(type: FlowNodeType): string {
       return 'Question'
     case 'http':
       return 'HTTP request'
+    case 'database':
+      return 'Database'
     case 'email':
       return 'Send email'
     case 'condition':
       return 'Condition'
+    case 'switch':
+      return 'Switch'
     case 'loop':
       return 'For each'
     case 'set_variable':
@@ -1404,6 +1686,12 @@ export function nodeTypeLabel(type: FlowNodeType): string {
       return 'Handoff'
     case 'transfer':
       return 'Transfer chatbot'
+    case 'sign_in':
+      return 'Sign in'
+    case 'button':
+      return 'Button'
+    case 'skip_to':
+      return 'Skip to step'
     case 'end':
       return 'End'
   }
@@ -1422,26 +1710,74 @@ export function collectConfigStrings(config: Record<string, unknown>): string[] 
     else if (Array.isArray(value)) {
       for (const item of value) {
         if (typeof item === 'string') out.push(item)
+        else if (item && typeof item === 'object') {
+          out.push(...collectConfigStrings(item as Record<string, unknown>))
+        }
       }
     } else if (value && typeof value === 'object') {
-      for (const nested of Object.values(value as Record<string, unknown>)) {
-        if (typeof nested === 'string') out.push(nested)
-      }
+      out.push(...collectConfigStrings(value as Record<string, unknown>))
     }
   }
   return out
 }
 
-/** Step-produced variable key from a node config, if any. */
+/** Step-produced variable key from a node config, if any (primary / first). */
 export function getStepOutputVariable(node: DesignerNode): string | null {
+  const all = getStepOutputVariables(node)
+  return all[0] ?? null
+}
+
+/** Variable keys assigned via silent On run `setVar("name", …)` expressions. */
+export function onRunAssignedVariableKeys(config: Record<string, unknown> | undefined | null): string[] {
+  const raw = readOnRun(config)
+  if (!raw) return []
+  const keys = new Set<string>()
+  for (const match of raw.matchAll(/setVar\s*\(\s*["']([^"']+)["']/gi)) {
+    const name = match[1]?.trim()
+    if (name) keys.add(name)
+  }
+  return [...keys]
+}
+
+/** All flow variables a step may write (Sign-in writes several). */
+export function getStepOutputVariables(node: DesignerNode): string[] {
   const cfg = node.config
-  if (node.type === 'question' || node.type === 'http' || node.type === 'operation' || node.type === 'entity') {
-    const key = cfg.outputVariable
-    return typeof key === 'string' && key.trim() ? key.trim() : null
+  const fromOnRun = onRunAssignedVariableKeys(cfg)
+  let base: string[] = []
+  if (node.type === 'button') {
+    base = buttonAssignedVariableKeys(cfg)
+  } else if (
+    node.type === 'question' ||
+    node.type === 'http' ||
+    node.type === 'operation' ||
+    node.type === 'entity' ||
+    node.type === 'database' ||
+    node.type === 'integration' ||
+    node.type === 'email'
+  ) {
+    const key =
+      typeof cfg.outputVariable === 'string' && cfg.outputVariable.trim()
+        ? cfg.outputVariable.trim()
+        : node.type === 'integration' && typeof cfg.resultVariable === 'string'
+          ? cfg.resultVariable.trim()
+          : ''
+    base = key ? [key] : []
+  } else if (node.type === 'set_variable') {
+    base = [
+      ...new Set(
+        readSetVariableAssignments(node.config)
+          .map((row) => row.variableKey.trim())
+          .filter(Boolean),
+      ),
+    ]
+  } else if (node.type === 'sign_in') {
+    base = [
+      String(cfg.emailVariable ?? 'email').trim() || 'email',
+      String(cfg.userIdVariable ?? 'user_id').trim() || 'user_id',
+      String(cfg.tokenVariable ?? 'auth_token').trim() || 'auth_token',
+      String(cfg.profileVariable ?? 'user').trim() || 'user',
+      '_signed_in',
+    ]
   }
-  if (node.type === 'set_variable') {
-    const key = cfg.variableKey
-    return typeof key === 'string' && key.trim() ? key.trim() : null
-  }
-  return null
+  return [...new Set([...base, ...fromOnRun])]
 }

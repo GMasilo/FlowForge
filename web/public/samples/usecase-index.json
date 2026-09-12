@@ -1,0 +1,58 @@
+[
+  {
+    "id": "health",
+    "slug": "usecase-health",
+    "file": "flowforge-usecase-health.json",
+    "name": "Health — Patient intake & care journey",
+    "brand": "CareFlow Clinic",
+    "description": "CareFlow Clinic: book visits, triage symptoms, pharmacy shop, records release, and feedback."
+  },
+  {
+    "id": "education",
+    "slug": "usecase-education",
+    "file": "flowforge-usecase-education.json",
+    "name": "Education — Student application journey",
+    "brand": "Summit University",
+    "description": "Summit University: apply, browse programmes, open days, fee estimates, and status checks."
+  },
+  {
+    "id": "mining",
+    "slug": "usecase-mining",
+    "file": "flowforge-usecase-mining.json",
+    "name": "Mining -- Site induction & safety report",
+    "brand": "OreGuard Mining",
+    "description": "OreGuard Mining: book induction, report hazards, request PPE, visitor access, and HSE contact."
+  },
+  {
+    "id": "banking",
+    "slug": "usecase-banking",
+    "file": "flowforge-usecase-banking.json",
+    "name": "Banking -- Everyday banking assistant",
+    "brand": "LedgerBank",
+    "description": "LedgerBank: open an account, check a demo balance, apply for a loan, explore cards, or get support."
+  },
+  {
+    "id": "retail",
+    "slug": "usecase-retail",
+    "file": "flowforge-usecase-retail.json",
+    "name": "Retail -- Personal shopper & orders",
+    "brand": "Northline Market",
+    "description": "Northline Market: shop the edit, track orders, book a stylist, start returns, and leave feedback."
+  },
+  {
+    "id": "government",
+    "slug": "usecase-government",
+    "file": "flowforge-usecase-government.json",
+    "name": "Government -- Citizen service request",
+    "brand": "CivicAssist",
+    "description": "CivicAssist: lodge requests, check cases, book counters, pay permit fees, and rate service."
+  },
+  {
+    "id": "crm",
+    "slug": "usecase-crm",
+    "file": "flowforge-usecase-crm.json",
+    "name": "CRM -- Sales & customer success assistant",
+    "brand": "PulseCRM",
+    "description": "PulseCRM: look up accounts, capture leads, log tickets, check deals, book meetings, and buy add-ons."
+  }
+]

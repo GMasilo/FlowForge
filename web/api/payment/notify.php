@@ -33,7 +33,10 @@ if (!$intentRpc['ok'] || !is_array($intentRpc['data'] ?? null) || $intentRpc['da
 $intent = $intentRpc['data'];
 $currentStatus = (string) ($intent['status'] ?? '');
 if ($currentStatus === 'verified') {
-    // Idempotent success for retries
+    // Idempotent success for retries — still attempt stock decrement (RPC is idempotent).
+    SupabaseRest::rpcAsService($config, 'decrement_store_stock_for_payment_reference', [
+        'p_reference' => $reference,
+    ]);
     http_response_code(200);
     header('Content-Type: text/plain; charset=utf-8');
     echo 'OK';
@@ -72,6 +75,10 @@ if ($provider === 'payfast') {
         'p_status' => 'verified',
         'p_provider_payment_id' => (string) ($posted['pf_payment_id'] ?? ''),
         'p_payload' => $posted,
+    ]);
+
+    SupabaseRest::rpcAsService($config, 'decrement_store_stock_for_payment_reference', [
+        'p_reference' => $reference,
     ]);
 
     http_response_code(200);
@@ -115,6 +122,10 @@ SupabaseRest::rpcAsService($config, 'update_payment_intent_status', [
     'p_status' => 'verified',
     'p_provider_payment_id' => (string) ($posted['provider_payment_id'] ?? ''),
     'p_payload' => $posted,
+]);
+
+SupabaseRest::rpcAsService($config, 'decrement_store_stock_for_payment_reference', [
+    'p_reference' => $reference,
 ]);
 
 Response::json(['ok' => true, 'status' => 'verified', 'reference' => $reference]);

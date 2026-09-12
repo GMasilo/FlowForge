@@ -11,6 +11,7 @@ import {
 } from '@/features/instances/conversationStatus'
 import { ChatMessageBody } from '@/features/chat/ChatMessageBody'
 import { UserMessageBubble } from '@/features/chat/UserMessageBubble'
+import { ChatBubbleMeta, messageCopyText } from '@/features/chat/ChatBubbleMeta'
 import { downloadJson } from '@/shared/lib/downloadJson'
 import { subscribeSessionEvents } from '@/shared/lib/realtime'
 import { safeDownloadBasename } from '@/features/designer/utils/flowTransfer'
@@ -26,6 +27,7 @@ import {
 import { supabase } from '@/shared/lib/supabase'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
+import { PAGE_HELP } from '@/shared/help/pageHelp'
 import { PageHeader } from '@/shared/ui/page-header'
 import { FieldError } from '@/shared/ui/field-error'
 import { Input } from '@/shared/ui/input'
@@ -309,6 +311,7 @@ export function ConversationDetailPage() {
         description={`Session started ${format(new Date(session.created_at), 'yyyy-MM-dd HH:mm')}${
           session.publish_version != null ? ` · published v${session.publish_version}` : ''
         }${session.variant_key ? ` · variant ${session.variant_key}` : ''}`}
+        help={PAGE_HELP.conversationDetail}
         actions={
           <>
             <Link
@@ -387,7 +390,12 @@ export function ConversationDetailPage() {
                         <div className="max-w-[88%] rounded-[1.25rem] rounded-br-md bg-gradient-to-br from-teal-600 to-cyan-600 px-3.5 py-2.5 text-sm text-white shadow-sm">
                           <UserMessageBubble message={message} />
                         </div>
-                        <p className="text-[10px] text-slate-400">{format(new Date(createdAt), 'HH:mm:ss')}</p>
+                        <ChatBubbleMeta
+                          createdAt={createdAt}
+                          copyText={messageCopyText(message)}
+                          align="end"
+                          formatTime={(iso) => format(new Date(iso), 'HH:mm:ss')}
+                        />
                       </div>
                     )
                   }
@@ -408,7 +416,12 @@ export function ConversationDetailPage() {
                         ) : null}
                         <ChatMessageBody text={text} />
                       </div>
-                      <p className="text-[10px] text-slate-400">{format(new Date(createdAt), 'HH:mm:ss')}</p>
+                      <ChatBubbleMeta
+                        createdAt={createdAt}
+                        copyText={text}
+                        align="start"
+                        formatTime={(iso) => format(new Date(iso), 'HH:mm:ss')}
+                      />
                     </div>
                   )
                 }

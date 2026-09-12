@@ -157,6 +157,17 @@ export function SignupPage() {
                 />
               </div>
               {error ? <FieldError>{error}</FieldError> : null}
+              <p className="text-xs leading-relaxed text-[var(--color-ink-muted)]">
+                By creating an account you agree to the{' '}
+                <Link className="font-medium text-teal-800 underline decoration-teal-700/30 underline-offset-2" to="/terms">
+                  Terms of Service
+                </Link>{' '}
+                and{' '}
+                <Link className="font-medium text-teal-800 underline decoration-teal-700/30 underline-offset-2" to="/privacy">
+                  Privacy Policy
+                </Link>
+                .
+              </p>
               <Button type="submit" className="w-full" size="lg" disabled={submitting}>
                 {submitting ? 'Creating…' : 'Create account & join'}
               </Button>
@@ -184,6 +195,14 @@ export function SignupPage() {
             <span className="text-[var(--color-border)]">·</span>
             <Link className="hover:text-teal-800" to="/faq">
               FAQ
+            </Link>
+            <span className="text-[var(--color-border)]">·</span>
+            <Link className="hover:text-teal-800" to="/terms">
+              Terms
+            </Link>
+            <span className="text-[var(--color-border)]">·</span>
+            <Link className="hover:text-teal-800" to="/privacy">
+              Privacy
             </Link>
           </p>
         </div>

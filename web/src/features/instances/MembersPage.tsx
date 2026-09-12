@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Pencil, Plus, Trash2, X, Mail } from 'lucide-react'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { canAdmin } from '@/shared/types/database'
+import { formatQuotaCap } from '@/features/billing/planCatalog'
+import { canAdmin, instanceFeatureEnabled } from '@/shared/types/database'
 import type { InstanceRole } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import {
@@ -21,6 +23,7 @@ import { Badge } from '@/shared/ui/badge'
 import { SuperuserBadge } from '@/shared/ui/superuser-badge'
 import { InitialsAvatar } from '@/shared/ui/initials-avatar'
 import { FieldError } from '@/shared/ui/field-error'
+import { PAGE_HELP } from '@/shared/help/pageHelp'
 import { PageHeader } from '@/shared/ui/page-header'
 import {
   BulkActionBar,
@@ -99,6 +102,7 @@ export function MembersPage() {
   const [bulkRole, setBulkRole] = useState<InstanceRole>('editor')
   const apiConfigured = isFlowForgeApiConfigured()
   const isAdmin = canAdmin(role)
+  const maxSeats = instance.quota_max_seats ?? -1
 
   const users = useQuery({
     queryKey: ['organisation-users', instance.id],
@@ -111,6 +115,9 @@ export function MembersPage() {
       return rows
     },
   })
+
+  const seatCount = (users.data ?? []).length
+  const atSeatLimit = maxSeats >= 0 && seatCount >= maxSeats
 
   const filteredUsers = useMemo(() => {
     return (users.data ?? []).filter((row) =>
@@ -465,6 +472,10 @@ export function MembersPage() {
   }
 
   function startCreate() {
+    if (atSeatLimit) {
+      setError(`Seat limit reached for this organisation plan (${seatCount} of ${maxSeats}).`)
+      return
+    }
     setForm(emptyForm())
     setEditingUserId(null)
     setInfo(null)
@@ -512,15 +523,39 @@ export function MembersPage() {
       <PageHeader
         title="Users"
         description={`People with access to ${instance.name}.`}
+        help={PAGE_HELP.users}
         actions={
           isAdmin ? (
-            <Button onClick={() => (open && !editingUserId ? resetForm() : startCreate())}>
+            <Button
+              onClick={() => (open && !editingUserId ? resetForm() : startCreate())}
+              disabled={!editingUserId && atSeatLimit && !open}
+              title={
+                atSeatLimit
+                  ? `Plan limit: ${formatQuotaCap(maxSeats)} seat${maxSeats === 1 ? '' : 's'}`
+                  : undefined
+              }
+            >
               <Plus className="h-4 w-4" />
               Add user
             </Button>
           ) : null
         }
       />
+
+      {isAdmin && maxSeats >= 0 ? (
+        <p className="text-sm text-[var(--color-ink-muted)]">
+          Seats used: {seatCount} / {formatQuotaCap(maxSeats)}
+          {atSeatLimit ? (
+            <>
+              {' '}
+              — plan limit reached.{' '}
+              <Link to="/pricing" className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline">
+                View pricing
+              </Link>
+            </>
+          ) : null}
+        </p>
+      ) : null}
 
       {info ? (
         <p
@@ -587,7 +622,9 @@ export function MembersPage() {
                 >
                   <option value="admin">admin</option>
                   <option value="editor">editor</option>
-                  <option value="agent">agent</option>
+                  {instanceFeatureEnabled(instance, 'agent_console') ? (
+                    <option value="agent">agent</option>
+                  ) : null}
                   <option value="viewer">viewer</option>
                 </Select>
               </div>
@@ -676,7 +713,9 @@ export function MembersPage() {
                 >
                   <option value="admin">admin</option>
                   <option value="editor">editor</option>
-                  <option value="agent">agent</option>
+                  {instanceFeatureEnabled(instance, 'agent_console') ? (
+                    <option value="agent">agent</option>
+                  ) : null}
                   <option value="viewer">viewer</option>
                 </Select>
                 <Button

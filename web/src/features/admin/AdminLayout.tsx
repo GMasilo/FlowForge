@@ -12,21 +12,21 @@ import {
   Webhook,
 } from 'lucide-react'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
-import { canAdmin } from '@/shared/types/database'
+import { canAdmin, instanceFeatureEnabled } from '@/shared/types/database'
 import { cn } from '@/shared/lib/utils'
 import { instanceAdminPath } from '@/features/admin/adminPaths'
 
 const tabs = [
-  { to: '', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/chatbots', label: 'Chatbots', icon: Bot, end: false },
-  { to: '/users', label: 'Users', icon: Users, end: false },
-  { to: '/recycle-bin', label: 'Recycle bin', icon: Recycle, end: false },
-  { to: '/settings', label: 'Organisation', icon: Building2, end: false },
-  { to: '/compliance', label: 'Compliance', icon: Scale, end: false },
-  { to: '/security', label: 'Security', icon: Lock, end: false },
-  { to: '/usage', label: 'Usage', icon: Gauge, end: false },
-  { to: '/webhooks', label: 'Webhooks', icon: Webhook, end: false },
-  { to: '/audit', label: 'Audit', icon: ScrollText, end: false },
+  { to: '', label: 'Overview', icon: LayoutDashboard, end: true, feature: null },
+  { to: '/chatbots', label: 'Chatbots', icon: Bot, end: false, feature: null },
+  { to: '/users', label: 'Users', icon: Users, end: false, feature: null },
+  { to: '/recycle-bin', label: 'Recycle bin', icon: Recycle, end: false, feature: null },
+  { to: '/settings', label: 'Organisation', icon: Building2, end: false, feature: null },
+  { to: '/compliance', label: 'Compliance', icon: Scale, end: false, feature: 'compliance' as const },
+  { to: '/security', label: 'Security', icon: Lock, end: false, feature: null },
+  { to: '/usage', label: 'Usage', icon: Gauge, end: false, feature: null },
+  { to: '/webhooks', label: 'Webhooks', icon: Webhook, end: false, feature: 'webhooks' as const },
+  { to: '/audit', label: 'Audit', icon: ScrollText, end: false, feature: null },
 ] as const
 
 export function AdminLayout() {
@@ -36,6 +36,9 @@ export function AdminLayout() {
   }
 
   const base = instanceAdminPath(instance.id)
+  const visibleTabs = tabs.filter(
+    (tab) => !tab.feature || instanceFeatureEnabled(instance, tab.feature),
+  )
 
   return (
     <div className="space-y-6">
@@ -43,7 +46,7 @@ export function AdminLayout() {
         aria-label="Organisation admin"
         className="flex w-fit max-w-full flex-wrap rounded-xl border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/80 p-1"
       >
-        {tabs.map(({ to, label, icon: Icon, end }) => (
+        {visibleTabs.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to || 'overview'}
             to={`${base}${to}`}

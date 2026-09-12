@@ -13,6 +13,7 @@ const TEMPLATE_KIND_SET = new Set<string>([
   'legal',
   'receipt',
   'document',
+  'agreement',
 ])
 const VARIABLE_TYPE_SET = new Set<string>(variableTypes)
 const ENTITY_KIND_SET = new Set<string>(['static', 'dynamic'])
@@ -219,6 +220,30 @@ export function remapEntityIds(
 
     return node
   })
+}
+
+/** Assign fresh node/edge ids on import so flow packs can be imported into multiple chatbots. */
+export function remapFlowGraphIds(
+  nodes: DesignerNode[],
+  edges: DesignerEdge[],
+): { nodes: DesignerNode[]; edges: DesignerEdge[] } {
+  const nodeIdMap = new Map<string, string>()
+  for (const node of nodes) {
+    nodeIdMap.set(node.id, crypto.randomUUID())
+  }
+
+  return {
+    nodes: nodes.map((node) => ({
+      ...node,
+      id: nodeIdMap.get(node.id) ?? node.id,
+    })),
+    edges: edges.map((edge) => ({
+      ...edge,
+      id: crypto.randomUUID(),
+      source: nodeIdMap.get(edge.source) ?? edge.source,
+      target: nodeIdMap.get(edge.target) ?? edge.target,
+    })),
+  }
 }
 
 export function buildRunHistoryExport(args: {

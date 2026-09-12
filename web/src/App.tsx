@@ -7,7 +7,8 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { SignupPage } from '@/features/auth/SignupPage'
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
-import { HomeRedirect } from '@/features/auth/HomeRedirect'
+import { RootPage } from '@/features/landing/RootPage'
+import { PlatformSettingsPage } from '@/features/platform/PlatformSettingsPage'
 import { AgentScopeGuard } from '@/features/auth/AgentScopeGuard'
 import { ProfilePage } from '@/features/auth/ProfilePage'
 import { AppShell } from '@/app/AppShell'
@@ -33,10 +34,12 @@ import { CompliancePage } from '@/features/admin/CompliancePage'
 import { SecurityPage } from '@/features/admin/SecurityPage'
 import { RecycleBinPage } from '@/features/chatbots/RecycleBinPage'
 import { InboxPage } from '@/features/instances/InboxPage'
+import { AgentConsolePage } from '@/features/instances/AgentConsolePage'
 import { MarketplacePage } from '@/features/marketplace/MarketplacePage'
 import { ChatbotsPage } from '@/features/chatbots/ChatbotsPage'
 import { ChatbotSettingsPage } from '@/features/chatbots/ChatbotSettingsPage'
 import { ChatbotDataPage } from '@/features/chatbots/ChatbotDataPage'
+import { ChatbotTestPage } from '@/features/chatbots/ChatbotTestPage'
 import { TemplatesPage } from '@/features/templates/TemplatesPage'
 import { ConnectionsPage } from '@/features/connections/ConnectionsPage'
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
@@ -44,8 +47,12 @@ import { DesignerPage } from '@/features/designer/DesignerPage'
 import { PublicChatPage } from '@/features/chat/PublicChatPage'
 import { PublicShell } from '@/features/docs/PublicShell'
 import { DocsPage } from '@/features/docs/DocsPage'
+import { ApiDocsPage } from '@/features/docs/ApiDocsPage'
 import { FaqPage } from '@/features/docs/FaqPage'
 import { HelpPage } from '@/features/docs/HelpPage'
+import { UseCasesPage } from '@/features/landing/UseCasesPage'
+import { PricingPage } from '@/features/landing/PricingPage'
+import { PrivacyPage, TermsPage } from '@/features/docs/LegalPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,18 +74,29 @@ export function App() {
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/" element={<RootPage />} />
+              <Route path="/o/:orgSlug/c/:publicSlug" element={<PublicChatPage />} />
+              <Route path="/o/:orgSlug/embed/:publicSlug" element={<PublicChatPage embed />} />
+              {/* Legacy slug-only URLs (ambiguous if multiple orgs share the slug) */}
               <Route path="/c/:publicSlug" element={<PublicChatPage />} />
+              <Route path="/test/:testToken" element={<PublicChatPage stagingTest />} />
               <Route path="/embed/:publicSlug" element={<PublicChatPage embed />} />
+              <Route path="/embed/test/:testToken" element={<PublicChatPage embed stagingTest />} />
               <Route element={<PublicShell />}>
                 <Route path="/docs" element={<DocsPage />} />
+                <Route path="/docs/api" element={<ApiDocsPage />} />
                 <Route path="/faq" element={<FaqPage />} />
                 <Route path="/help" element={<HelpPage />} />
+                <Route path="/use-cases" element={<UseCasesPage />} />
+                <Route path="/pricing" element={<PricingPage />} />
+                <Route path="/terms" element={<TermsPage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
               </Route>
               <Route element={<RequireAuth />}>
                 <Route element={<AppShell />}>
-                  <Route path="/" element={<HomeRedirect />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/instances" element={<InstancesPage />} />
+                  <Route path="/admin/platform" element={<PlatformSettingsPage />} />
                 </Route>
                 <Route path="/instances/:instanceId" element={<InstanceProvider />}>
                   <Route element={<AppShell />}>
@@ -92,10 +110,12 @@ export function App() {
                       <Route path="usage" element={<LegacyAdminRedirect page="usage" />} />
                       <Route path="alerts" element={<AlertsPage />} />
                       <Route path="inbox" element={<InboxPage />} />
+                      <Route path="agent" element={<AgentConsolePage />} />
                       <Route path="conversations" element={<ConversationsPage />} />
                       <Route path="conversations/:sessionId" element={<ConversationDetailPage />} />
                       <Route path="analytics" element={<AnalyticsPage />} />
                       <Route path="marketplace" element={<MarketplacePage />} />
+                      <Route path="recycle-bin" element={<RecycleBinPage />} />
                       <Route path="admin" element={<AdminLayout />}>
                         <Route index element={<AdminOverviewPage />} />
                         <Route path="chatbots" element={<AdminChatbotsPage />} />
@@ -112,6 +132,7 @@ export function App() {
                       <Route path="chatbots/:chatbotId/design" element={<DesignerPage />} />
                       <Route path="chatbots/:chatbotId/templates" element={<TemplatesPage />} />
                       <Route path="chatbots/:chatbotId/data" element={<ChatbotDataPage />} />
+                      <Route path="chatbots/:chatbotId/test" element={<ChatbotTestPage />} />
                     </Route>
                   </Route>
                 </Route>

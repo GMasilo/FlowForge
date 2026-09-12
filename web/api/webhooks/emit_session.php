@@ -52,7 +52,7 @@ $hooks = $hooksRpc['data'] ?? [];
 if (!is_array($hooks)) {
     $hooks = [];
 }
-if ($hooks !== [] && !array_is_list($hooks)) {
+if ($hooks !== [] && !(function_exists('array_is_list') ? \array_is_list($hooks) : array_keys($hooks) === range(0, count($hooks) - 1))) {
     $hooks = [$hooks];
 }
 

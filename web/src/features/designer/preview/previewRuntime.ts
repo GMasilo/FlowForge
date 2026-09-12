@@ -1,23 +1,44 @@
 import {
   nodeTypeLabel,
   readDelaySeconds,
+  readOnRun,
   readRunAfter,
   readTimeoutSeconds,
   isAnswerRequired,
   resolveQuestionChoices,
+  resolveSuggestedResponses,
+  readSetVariableAssignments,
   type DesignerEdge,
   type DesignerNode,
   type RunAfterKey,
 } from '@/features/designer/model/flowSchema'
+import {
+  listenerAdvancesFlow,
+  listenersForEvent,
+  resolveButtonOptions,
+  type ButtonListenerEvent,
+  type ResolvedButtonOption,
+} from '@/features/designer/model/buttonStep'
+import {
+  coerceFunctionParamValue,
+  expressionCallArgs,
+  getFlowFunction,
+} from '@/features/designer/model/flowFunctions'
+import {
+  evaluateExpression,
+  interpolateTemplate,
+  invokeExpressionFunction,
+  looksLikeExpression,
+  parseJsonValue,
+  resolveExpressionValue,
+  setExpressionChatbotId,
+} from '@/features/designer/preview/expressionEval'
+import { clearChatCookie, writeChatCookie } from '@/features/chat/chatCookies'
 import { conversationFilesToMedia } from '@/features/designer/model/conversationFiles'
 import { validateQuestionAnswer } from '@/features/designer/model/answerValidation'
 import { captchaAnswersMatch, generateCaptchaPuzzle } from '@/features/designer/model/captchaChallenge'
 import { resolveMediaAttachments, mediaExprMap, stripFileEmbeds } from '@/features/designer/model/chatbotMedia'
-import {
-  interpolateTemplate,
-  parseJsonValue,
-  resolveExpressionValue,
-} from '@/features/designer/preview/expressionEval'
+import { readSkipToTargetKey } from '@/features/designer/model/skipToStep'
 import { parseTemplateBindingMap, type TemplateBindingMap } from '@/features/templates/templateModel'
 import { findContinueRootIds } from '@/features/designer/utils/conditionGraph'
 import type { FlowNodeType } from '@/shared/types/database'
@@ -43,6 +64,10 @@ export interface ChatMessage {
   tel?: string
   /** Designer media shown with a bot message / question prompt. */
   media?: Array<{ filename: string; url: string; key: string; mime: string }>
+  /** Quick-reply chips under a bot message (message steps with suggested responses). */
+  suggestions?: string[]
+  /** Action buttons under a bot message (button steps). */
+  buttons?: ResolvedButtonOption[]
 }
 
 export type PreviewPhase =
@@ -78,6 +103,18 @@ export type PreviewPhase =
       captchaPrompt?: string
     }
   | { kind: 'waiting_handoff'; nodeId: string; message: string; startedAt: string }
+  | {
+      kind: 'waiting_suggestion'
+      nodeId: string
+      suggestions: string[]
+      startedAt: string
+    }
+  | {
+      kind: 'waiting_button'
+      nodeId: string
+      buttons: ResolvedButtonOption[]
+      startedAt: string
+    }
   | { kind: 'typing' }
   | { kind: 'finished' }
 
@@ -101,6 +138,13 @@ export type PreviewCaptchaChallenge = {
   attempts: number
   maxAttempts: number
   kind: 'math' | 'text'
+}
+
+/** Failed password/HTTP/entity sign-in attempts for the active Sign-in step. */
+export type PreviewSignInAttempts = {
+  nodeId: string
+  attempts: number
+  maxAttempts: number
 }
 
 export type PreviewRunStatus = 'Succeeded' | 'Failed' | 'Skipped' | 'TimedOut'
@@ -144,7 +188,9 @@ export function interpolate(
   embedMedia = false,
   templates: Record<string, unknown> = {},
   templateBindings: TemplateBindingMap = {},
+  chatbotId?: string | null,
 ): string {
+  if (chatbotId !== undefined) setExpressionChatbotId(chatbotId)
   return interpolateTemplate(template, {
     vars,
     steps: stepOutputs,
@@ -152,6 +198,7 @@ export function interpolate(
     templates,
     embedMedia,
     templateBindings,
+    chatbotId,
   })
 }
 
@@ -162,12 +209,57 @@ function interpolateChat(
   media: Record<string, unknown> = {},
   templates: Record<string, unknown> = {},
   templateBindings: TemplateBindingMap = {},
+  chatbotId?: string | null,
 ): string {
-  return interpolate(template, vars, stepOutputs, media, true, templates, templateBindings)
+  return interpolate(template, vars, stepOutputs, media, true, templates, templateBindings, chatbotId)
 }
 
 function bindingsOf(config: Record<string, unknown>): TemplateBindingMap {
   return parseTemplateBindingMap(config.templateBindings)
+}
+
+/**
+ * Evaluate silent On run expressions (setCookie, setVar, …) without adding chat bubbles.
+ * Supports `{{expr}}` templates or one bare expression per line.
+ */
+export function applyOnRunExpressions(
+  state: PreviewEngineState,
+  node: DesignerNode,
+): PreviewEngineState {
+  const raw = readOnRun(node.config)
+  if (!raw) return state
+
+  bindCookieScope(state)
+  const vars = { ...state.vars }
+  const ctx = {
+    vars,
+    steps: state.stepOutputs,
+    media: state.media,
+    templates: state.templates,
+    templateBindings: bindingsOf(node.config),
+    embedMedia: false,
+    chatbotId: state.chatbotId,
+  }
+
+  const errors: string[] = []
+  try {
+    if (/\{\{[\s\S]*?\}\}/.test(raw)) {
+      interpolateTemplate(raw, ctx)
+    } else {
+      for (const line of raw.split(/\r?\n/)) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) continue
+        if (!looksLikeExpression(trimmed) && !/^[A-Za-z_]/.test(trimmed)) continue
+        evaluateExpression(trimmed, ctx)
+      }
+    }
+  } catch (e) {
+    errors.push(e instanceof Error ? e.message : String(e))
+  }
+
+  // Keep side-effect results in vars; never render On run output as a chat bubble.
+  void errors
+  return { ...state, vars: ctx.vars }
 }
 
 function resolveValue(
@@ -177,8 +269,21 @@ function resolveValue(
   media: Record<string, unknown> = {},
   templates: Record<string, unknown> = {},
   templateBindings: TemplateBindingMap = {},
+  chatbotId?: string | null,
 ): unknown {
-  return resolveExpressionValue(raw, { vars, steps: stepOutputs, media, templates, templateBindings })
+  if (chatbotId !== undefined) setExpressionChatbotId(chatbotId)
+  return resolveExpressionValue(raw, {
+    vars,
+    steps: stepOutputs,
+    media,
+    templates,
+    templateBindings,
+    chatbotId,
+  })
+}
+
+function bindCookieScope(state: PreviewEngineState): void {
+  setExpressionChatbotId(state.chatbotId)
 }
 
 function coerceCompare(left: unknown, right: unknown, operator: string): boolean {
@@ -244,6 +349,8 @@ export interface PreviewEngineState {
   runs: PreviewStepRun[]
   /** Active emailed OTP challenge, if any. */
   otpChallenge?: PreviewOtpChallenge | null
+  /** Failed credential attempts on the current Sign-in step (HTTP / entity / password+HTTP). */
+  signInAttempts?: PreviewSignInAttempts | null
   /** Active captcha solution, if any. */
   captchaChallenge?: PreviewCaptchaChallenge | null
   /** {{media.key}} → public file URL */
@@ -251,6 +358,8 @@ export interface PreviewEngineState {
   mediaCatalog: Array<{ filename: string; url: string; key: string; mime: string }>
   /** {{templates.key.text}} / .html / .subject */
   templates: Record<string, unknown>
+  /** Scopes cookie()/setCookie()/clearCookie() to this chatbot. */
+  chatbotId?: string | null
 }
 
 function appendRun(
@@ -370,6 +479,7 @@ export function createInitialPreviewState(
   globalDefaults: Record<string, unknown>,
   mediaCatalog: PreviewEngineState['mediaCatalog'] = [],
   templates: Record<string, unknown> = {},
+  chatbotId?: string | null,
 ): PreviewEngineState {
   const root = findRoot(nodes, edges)
   const media = mediaExprMap(mediaCatalog)
@@ -382,10 +492,12 @@ export function createInitialPreviewState(
     loopStack: [],
     runs: [],
     otpChallenge: null,
+    signInAttempts: null,
     captchaChallenge: null,
     media,
     mediaCatalog,
     templates,
+    chatbotId: chatbotId?.trim() || null,
   }
 }
 
@@ -448,6 +560,20 @@ export type ConnectionStepContext = {
   chatbotId?: string
   instanceId?: string
   sessionId?: string
+}
+
+/** Public chat sessions should not surface HTTP/entity/debug status lines in the transcript. */
+function isPublicChatRuntime(options?: ConnectionStepContext): boolean {
+  return !!options?.sessionId?.trim()
+}
+
+function appendTechSystemMessage(
+  messages: ChatMessage[],
+  options: ConnectionStepContext | undefined,
+  text: string,
+): ChatMessage[] {
+  if (isPublicChatRuntime(options)) return messages
+  return [...messages, msg('system', text)]
 }
 
 /**
@@ -671,6 +797,130 @@ function applyAssignment(
   return { ...state, vars, stepOutputs }
 }
 
+/** Set a flow variable without advancing the step (e.g. button setVar). */
+export function setPreviewVar(
+  state: PreviewEngineState,
+  varName: string,
+  varValue: unknown,
+): PreviewEngineState {
+  const key = String(varName ?? '').trim()
+  if (!key) return state
+  return { ...state, vars: { ...state.vars, [key]: varValue } }
+}
+
+/**
+ * Execute a catalog flow function against preview state.
+ * - setVar: mutates vars
+ * - expression helpers: evaluate and store into resultVariable
+ * - host: no-op here (caller postsMessage)
+ */
+export function applyFlowFunction(
+  state: PreviewEngineState,
+  functionName: string,
+  params: Record<string, string>,
+): {
+  state: PreviewEngineState
+  handled: boolean
+  kind: 'runtime' | 'expression' | 'host' | 'unknown'
+  result?: unknown
+  error?: string
+} {
+  bindCookieScope(state)
+  const def = getFlowFunction(functionName)
+  if (!def) return { state, handled: false, kind: 'unknown' }
+  if (def.kind === 'host') return { state, handled: true, kind: 'host' }
+
+  if (def.name === 'setVar' || def.name === 'setCookie' || def.name === 'clearCookie' || def.kind === 'runtime') {
+    if (def.name === 'setVar') {
+      const varName = String(params.varName ?? '').trim()
+      const rawValue = params.varValue ?? ''
+      return {
+        state: setPreviewVar(state, varName, coerceFunctionParamValue(rawValue)),
+        handled: true,
+        kind: 'runtime',
+      }
+    }
+    if (def.name === 'setCookie') {
+      const name = String(params.name ?? '').trim()
+      if (!name) {
+        return { state, handled: true, kind: 'runtime', error: 'setCookie: name is required' }
+      }
+      const rawValue = params.value ?? ''
+      const coerced = coerceFunctionParamValue(rawValue)
+      const value = coerced == null ? '' : String(coerced)
+      const daysRaw = String(params.days ?? '').trim()
+      const days = daysRaw === '' ? 365 : Number(daysRaw)
+      try {
+        writeChatCookie(name, value, Number.isFinite(days) ? days : 365, state.chatbotId)
+        return { state, handled: true, kind: 'runtime', result: value }
+      } catch (e) {
+        return {
+          state,
+          handled: true,
+          kind: 'runtime',
+          error: e instanceof Error ? e.message : String(e),
+        }
+      }
+    }
+    if (def.name === 'clearCookie') {
+      const name = String(params.name ?? '').trim()
+      if (!name) {
+        return { state, handled: true, kind: 'runtime', error: 'clearCookie: name is required' }
+      }
+      try {
+        clearChatCookie(name, state.chatbotId)
+        return { state, handled: true, kind: 'runtime', result: null }
+      } catch (e) {
+        return {
+          state,
+          handled: true,
+          kind: 'runtime',
+          error: e instanceof Error ? e.message : String(e),
+        }
+      }
+    }
+    return { state, handled: false, kind: 'runtime' }
+  }
+
+  if (def.kind === 'expression') {
+    try {
+      const args = expressionCallArgs(def, params)
+      const result = invokeExpressionFunction(def.name, args, {
+        vars: state.vars,
+        steps: state.stepOutputs,
+        media: state.media,
+        templates: state.templates,
+        chatbotId: state.chatbotId,
+      })
+      const resultVar = String(params.resultVariable ?? '').trim()
+      if (!resultVar) {
+        return {
+          state,
+          handled: true,
+          kind: 'expression',
+          result,
+          error: 'Store result in is required',
+        }
+      }
+      return {
+        state: setPreviewVar(state, resultVar, result),
+        handled: true,
+        kind: 'expression',
+        result,
+      }
+    } catch (e) {
+      return {
+        state,
+        handled: true,
+        kind: 'expression',
+        error: e instanceof Error ? e.message : String(e),
+      }
+    }
+  }
+
+  return { state, handled: false, kind: 'unknown' }
+}
+
 function previousRunStatus(state: PreviewEngineState): PreviewRunStatus | null {
   if (!state.runs.length) return null
   return state.runs[state.runs.length - 1]!.status
@@ -708,21 +958,28 @@ function skipDueToRunAfter(
 ): PreviewEngineState {
   const previousStatus = previousRunStatus(state)
   const runAfter = readRunAfter(node.config)
+  const skipToKey = String(node.config.runAfterSkipTo ?? '').trim()
+  const skipTarget =
+    skipToKey && skipToKey !== node.key
+      ? nodes.find((n) => n.key === skipToKey)?.id ?? null
+      : null
   let next = appendRun(state, node, {
     status: 'Skipped',
     inputs: {
       runAfter,
       delaySeconds: readDelaySeconds(node.config),
+      runAfterSkipTo: skipToKey || null,
     },
     processed: {
       previousStatus,
       reason: 'Configure run after — previous step status is not allowed',
+      redirectedTo: skipTarget ? skipToKey : null,
     },
     outputs: {},
     savedAs: null,
   })
   // Condition/loop still need a next handle; use unlabeled (then) when skipping
-  return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
+  return resolveAfterStep(next, edges, nodes, skipTarget ?? nextNodeId(edges, node.id))
 }
 
 /**
@@ -734,7 +991,14 @@ export function tickPreview(
   nodes: DesignerNode[],
   edges: DesignerEdge[],
 ): PreviewEngineState {
-  if (!state.currentId || state.phase.kind === 'waiting_input' || state.phase.kind === 'finished') {
+  bindCookieScope(state)
+  if (
+    !state.currentId ||
+    state.phase.kind === 'waiting_input' ||
+    state.phase.kind === 'waiting_suggestion' ||
+    state.phase.kind === 'waiting_button' ||
+    state.phase.kind === 'finished'
+  ) {
     return state
   }
 
@@ -747,16 +1011,26 @@ export function tickPreview(
     return skipDueToRunAfter(state, node, edges, nodes)
   }
 
-  let next = { ...state }
+  let next = applyOnRunExpressions({ ...state }, node)
 
   if (node.type === 'message') {
+    const bindings = bindingsOf(node.config)
     const template = String(node.config.text ?? '')
-    const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates, bindingsOf(node.config))
+    const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates, bindings)
     const media = attachmentsFor(node, next.mediaCatalog)
     const stored = stripFileEmbeds(text)
+    const suggestions = resolveSuggestedResponses(node.config, {
+      resolve: (raw) => resolveValue(raw, next.vars, next.stepOutputs, next.media, next.templates, bindings),
+    })
     next = {
       ...next,
-      messages: [...next.messages, msg('bot', text || (media?.length ? '' : '?'), { media })],
+      messages: [
+        ...next.messages,
+        msg('bot', text || (media?.length ? '' : '?'), {
+          media,
+          suggestions: suggestions.length ? suggestions : undefined,
+        }),
+      ],
       stepOutputs: { ...next.stepOutputs, [node.key]: { response: stored } },
     }
     next = appendRun(next, node, {
@@ -765,7 +1039,55 @@ export function tickPreview(
       outputs: { response: stored },
       savedAs: savedAsStep(node.key),
     })
+    if (suggestions.length) {
+      return {
+        ...next,
+        currentId: node.id,
+        phase: {
+          kind: 'waiting_suggestion',
+          nodeId: node.id,
+          suggestions,
+          startedAt: new Date().toISOString(),
+        },
+      }
+    }
     return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
+  }
+
+  if (node.type === 'button') {
+    const bindings = bindingsOf(node.config)
+    const template = String(node.config.text ?? '')
+    const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates, bindings)
+    const buttons = resolveButtonOptions(node.config, (raw) =>
+      interpolate(raw, next.vars, next.stepOutputs, next.media, false, next.templates, bindings),
+    )
+
+    next = {
+      ...next,
+      messages: [
+        ...next.messages,
+        msg('bot', text || (buttons.length ? '' : 'Choose an action'), {
+          buttons,
+        }),
+      ],
+      stepOutputs: { ...next.stepOutputs, [node.key]: { response: stripFileEmbeds(text) } },
+    }
+    next = appendRun(next, node, {
+      inputs: { text: template },
+      processed: { buttons },
+      outputs: { response: stripFileEmbeds(text) },
+      savedAs: savedAsStep(node.key),
+    })
+    return {
+      ...next,
+      currentId: node.id,
+      phase: {
+        kind: 'waiting_button',
+        nodeId: node.id,
+        buttons,
+        startedAt: new Date().toISOString(),
+      },
+    }
   }
 
   if (node.type === 'question') {
@@ -876,15 +1198,40 @@ export function tickPreview(
   }
 
   if (node.type === 'set_variable') {
-    const key = String(node.config.variableKey ?? '').trim()
-    const rawValue = String(node.config.value ?? '')
-    const value = resolveValue(rawValue, next.vars, next.stepOutputs, next.media, next.templates)
-    if (key) next = applyAssignment(next, key, value, node.key)
+    const rows = readSetVariableAssignments(node.config)
+    const assigned: Record<string, unknown> = {}
+    const inputs: Array<{ variableKey: string; value: string; valueType: string }> = []
+    for (const row of rows) {
+      const key = row.variableKey.trim()
+      if (!key) continue
+      const rawValue = String(row.value ?? '')
+      const value = resolveValue(rawValue, next.vars, next.stepOutputs, next.media, next.templates)
+      next = { ...next, vars: { ...next.vars, [key]: value } }
+      assigned[key] = value
+      inputs.push({ variableKey: key, value: rawValue, valueType: row.valueType })
+    }
+    const keys = Object.keys(assigned)
+    const single = keys.length === 1 ? assigned[keys[0]!] : undefined
+    next = {
+      ...next,
+      stepOutputs: {
+        ...next.stepOutputs,
+        [node.key]:
+          keys.length === 1
+            ? { response: single, data: single }
+            : { response: assigned, data: assigned, assignments: assigned },
+      },
+    }
     next = appendRun(next, node, {
-      inputs: { variableKey: key, value: rawValue, valueType: node.config.valueType ?? 'string' },
-      processed: { resolvedValue: value },
-      outputs: { value },
-      savedAs: savedAsVar(key) ?? savedAsStep(node.key),
+      inputs: {
+        assignments: inputs,
+        variableKey: keys[0] ?? '',
+        value: inputs[0]?.value ?? '',
+        valueType: inputs[0]?.valueType ?? 'string',
+      },
+      processed: { resolved: assigned },
+      outputs: keys.length === 1 ? { value: single } : { values: assigned },
+      savedAs: keys.length ? keys.map((k) => `{{vars.${k}}}`).join(', ') : savedAsStep(node.key),
     })
     return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
   }
@@ -985,6 +1332,7 @@ export function tickPreview(
   if (
     node.type === 'http' ||
     node.type === 'email' ||
+    node.type === 'database' ||
     node.type === 'integration' ||
     node.type === 'entity' ||
     node.type === 'transfer'
@@ -1007,6 +1355,42 @@ export function tickPreview(
       savedAs: null,
     })
     return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id, pass ? 'true' : 'false'))
+  }
+
+  if (node.type === 'switch') {
+    const valueRaw = String(node.config.value ?? '')
+    const cases = Array.isArray(node.config.cases) ? node.config.cases : []
+    const value = resolveValue(valueRaw, next.vars, next.stepOutputs, next.media, next.templates)
+    const valueStr = value == null ? '' : String(value)
+    let matchedHandle = 'default'
+    let matchedLabel = 'Default'
+    let matchedMatch = ''
+    for (let i = 0; i < cases.length; i += 1) {
+      const row = cases[i]
+      if (!row || typeof row !== 'object') continue
+      const c = row as Record<string, unknown>
+      const id = typeof c.id === 'string' ? c.id : ''
+      if (!id) continue
+      const matchRaw = typeof c.match === 'string' ? c.match : ''
+      const matchVal = resolveValue(matchRaw, next.vars, next.stepOutputs, next.media, next.templates)
+      const matchStr = matchVal == null ? '' : String(matchVal)
+      if (valueStr === matchStr) {
+        matchedHandle = id
+        matchedMatch = matchRaw
+        matchedLabel =
+          typeof c.label === 'string' && c.label.trim()
+            ? c.label.trim()
+            : matchRaw.trim() || `Case ${i + 1}`
+        break
+      }
+    }
+    next = appendRun(next, node, {
+      inputs: { value: valueRaw, cases },
+      processed: { value: valueStr, branch: matchedLabel, handle: matchedHandle, match: matchedMatch },
+      outputs: { result: matchedHandle, branch: matchedLabel },
+      savedAs: null,
+    })
+    return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id, matchedHandle))
   }
 
   if (node.type === 'loop') {
@@ -1060,6 +1444,83 @@ export function tickPreview(
     }
   }
 
+  if (node.type === 'sign_in') {
+    const mode = String(node.config.mode ?? 'http')
+    const skipIfSignedIn = node.config.skipIfSignedIn !== false
+    const emailVariable = String(node.config.emailVariable ?? 'email').trim() || 'email'
+    const userIdVariable = String(node.config.userIdVariable ?? 'user_id').trim() || 'user_id'
+    const tokenVariable = String(node.config.tokenVariable ?? 'auth_token').trim() || 'auth_token'
+    const profileVariable = String(node.config.profileVariable ?? 'user').trim() || 'user'
+    const signedInFlag = next.vars._signed_in
+    const alreadySignedIn =
+      signedInFlag === true || signedInFlag === 'true' || signedInFlag === 1 || signedInFlag === '1'
+
+    if (mode === 'sign_out') {
+      const vars: Record<string, unknown> = { ...next.vars, _signed_in: false }
+      delete vars[emailVariable]
+      delete vars[userIdVariable]
+      delete vars[tokenVariable]
+      delete vars[profileVariable]
+      const now = new Date().toISOString()
+      next = {
+        ...next,
+        vars,
+        messages: [
+          ...next.messages,
+          msg('system', 'Signed out', { createdAt: now }),
+        ],
+        stepOutputs: {
+          ...next.stepOutputs,
+          [node.key]: { ok: true, signedOut: true },
+        },
+      }
+      next = appendRun(next, node, {
+        inputs: { mode: 'sign_out' },
+        processed: { signedOut: true },
+        outputs: { ok: true, _signed_in: false },
+        savedAs: null,
+      })
+      const nextId =
+        nextNodeId(edges, node.id, 'success') ?? nextNodeId(edges, node.id)
+      return resolveAfterStep(next, edges, nodes, nextId)
+    }
+
+    if (skipIfSignedIn && alreadySignedIn) {
+      next = {
+        ...next,
+        stepOutputs: {
+          ...next.stepOutputs,
+          [node.key]: { ok: true, skipped: true, reason: 'already_signed_in' },
+        },
+      }
+      next = appendRun(next, node, {
+        inputs: { mode, skipIfSignedIn: true },
+        processed: { skipped: true, reason: 'already_signed_in' },
+        outputs: { ok: true, skipped: true },
+        savedAs: null,
+      })
+      const nextId =
+        nextNodeId(edges, node.id, 'success') ?? nextNodeId(edges, node.id)
+      return resolveAfterStep(next, edges, nodes, nextId)
+    }
+
+    const prompt = String(node.config.prompt ?? 'Sign in to continue')
+    const text = interpolateChat(prompt, next.vars, next.stepOutputs, next.media, next.templates, bindingsOf(node.config))
+    const media = attachmentsFor(node, next.mediaCatalog)
+    return {
+      ...next,
+      messages: [...next.messages, msg('bot', text, { media })],
+      currentId: node.id,
+      phase: {
+        kind: 'waiting_input',
+        nodeId: node.id,
+        prompt: text,
+        answerType: 'sign_in',
+        startedAt: new Date().toISOString(),
+      },
+    }
+  }
+
   if (node.type === 'handoff') {
     const template = String(node.config.message ?? 'Connecting you with an agent…')
     const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates, bindingsOf(node.config))
@@ -1102,6 +1563,293 @@ export function tickPreview(
     }
   }
 
+  if (node.type === 'skip_to') {
+    const skipKey = readSkipToTargetKey(node.config)
+    const skipTarget =
+      skipKey && skipKey !== node.key ? nodes.find((n) => n.key === skipKey)?.id ?? null : null
+    next = {
+      ...next,
+      stepOutputs: {
+        ...next.stepOutputs,
+        [node.key]: { redirectedTo: skipTarget ? skipKey : null },
+      },
+    }
+    next = appendRun(next, node, {
+      inputs: { targetNodeKey: skipKey || null },
+      processed: {
+        redirectedTo: skipTarget ? skipKey : null,
+        fallback: skipTarget ? null : 'next',
+      },
+      outputs: { redirectedTo: skipTarget ? skipKey : null },
+      savedAs: null,
+    })
+    return resolveAfterStep(next, edges, nodes, skipTarget ?? nextNodeId(edges, node.id))
+  }
+
+  return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
+}
+
+export function submitPreviewButton(
+  state: PreviewEngineState,
+  nodes: DesignerNode[],
+  edges: DesignerEdge[],
+  value: string,
+  opts?: {
+    label?: string
+    source?: string
+    payload?: unknown
+    skipToNodeKey?: string
+  },
+): PreviewEngineState {
+  bindCookieScope(state)
+  if (state.phase.kind !== 'waiting_button') return state
+  const waiting = state.phase
+  const node = nodes.find((n) => n.id === waiting.nodeId)
+  if (!node || node.type !== 'button') return state
+
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return state
+  const picked = trimmed
+  const label =
+    opts?.label?.trim() ||
+    waiting.buttons.find((b) => b.value === picked)?.label ||
+    picked
+
+  const priorOutput = state.stepOutputs[node.key]
+  const botResponse =
+    priorOutput && typeof priorOutput === 'object' && priorOutput !== null && 'response' in priorOutput
+      ? (priorOutput as { response: unknown }).response
+      : priorOutput
+
+  const outputs = {
+    response: botResponse,
+    value: picked,
+    label,
+    source: opts?.source ?? 'click',
+    payload: opts?.payload ?? null,
+    skipToNodeKey: opts?.skipToNodeKey?.trim() || null,
+  }
+  const outputVar = String(node.config.outputVariable ?? '').trim()
+
+  let next: PreviewEngineState = {
+    ...state,
+    messages: [
+      ...state.messages.map((m) => (m.buttons?.length ? { ...m, buttons: undefined } : m)),
+      msg('user', label),
+    ],
+    stepOutputs: { ...state.stepOutputs, [node.key]: outputs },
+    phase: { kind: 'typing' },
+  }
+
+  if (outputVar) {
+    next = applyAssignment(next, outputVar, picked, node.key, outputs)
+  }
+
+  if (next.runs.length) {
+    const last = next.runs[next.runs.length - 1]!
+    if (last.nodeId === node.id) {
+      next = {
+        ...next,
+        runs: [
+          ...next.runs.slice(0, -1),
+          {
+            ...last,
+            outputs: { ...last.outputs, ...outputs },
+            savedAs: savedAsVar(outputVar) ?? last.savedAs,
+          },
+        ],
+      }
+    }
+  }
+
+  const skipKey = opts?.skipToNodeKey?.trim()
+  const skipTarget =
+    skipKey && skipKey !== node.key ? nodes.find((n) => n.key === skipKey)?.id ?? null : null
+
+  return resolveAfterStep(next, edges, nodes, skipTarget ?? nextNodeId(edges, node.id))
+}
+
+/**
+ * Handle a button interaction (click / hover / …): run functions, skip, or continue.
+ * Click with only side-effect listeners still advances the flow after those run.
+ * Embed emits are returned as sideEffects for the UI to postMessage.
+ */
+export type ButtonInteractSideEffect =
+  | {
+      type: 'emit_event'
+      eventName: string
+      value: string
+      payload?: unknown
+      nodeKey?: string
+    }
+  | {
+      type: 'run_function_host'
+      name: string
+      args: unknown
+      value: string
+      nodeKey?: string
+    }
+
+export function handlePreviewButtonInteract(
+  state: PreviewEngineState,
+  nodes: DesignerNode[],
+  edges: DesignerEdge[],
+  event: ButtonListenerEvent,
+  button: ResolvedButtonOption,
+): { state: PreviewEngineState; sideEffects: ButtonInteractSideEffect[] } {
+  bindCookieScope(state)
+  if (state.phase.kind !== 'waiting_button') return { state, sideEffects: [] }
+  const phase = state.phase
+  const node = nodes.find((n) => n.id === phase.nodeId)
+  const fromPhase =
+    phase.buttons.find((b) => b.id && b.id === button.id) ||
+    phase.buttons.find((b) => b.value === button.value && b.label === button.label) ||
+    button
+
+  let matched = listenersForEvent(fromPhase, event)
+  if (!matched.length && event === 'click') {
+    matched = [
+      {
+        event: 'click',
+        action: 'continue',
+        eventName: 'button_click',
+        eventPayload: '',
+        functionName: '',
+        functionArgs: '',
+        functionParams: {},
+        skipToNodeKey: '',
+      },
+    ]
+  }
+  if (!matched.length) return { state, sideEffects: [] }
+
+  let current = state
+  let advanced = false
+  const errors: string[] = []
+  const sideEffects: ButtonInteractSideEffect[] = []
+
+  for (const lst of matched) {
+    if (lst.action === 'emit_event') {
+      let payload: unknown
+      const raw = lst.eventPayload.trim()
+      if (raw) {
+        try {
+          payload = JSON.parse(raw) as unknown
+        } catch {
+          payload = raw
+        }
+      }
+      sideEffects.push({
+        type: 'emit_event',
+        eventName: lst.eventName || 'button_click',
+        value: fromPhase.value,
+        payload,
+        nodeKey: node?.key,
+      })
+      continue
+    }
+    if (lst.action === 'run_function') {
+      if (!lst.functionName.trim()) {
+        errors.push('Run function has no function selected')
+        continue
+      }
+      const result = applyFlowFunction(current, lst.functionName, lst.functionParams ?? {})
+      current = result.state
+      if (result.error) errors.push(`${lst.functionName}: ${result.error}`)
+      if (result.kind === 'host' || result.kind === 'unknown') {
+        sideEffects.push({
+          type: 'run_function_host',
+          name: lst.functionName,
+          args: Object.keys(lst.functionParams ?? {}).length
+            ? lst.functionParams
+            : lst.functionArgs,
+          value: fromPhase.value,
+          nodeKey: node?.key,
+        })
+      }
+      continue
+    }
+    if (!listenerAdvancesFlow(lst.action) || advanced) continue
+    advanced = true
+    current = submitPreviewButton(current, nodes, edges, fromPhase.value, {
+      label: fromPhase.label,
+      source: event,
+      skipToNodeKey: lst.action === 'skip_to' ? lst.skipToNodeKey : undefined,
+    })
+  }
+
+  // Click should progress after side effects when no continue/skip listener ran.
+  if (event === 'click' && !advanced && current.phase.kind === 'waiting_button') {
+    current = submitPreviewButton(current, nodes, edges, fromPhase.value, {
+      label: fromPhase.label,
+      source: event,
+    })
+  }
+
+  if (errors.length) {
+    current = {
+      ...current,
+      messages: [...current.messages, msg('system', errors.join(' · '))],
+    }
+  }
+
+  return { state: current, sideEffects }
+}
+
+export function submitPreviewSuggestion(
+  state: PreviewEngineState,
+  nodes: DesignerNode[],
+  edges: DesignerEdge[],
+  text: string,
+): PreviewEngineState {
+  bindCookieScope(state)
+  if (state.phase.kind !== 'waiting_suggestion') return state
+  const waiting = state.phase
+  const node = nodes.find((n) => n.id === waiting.nodeId)
+  if (!node || node.type !== 'message') return state
+
+  const trimmed = text.trim()
+  if (!trimmed) return state
+
+  const priorOutput = state.stepOutputs[node.key]
+  const botResponse =
+    priorOutput && typeof priorOutput === 'object' && priorOutput !== null && 'response' in priorOutput
+      ? (priorOutput as { response: unknown }).response
+      : priorOutput
+  const outputs = { response: botResponse, suggestion: trimmed }
+  const suggestionVar = String(node.config.suggestionVariable ?? '').trim()
+
+  let next: PreviewEngineState = {
+    ...state,
+    messages: [
+      ...state.messages.map((m) => (m.suggestions?.length ? { ...m, suggestions: undefined } : m)),
+      msg('user', trimmed),
+    ],
+    stepOutputs: { ...state.stepOutputs, [node.key]: outputs },
+    phase: { kind: 'typing' },
+  }
+
+  if (suggestionVar) {
+    next = applyAssignment(next, suggestionVar, trimmed, node.key, outputs)
+  }
+
+  if (next.runs.length) {
+    const last = next.runs[next.runs.length - 1]!
+    if (last.nodeId === node.id) {
+      next = {
+        ...next,
+        runs: [
+          ...next.runs.slice(0, -1),
+          {
+            ...last,
+            outputs: { ...last.outputs, suggestion: trimmed },
+            savedAs: savedAsVar(suggestionVar) ?? last.savedAs,
+          },
+        ],
+      }
+    }
+  }
+
   return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
 }
 
@@ -1111,6 +1859,7 @@ export function submitPreviewAnswer(
   edges: DesignerEdge[],
   answer: string | string[] | Record<string, unknown> | Record<string, unknown>[],
 ): PreviewEngineState {
+  bindCookieScope(state)
   if (state.phase.kind !== 'waiting_input') return state
   const waiting = state.phase
   const node = nodes.find((n) => n.id === waiting.nodeId)
@@ -1287,6 +2036,7 @@ export function submitPreviewAnswer(
     messages: [...state.messages, userMessage],
     phase: { kind: 'typing' },
     otpChallenge: null,
+    signInAttempts: null,
     captchaChallenge: null,
   }
   if (key) {
@@ -1322,6 +2072,7 @@ export function skipPreviewQuestion(
   nodes: DesignerNode[],
   edges: DesignerEdge[],
 ): PreviewEngineState {
+  bindCookieScope(state)
   if (state.phase.kind !== 'waiting_input') return state
   const waiting = state.phase
   const node = nodes.find((n) => n.id === waiting.nodeId)
@@ -1333,6 +2084,7 @@ export function skipPreviewQuestion(
     messages: [...state.messages, msg('system', 'Skipped (optional)')],
     phase: { kind: 'typing' },
     otpChallenge: null,
+    signInAttempts: null,
     captchaChallenge: null,
   }
   if (key) next = applyAssignment(next, key, null, node.key, { response: null, skipped: true })
@@ -1362,6 +2114,7 @@ export function timeoutPreviewQuestion(
   nodes: DesignerNode[],
   edges: DesignerEdge[],
 ): PreviewEngineState {
+  bindCookieScope(state)
   if (state.phase.kind !== 'waiting_input') return state
   const waiting = state.phase
   const node = nodes.find((n) => n.id === waiting.nodeId)
@@ -1376,6 +2129,7 @@ export function timeoutPreviewQuestion(
     messages: [...state.messages, msg('system', `Question timed out after ${timeoutSeconds}s`)],
     phase: { kind: 'typing' },
     otpChallenge: null,
+    signInAttempts: null,
     captchaChallenge: null,
   }
   if (key) next = applyAssignment(next, key, null, node.key, { response: null, timedOut: true })
@@ -1410,9 +2164,10 @@ export async function runConnectionStep(
   connectionsById: Record<string, Record<string, unknown>>,
   options?: ConnectionStepContext,
 ): Promise<PreviewEngineState> {
+  bindCookieScope(state)
   if (!state.currentId) return state
   const node = nodes.find((n) => n.id === state.currentId)
-  if (!node || (node.type !== 'http' && node.type !== 'email')) return state
+  if (!node || (node.type !== 'http' && node.type !== 'email' && node.type !== 'database')) return state
 
   if (!shouldRunAfterPredecessor(node.config, previousRunStatus(state))) {
     return skipDueToRunAfter(state, node, edges, nodes)
@@ -1426,9 +2181,8 @@ export async function runConnectionStep(
       ? AbortSignal.timeout(timeoutSeconds * 1000)
       : undefined
 
-  const { executeHttpConnection, sendEmailConnection, isFlowForgeApiConfigured } = await import(
-    '@/shared/lib/flowforgeApi',
-  )
+  const { executeHttpConnection, sendEmailConnection, executeDatabaseConnection, isFlowForgeApiConfigured } =
+    await import('@/shared/lib/flowforgeApi')
 
   let next = { ...state }
   let runStatus: PreviewRunStatus = 'Succeeded'
@@ -1436,6 +2190,7 @@ export async function runConnectionStep(
   let processed: Record<string, unknown> = {}
   let outputs: Record<string, unknown> = {}
   let savedAs: string | null = null
+  let connectionInvokeMs: number | undefined
 
   const useServerSecrets = !!(options?.chatbotId && String(node.config.connectionId ?? '').trim())
 
@@ -1478,17 +2233,37 @@ export async function runConnectionStep(
           body: bodyText || undefined,
         }
 
+    const baseUrl = httpCfg?.baseUrl?.replace(/\/$/, '') ?? ''
+    const pathForUrl = built.path?.startsWith('/') ? built.path : `/${built.path || ''}`
+    let fullUrl = baseUrl ? `${baseUrl}${pathForUrl || '/'}` : pathForUrl || '/'
+    if (built.query && Object.keys(built.query).length) {
+      const qs = new URLSearchParams(built.query).toString()
+      if (qs) fullUrl += (fullUrl.includes('?') ? '&' : '?') + qs
+    }
+    const requestHeaders = [...(httpCfg?.headers ?? []), ...built.headers].map((h) => ({
+      key: h.key,
+      value: /^(authorization|proxy-authorization|x-api-key)$/i.test(h.key) ? '***' : h.value,
+    }))
+
     inputs = {
       connectionId: connectionId || null,
+      connectionName:
+        connection && typeof connection === 'object' && String((connection as { name?: unknown }).name ?? '').trim()
+          ? String((connection as { name?: unknown }).name).trim()
+          : undefined,
       method: built.method,
       path: node.config.path ?? '',
+      baseUrl: baseUrl || (useServerSecrets ? '(resolved server-side)' : null),
+      url: fullUrl,
       body: rawBody || undefined,
       paramValues: rawParams,
     }
     processed = {
       method: built.method,
       path: built.path,
+      url: fullUrl,
       query: built.query,
+      headers: requestHeaders,
       body: built.body,
       paramValues: interpolatedParams,
     }
@@ -1497,21 +2272,25 @@ export async function runConnectionStep(
     const canCallApi =
       isFlowForgeApiConfigured() && (!!connection || (useServerSecrets && !!connectionId))
     if (!canCallApi) {
+      connectionInvokeMs = 0
       result = {
         ok: true,
         status: 200,
         path: built.path,
+        url: fullUrl,
         data: { mock: true, reason: !connection && !useServerSecrets ? 'missing_connection' : 'api_not_configured' },
       }
       next = {
         ...next,
-        messages: [
-          ...next.messages,
-          msg('system', `HTTP ${built.method} ${built.path || '/'} (mocked - configure API URL and connection)`),
-        ],
+        messages: appendTechSystemMessage(
+          next.messages,
+          options,
+          `HTTP ${built.method} ${fullUrl} (mocked - configure API URL and connection)`,
+        ),
       }
     } else {
       try {
+        const invokeStart = performance.now()
         const apiResult = await executeHttpConnection({
           ...(useServerSecrets
             ? {
@@ -1529,6 +2308,7 @@ export async function runConnectionStep(
           body: built.body,
           signal: abortSignal,
         })
+        connectionInvokeMs = Math.round(performance.now() - invokeStart)
 
         let schemaErrors: string[] = []
         if (httpCfg) {
@@ -1540,38 +2320,212 @@ export async function runConnectionStep(
           )
         }
 
+        const failed = !apiResult.ok || schemaErrors.length > 0
         result = {
-          ok: apiResult.ok && schemaErrors.length === 0,
+          ok: !failed,
           status: apiResult.status,
+          url: fullUrl,
           headers: apiResult.headers,
           data: apiResult.data,
-          error: apiResult.error ?? null,
+          error: apiResult.error ?? (schemaErrors.length ? 'Response did not match expected schema' : null),
           schemaErrors: schemaErrors.length ? schemaErrors : undefined,
         }
-        if (!result.ok) runStatus = 'Failed'
+        processed = {
+          ...processed,
+          responseStatus: apiResult.status,
+          responseError: apiResult.error ?? null,
+          schemaErrors: schemaErrors.length ? schemaErrors : undefined,
+          failureReason: !apiResult.ok
+            ? apiResult.error || `Upstream returned HTTP ${apiResult.status}`
+            : schemaErrors.length
+              ? 'schema_mismatch'
+              : undefined,
+        }
+        if (failed) runStatus = 'Failed'
         next = {
           ...next,
-          messages: [
-            ...next.messages,
-            msg(
-              'system',
-              `HTTP ${built.method} ${built.path || '/'} -> ${apiResult.status}${
-                !apiResult.ok ? ' (failed)' : schemaErrors.length ? ' (schema mismatch)' : ''
-              }`,
-            ),
-          ],
+          messages: appendTechSystemMessage(
+            next.messages,
+            options,
+            `HTTP ${built.method} ${fullUrl} -> ${apiResult.status}${
+              !apiResult.ok
+                ? ` (failed${apiResult.error ? `: ${apiResult.error}` : ''})`
+                : schemaErrors.length
+                  ? ' (schema mismatch)'
+                  : ''
+            }`,
+          ),
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'HTTP request failed'
         const timedOut = isAbortOrTimeoutError(err)
-        result = { ok: false, status: 0, data: null, error: message, timedOut }
+        if (connectionInvokeMs == null) {
+          connectionInvokeMs = Math.round(performance.now() - wallStart)
+        }
+        result = {
+          ok: false,
+          status: 0,
+          url: fullUrl,
+          data: null,
+          error: message,
+          timedOut,
+        }
+        processed = {
+          ...processed,
+          responseStatus: 0,
+          responseError: message,
+          failureReason: timedOut ? 'timeout' : message,
+        }
         runStatus = timedOut ? 'TimedOut' : 'Failed'
         next = {
           ...next,
-          messages: [
-            ...next.messages,
-            msg('system', timedOut ? `HTTP timed out after ${timeoutSeconds}s` : `HTTP error: ${message}`),
-          ],
+          messages: appendTechSystemMessage(
+            next.messages,
+            options,
+            timedOut
+              ? `HTTP timed out after ${timeoutSeconds}s (${fullUrl})`
+              : `HTTP error: ${message} (${built.method} ${fullUrl})`,
+          ),
+        }
+      }
+    }
+
+    const key = String(node.config.outputVariable ?? '').trim()
+    if (key) next = applyAssignment(next, key, result, node.key, result)
+    else next = { ...next, stepOutputs: { ...next.stepOutputs, [node.key]: result } }
+    outputs = result
+    savedAs = savedAsVar(key) ?? savedAsStep(node.key)
+  }
+
+  if (node.type === 'database') {
+    const connectionId = String(node.config.connectionId ?? '')
+    const connection = connectionsById[connectionId]
+    const operation = String(node.config.operation ?? 'query') === 'execute' ? 'execute' : 'query'
+    const sql = String(node.config.sql ?? '').trim()
+    const rawParams =
+      node.config.paramValues && typeof node.config.paramValues === 'object'
+        ? (node.config.paramValues as Record<string, string>)
+        : {}
+    const interpolatedParams: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(rawParams)) {
+      const name = k.trim().replace(/^:/, '')
+      if (!name) continue
+      interpolatedParams[name] = interpolate(
+        String(v ?? ''),
+        next.vars,
+        next.stepOutputs,
+        next.media,
+        false,
+        next.templates,
+      )
+    }
+
+    inputs = {
+      connectionId: connectionId || null,
+      connectionName:
+        connection && typeof connection === 'object' && String((connection as { name?: unknown }).name ?? '').trim()
+          ? String((connection as { name?: unknown }).name).trim()
+          : undefined,
+      operation,
+      sql,
+      paramValues: rawParams,
+    }
+    processed = {
+      operation,
+      sql,
+      paramValues: interpolatedParams,
+    }
+
+    let result: Record<string, unknown>
+    const canCallApi =
+      isFlowForgeApiConfigured() && (!!connection || (useServerSecrets && !!connectionId))
+    if (!canCallApi) {
+      connectionInvokeMs = 0
+      result = {
+        ok: true,
+        rows: [],
+        rowCount: 0,
+        mock: true,
+        reason: !connection && !useServerSecrets ? 'missing_connection' : 'api_not_configured',
+      }
+      next = {
+        ...next,
+        messages: appendTechSystemMessage(
+          next.messages,
+          options,
+          `Database ${operation} (mocked — configure API URL and connection)`,
+        ),
+      }
+    } else {
+      try {
+        const invokeStart = performance.now()
+        const apiResult = await executeDatabaseConnection({
+          ...(useServerSecrets
+            ? {
+                connectionId,
+                chatbotId: options!.chatbotId,
+                instanceId: options?.instanceId,
+                sessionId: options?.sessionId,
+              }
+            : {}),
+          ...(connection ? { connection } : {}),
+          sql,
+          params: interpolatedParams,
+          operation,
+          signal: abortSignal,
+        })
+        connectionInvokeMs = Math.round(performance.now() - invokeStart)
+        const failed = !apiResult.ok
+        result = {
+          ok: !failed,
+          rows: apiResult.rows ?? [],
+          rowCount: apiResult.rowCount ?? 0,
+          error: apiResult.error ?? null,
+        }
+        processed = {
+          ...processed,
+          responseError: apiResult.error ?? null,
+          failureReason: failed ? apiResult.error || 'Database query failed' : undefined,
+        }
+        if (failed) runStatus = 'Failed'
+        next = {
+          ...next,
+          messages: appendTechSystemMessage(
+            next.messages,
+            options,
+            failed
+              ? `Database ${operation} failed${apiResult.error ? `: ${apiResult.error}` : ''}`
+              : `Database ${operation} → ${apiResult.rowCount ?? 0} row(s)`,
+          ),
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Database query failed'
+        const timedOut = isAbortOrTimeoutError(err)
+        if (connectionInvokeMs == null) {
+          connectionInvokeMs = Math.round(performance.now() - wallStart)
+        }
+        result = {
+          ok: false,
+          rows: [],
+          rowCount: 0,
+          error: message,
+          timedOut,
+        }
+        processed = {
+          ...processed,
+          responseError: message,
+          failureReason: timedOut ? 'timeout' : message,
+        }
+        runStatus = timedOut ? 'TimedOut' : 'Failed'
+        next = {
+          ...next,
+          messages: appendTechSystemMessage(
+            next.messages,
+            options,
+            timedOut
+              ? `Database timed out after ${timeoutSeconds}s`
+              : `Database error: ${message}`,
+          ),
         }
       }
     }
@@ -1659,16 +2613,19 @@ export async function runConnectionStep(
     const canCallApi =
       isFlowForgeApiConfigured() && (!!connection || (useServerSecrets && !!connectionId))
     if (!canCallApi) {
+      connectionInvokeMs = 0
       next = {
         ...next,
-        messages: [
-          ...next.messages,
-          msg('system', `Email to ${to || '(missing)'} - ${subject || '(no subject)'} (mocked)`),
-        ],
+        messages: appendTechSystemMessage(
+          next.messages,
+          options,
+          `Email to ${to || '(missing)'} - ${subject || '(no subject)'} (mocked)`,
+        ),
       }
       result = { ...result, ok: true, mocked: true }
     } else {
       try {
+        const invokeStart = performance.now()
         const apiResult = await sendEmailConnection({
           ...(useServerSecrets
             ? {
@@ -1684,6 +2641,7 @@ export async function runConnectionStep(
           body,
           signal: abortSignal,
         })
+        connectionInvokeMs = Math.round(performance.now() - invokeStart)
         result = {
           ...result,
           ok: apiResult.ok,
@@ -1704,27 +2662,29 @@ export async function runConnectionStep(
         if (!result.ok) runStatus = 'Failed'
         next = {
           ...next,
-          messages: [
-            ...next.messages,
-            msg(
-              'system',
-              apiResult.ok
-                ? `Email sent to ${to}${result.schemaErrors ? ' (schema mismatch)' : ''}`
-                : `Email failed: ${apiResult.error ?? 'unknown'}`,
-            ),
-          ],
+          messages: appendTechSystemMessage(
+            next.messages,
+            options,
+            apiResult.ok
+              ? `Email sent to ${to}${result.schemaErrors ? ' (schema mismatch)' : ''}`
+              : `Email failed: ${apiResult.error ?? 'unknown'}`,
+          ),
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Email failed'
         const timedOut = isAbortOrTimeoutError(err)
+        if (connectionInvokeMs == null) {
+          connectionInvokeMs = Math.round(performance.now() - wallStart)
+        }
         result = { ...result, ok: false, error: message, timedOut }
         runStatus = timedOut ? 'TimedOut' : 'Failed'
         next = {
           ...next,
-          messages: [
-            ...next.messages,
-            msg('system', timedOut ? `Email timed out after ${timeoutSeconds}s` : `Email error: ${message}`),
-          ],
+          messages: appendTechSystemMessage(
+            next.messages,
+            options,
+            timedOut ? `Email timed out after ${timeoutSeconds}s` : `Email error: ${message}`,
+          ),
         }
       }
     }
@@ -1741,6 +2701,7 @@ export async function runConnectionStep(
     inputs: { ...inputs, timeoutSeconds: timeoutSeconds || undefined },
     processed: {
       ...processed,
+      ...(connectionInvokeMs != null ? { invokeMs: connectionInvokeMs } : {}),
       ...(runStatus === 'TimedOut' ? { timedOut: true } : {}),
     },
     outputs,
@@ -1756,6 +2717,7 @@ export async function runIntegrationStep(
   edges: DesignerEdge[],
   options?: ConnectionStepContext,
 ): Promise<PreviewEngineState> {
+  bindCookieScope(state)
   if (!state.currentId) return state
   const node = nodes.find((n) => n.id === state.currentId)
   if (!node || node.type !== 'integration') return state
@@ -1778,10 +2740,16 @@ export async function runIntegrationStep(
   let runStatus: PreviewRunStatus = 'Succeeded'
   const integrationId = String(node.config.integrationId ?? '').trim()
   const action = String(node.config.action ?? '').trim()
-  const rawFields =
+  const rawFieldsSource =
     node.config.fieldValues && typeof node.config.fieldValues === 'object'
-      ? (node.config.fieldValues as Record<string, string>)
-      : {}
+      ? (node.config.fieldValues as Record<string, unknown>)
+      : node.config.params && typeof node.config.params === 'object'
+        ? (node.config.params as Record<string, unknown>)
+        : {}
+  const rawFields: Record<string, string> = {}
+  for (const [k, v] of Object.entries(rawFieldsSource)) {
+    rawFields[k] = String(v ?? '')
+  }
   const interpolatedFields: Record<string, string> = {}
   for (const [k, v] of Object.entries(rawFields)) {
     interpolatedFields[k] = interpolate(String(v ?? ''), next.vars, next.stepOutputs, next.media, false, next.templates)
@@ -1802,6 +2770,7 @@ export async function runIntegrationStep(
     action,
     fields: interpolatedFields,
   }
+  let connectionInvokeMs: number | undefined
 
   const canCallApi =
     isFlowForgeApiConfigured() &&
@@ -1810,16 +2779,19 @@ export async function runIntegrationStep(
     !!(options?.instanceId || options?.sessionId)
 
   if (!canCallApi) {
+    connectionInvokeMs = 0
     result = { ...result, ok: true, mocked: true }
     next = {
       ...next,
-      messages: [
-        ...next.messages,
-        msg('system', `Integration ${action || '(no action)'} (mocked)`),
-      ],
+      messages: appendTechSystemMessage(
+        next.messages,
+        options,
+        `Integration ${action || '(no action)'} (mocked)`,
+      ),
     }
   } else {
     try {
+      const invokeStart = performance.now()
       const apiResult = await executeIntegrationAction({
         integrationId,
         instanceId: options!.instanceId ?? '',
@@ -1829,6 +2801,7 @@ export async function runIntegrationStep(
         sessionId: options?.sessionId,
         signal: abortSignal,
       })
+      connectionInvokeMs = Math.round(performance.now() - invokeStart)
       result = {
         ok: apiResult.ok,
         status: apiResult.status,
@@ -1840,35 +2813,34 @@ export async function runIntegrationStep(
       if (!apiResult.ok) runStatus = 'Failed'
       next = {
         ...next,
-        messages: [
-          ...next.messages,
-          msg(
-            'system',
-            apiResult.ok
-              ? `Integration ${action} succeeded`
-              : `Integration failed: ${apiResult.error ?? 'unknown'}`,
-          ),
-        ],
+        messages: appendTechSystemMessage(
+          next.messages,
+          options,
+          apiResult.ok
+            ? `Integration ${action} succeeded`
+            : `Integration failed: ${apiResult.error ?? 'unknown'}`,
+        ),
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Integration failed'
       const timedOut = isAbortOrTimeoutError(err)
+      if (connectionInvokeMs == null) {
+        connectionInvokeMs = Math.round(performance.now() - wallStart)
+      }
       result = { ...result, ok: false, error: message, timedOut }
       runStatus = timedOut ? 'TimedOut' : 'Failed'
       next = {
         ...next,
-        messages: [
-          ...next.messages,
-          msg(
-            'system',
-            timedOut ? `Integration timed out after ${timeoutSeconds}s` : `Integration error: ${message}`,
-          ),
-        ],
+        messages: appendTechSystemMessage(
+          next.messages,
+          options,
+          timedOut ? `Integration timed out after ${timeoutSeconds}s` : `Integration error: ${message}`,
+        ),
       }
     }
   }
 
-  const key = String(node.config.outputVariable ?? '').trim()
+  const key = String(node.config.outputVariable ?? node.config.resultVariable ?? '').trim()
   if (key) next = applyAssignment(next, key, result, node.key, result)
   else next = { ...next, stepOutputs: { ...next.stepOutputs, [node.key]: result } }
 
@@ -1879,6 +2851,7 @@ export async function runIntegrationStep(
     inputs: { ...inputs, timeoutSeconds: timeoutSeconds || undefined },
     processed: {
       ...processed,
+      ...(connectionInvokeMs != null ? { invokeMs: connectionInvokeMs } : {}),
       ...(runStatus === 'TimedOut' ? { timedOut: true } : {}),
     },
     outputs: result,
@@ -1892,7 +2865,9 @@ export async function runEntityStep(
   state: PreviewEngineState,
   nodes: DesignerNode[],
   edges: DesignerEdge[],
+  options?: ConnectionStepContext,
 ): Promise<PreviewEngineState> {
+  bindCookieScope(state)
   if (!state.currentId) return state
   const node = nodes.find((n) => n.id === state.currentId)
   if (!node || node.type !== 'entity') return state
@@ -1935,134 +2910,240 @@ export async function runEntityStep(
 
   try {
     if (!entityId) throw new Error('Select an entity')
+    const chatbotId = options?.chatbotId?.trim()
+    if (!chatbotId) throw new Error('Chatbot context is required for entity steps')
+    const sessionId = options?.sessionId?.trim()
 
-    const { supabase } = await import('@/shared/lib/supabase')
-    const { data: entity, error: entityError } = await supabase
-      .from('chatbot_entities')
-      .select('*')
-      .eq('id', entityId)
-      .single()
-    if (entityError || !entity) throw new Error(entityError?.message ?? 'Entity not found')
-
-    const {
-      createDynamicRecord,
-      deleteDynamicRecord,
-      listEntityRecords,
-      toRecordPayload,
-      updateDynamicRecord,
-    } = await import('@/features/entities/entityApi')
+    const entityOpStart = performance.now()
     const { coalesceEntityFilters, queryEntityRecords } = await import('@/features/entities/entityQuery')
+    const resolveEntityValue = (raw: string) =>
+      resolveValue(raw, next.vars, next.stepOutputs, next.media, next.templates)
 
-    const recordId = recordIdRaw ? String(resolveValue(recordIdRaw, next.vars, next.stepOutputs, next.media, next.templates) ?? '') : ''
+    const recordId = recordIdRaw ? String(resolveEntityValue(recordIdRaw) ?? '') : ''
     const filters = coalesceEntityFilters({
       filters: filtersRaw as import('@/features/entities/entityQuery').EntityFilters | undefined,
       filterAttribute,
       filterEquals: filterEqualsRaw,
     })
-    const filterEquals = filterEqualsRaw
-      ? resolveValue(filterEqualsRaw, next.vars, next.stepOutputs, next.media, next.templates)
-      : undefined
+    const resolvedFilters = {
+      logic: filters.logic,
+      clauses: filters.clauses.map((clause) => ({
+        attribute: clause.attribute,
+        operator: clause.operator,
+        value:
+          clause.operator === 'exists' ? undefined : resolveEntityValue(String(clause.value ?? '')),
+        valueTemplate: String(clause.value ?? '') || undefined,
+      })),
+    }
+    const filterEquals = filterEqualsRaw ? resolveEntityValue(filterEqualsRaw) : undefined
 
     const incomingFields: Record<string, unknown> = {}
     for (const [k, tmpl] of Object.entries(fieldMap)) {
-      const resolved = resolveValue(String(tmpl ?? ''), next.vars, next.stepOutputs, next.media, next.templates)
+      const resolved = resolveEntityValue(String(tmpl ?? ''))
       if (resolved === undefined || resolved === null || (typeof resolved === 'string' && resolved.trim() === '')) {
         continue
       }
       incomingFields[k] = resolved
     }
 
-    let resolvedFields: Record<string, unknown> = incomingFields
-    if (operation === 'create' || operation === 'update') {
-      const { data: attrs, error: attrsError } = await supabase
-        .from('entity_attributes')
-        .select('*')
-        .eq('entity_id', entityId)
-        .order('sort_order')
-      if (attrsError) throw new Error(attrsError.message)
+    // Public / anon chat: RLS blocks direct table writes — use session-scoped RPC.
+    if (sessionId) {
+      const { publicChatEntityOp } = await import('@/features/entities/entityApi')
       const { ensurePrimaryKeyValue } = await import('@/features/entities/entityPrimaryKey')
-      const { validateAndCoerceEntityValues } = await import('@/features/entities/entityValueValidation')
-      // Create: auto-generate unique primary key `id` when the field map left it blank.
-      const fieldsForValidate =
-        operation === 'create' ? ensurePrimaryKeyValue(incomingFields) : incomingFields
-      resolvedFields = validateAndCoerceEntityValues(fieldsForValidate, attrs ?? [], {
-        partial: operation === 'update',
-      })
-    }
 
-    processed = {
-      entityKey: entity.key,
-      entityKind: entity.kind,
-      recordId: recordId || undefined,
-      filters,
-      filterEquals,
-      resolvedFields: Object.keys(resolvedFields).length ? resolvedFields : undefined,
-    }
-
-    if (entity.kind === 'static' && (operation === 'create' || operation === 'update' || operation === 'delete')) {
-      throw new Error('Static entities are read-only in flows (use List/Get)')
-    }
-
-    if (operation === 'list' || operation === 'get') {
-      let rows = await listEntityRecords(entity)
-      rows = queryEntityRecords(rows, filters, (raw) =>
-        resolveValue(raw, next.vars, next.stepOutputs, next.media, next.templates),
-      )
-      if (operation === 'get') {
-        if (recordId) rows = rows.filter((r) => r.id === recordId)
-        const one = rows[0] ?? null
-        outputs = { record: one ? toRecordPayload(one) : null, found: !!one }
-      } else {
-        const list = rows.map(toRecordPayload)
-        outputs = { records: list, count: list.length }
+      let rpcValues = incomingFields
+      if (operation === 'create') {
+        rpcValues = ensurePrimaryKeyValue(incomingFields)
       }
-    } else if (operation === 'create') {
-      const created = await createDynamicRecord(entityId, resolvedFields)
-      const values =
-        created.values && typeof created.values === 'object' && !Array.isArray(created.values)
-          ? (created.values as Record<string, unknown>)
-          : {}
-      outputs = { record: { id: created.id, ...values }, id: created.id }
-    } else if (operation === 'update') {
-      if (!recordId) throw new Error('Record id is required for update')
-      const updated = await updateDynamicRecord(recordId, resolvedFields, {
+
+      const result = await publicChatEntityOp({
+        sessionId,
+        chatbotId,
         entityId,
-        merge: true,
+        operation,
+        values: rpcValues,
+        recordId: recordId || undefined,
       })
-      const values =
-        updated.values && typeof updated.values === 'object' && !Array.isArray(updated.values)
-          ? (updated.values as Record<string, unknown>)
-          : {}
-      outputs = { record: { id: updated.id, ...values }, id: updated.id }
-    } else if (operation === 'delete') {
-      if (!recordId) throw new Error('Record id is required for delete')
-      await deleteDynamicRecord(recordId)
-      outputs = { deleted: true, id: recordId }
+      const entityKey = result.entity?.key ?? 'entity'
+
+      processed = {
+        entityKey,
+        entityKind: result.entity?.kind ?? 'dynamic',
+        recordId: recordId || undefined,
+        filters: resolvedFilters,
+        filterEquals,
+        fieldMap: Object.keys(fieldMap).length ? fieldMap : undefined,
+        resolvedFields: Object.keys(rpcValues).length ? rpcValues : undefined,
+        invokeMs: Math.round(performance.now() - entityOpStart),
+        via: 'public_chat_entity_op',
+      }
+
+      if (operation === 'list' || operation === 'get') {
+        const normalized = (result.records ?? []).map((raw) => {
+          const row = raw as { id?: string; values?: Record<string, unknown> } & Record<string, unknown>
+          if (row.values && typeof row.values === 'object' && !Array.isArray(row.values)) {
+            return { id: String(row.id ?? ''), values: row.values }
+          }
+          const { id: rid, created_at: _c, updated_at: _u, sort_order: _s, ...rest } = row
+          void _c
+          void _u
+          void _s
+          return { id: String(rid ?? ''), values: rest }
+        })
+        let filtered = queryEntityRecords(normalized, filters, resolveEntityValue)
+        if (operation === 'get') {
+          if (recordId) filtered = filtered.filter((r) => r.id === recordId)
+          const one = result.record
+            ? (() => {
+                const rec = result.record as Record<string, unknown>
+                return { id: String(rec.id ?? ''), ...rec }
+              })()
+            : filtered[0]
+              ? { id: filtered[0].id, ...filtered[0].values }
+              : null
+          outputs = { record: one, found: !!one }
+        } else {
+          const list = filtered.map((r) => ({ id: r.id, ...r.values }))
+          outputs = { records: list, count: list.length }
+        }
+      } else if (operation === 'create' || operation === 'update') {
+        const rec = (result.record ?? {}) as Record<string, unknown>
+        outputs = { record: rec, id: result.id ?? rec.id }
+      } else if (operation === 'delete') {
+        outputs = { deleted: true, id: result.id ?? recordId }
+      } else {
+        throw new Error(`Unknown entity operation "${operation}"`)
+      }
+
+      const value =
+        operation === 'list'
+          ? outputs.records
+          : operation === 'get' || operation === 'create' || operation === 'update'
+            ? outputs.record
+            : outputs
+
+      if (outputKey) next = applyAssignment(next, outputKey, value, node.key, outputs)
+      else next = { ...next, stepOutputs: { ...next.stepOutputs, [node.key]: outputs } }
+
+      next = {
+        ...next,
+        messages: appendTechSystemMessage(
+          next.messages,
+          options,
+          `Entity ${entityKey}.${operation}${
+            operation === 'list' ? ` → ${(outputs.count as number) ?? 0} rows` : ''
+          }`,
+        ),
+      }
     } else {
-      throw new Error(`Unknown entity operation "${operation}"`)
-    }
+      const { assertEntityLinkAllows, entityOpToLinkOp } = await import('@/features/entities/entityApi')
+      await assertEntityLinkAllows(entityId, chatbotId, entityOpToLinkOp(operation))
 
-    const value =
-      operation === 'list'
-        ? outputs.records
-        : operation === 'get' || operation === 'create' || operation === 'update'
-          ? outputs.record
-          : outputs
+      const { supabase } = await import('@/shared/lib/supabase')
+      const { data: entity, error: entityError } = await supabase
+        .from('chatbot_entities')
+        .select('*')
+        .eq('id', entityId)
+        .maybeSingle()
+      if (entityError || !entity) throw new Error(entityError?.message ?? 'Entity not found')
 
-    if (outputKey) next = applyAssignment(next, outputKey, value, node.key, outputs)
-    else next = { ...next, stepOutputs: { ...next.stepOutputs, [node.key]: outputs } }
+      const {
+        createDynamicRecord,
+        deleteDynamicRecord,
+        listEntityRecords,
+        toRecordPayload,
+        updateDynamicRecord,
+      } = await import('@/features/entities/entityApi')
 
-    next = {
-      ...next,
-      messages: [
-        ...next.messages,
-        msg(
-          'system',
+      let resolvedFields: Record<string, unknown> = incomingFields
+      if (operation === 'create' || operation === 'update') {
+        const { data: attrs, error: attrsError } = await supabase
+          .from('entity_attributes')
+          .select('*')
+          .eq('entity_id', entityId)
+          .order('sort_order')
+        if (attrsError) throw new Error(attrsError.message)
+        const { ensurePrimaryKeyValue } = await import('@/features/entities/entityPrimaryKey')
+        const { validateAndCoerceEntityValues } = await import('@/features/entities/entityValueValidation')
+        const fieldsForValidate =
+          operation === 'create' ? ensurePrimaryKeyValue(incomingFields) : incomingFields
+        resolvedFields = validateAndCoerceEntityValues(fieldsForValidate, attrs ?? [], {
+          partial: operation === 'update',
+        })
+      }
+
+      processed = {
+        entityKey: entity.key,
+        entityKind: entity.kind,
+        recordId: recordId || undefined,
+        filters: resolvedFilters,
+        filterEquals,
+        fieldMap: Object.keys(fieldMap).length ? fieldMap : undefined,
+        resolvedFields: Object.keys(resolvedFields).length ? resolvedFields : undefined,
+        invokeMs: Math.round(performance.now() - entityOpStart),
+      }
+
+      if (entity.kind === 'static' && (operation === 'create' || operation === 'update' || operation === 'delete')) {
+        throw new Error('Static entities are read-only in flows (use List/Get)')
+      }
+
+      if (operation === 'list' || operation === 'get') {
+        let rows = await listEntityRecords(entity)
+        rows = queryEntityRecords(rows, filters, resolveEntityValue)
+        if (operation === 'get') {
+          if (recordId) rows = rows.filter((r) => r.id === recordId)
+          const one = rows[0] ?? null
+          outputs = { record: one ? toRecordPayload(one) : null, found: !!one }
+        } else {
+          const list = rows.map(toRecordPayload)
+          outputs = { records: list, count: list.length }
+        }
+      } else if (operation === 'create') {
+        const created = await createDynamicRecord(entityId, resolvedFields)
+        const values =
+          created.values && typeof created.values === 'object' && !Array.isArray(created.values)
+            ? (created.values as Record<string, unknown>)
+            : {}
+        outputs = { record: { id: created.id, ...values }, id: created.id }
+      } else if (operation === 'update') {
+        if (!recordId) throw new Error('Record id is required for update')
+        const updated = await updateDynamicRecord(recordId, resolvedFields, {
+          entityId,
+          merge: true,
+        })
+        const values =
+          updated.values && typeof updated.values === 'object' && !Array.isArray(updated.values)
+            ? (updated.values as Record<string, unknown>)
+            : {}
+        outputs = { record: { id: updated.id, ...values }, id: updated.id }
+      } else if (operation === 'delete') {
+        if (!recordId) throw new Error('Record id is required for delete')
+        await deleteDynamicRecord(recordId)
+        outputs = { deleted: true, id: recordId }
+      } else {
+        throw new Error(`Unknown entity operation "${operation}"`)
+      }
+
+      const value =
+        operation === 'list'
+          ? outputs.records
+          : operation === 'get' || operation === 'create' || operation === 'update'
+            ? outputs.record
+            : outputs
+
+      if (outputKey) next = applyAssignment(next, outputKey, value, node.key, outputs)
+      else next = { ...next, stepOutputs: { ...next.stepOutputs, [node.key]: outputs } }
+
+      next = {
+        ...next,
+        messages: appendTechSystemMessage(
+          next.messages,
+          options,
           `Entity ${entity.key}.${operation}${
             operation === 'list' ? ` → ${(outputs.count as number) ?? 0} rows` : ''
           }`,
         ),
-      ],
+      }
     }
   } catch (err) {
     runStatus = 'Failed'
@@ -2070,7 +3151,7 @@ export async function runEntityStep(
     outputs = { ok: false, error: message }
     next = {
       ...next,
-      messages: [...next.messages, msg('system', `Entity error: ${message}`)],
+      messages: appendTechSystemMessage(next.messages, options, `Entity error: ${message}`),
       stepOutputs: { ...next.stepOutputs, [node.key]: outputs },
     }
   }

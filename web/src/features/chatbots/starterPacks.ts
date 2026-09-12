@@ -1,6 +1,7 @@
 import type { FlowTemplateExport } from '@/features/designer/utils/flowTransfer'
 import type { PackFlowBundle } from '@/features/chatbots/starterPackBuilder'
 import { createPackBuilder, emptyPackBundle } from '@/features/chatbots/starterPackBuilder'
+import { starterTemplateContent } from '@/features/templates/templateModel'
 
 export type ChatbotStarterPackId =
   | 'blank'
@@ -11,6 +12,12 @@ export type ChatbotStarterPackId =
   | 'shop'
   | 'feedback'
   | 'contact_form'
+  | 'faq_menu'
+  | 'agent_handoff'
+  | 'event_rsvp'
+  | 'job_application'
+  | 'it_helpdesk'
+  | 'product_onboarding'
 
 export type ChatbotStarterPack = {
   id: ChatbotStarterPackId
@@ -111,6 +118,13 @@ export function commonOrgTemplates(_brand = 'Your organisation'): FlowTemplateEx
         title: 'Terms of use',
         body: 'By continuing you agree we may store this conversation to help with your request. We do not sell your personal data. Edit this template to match your policy.',
       },
+    },
+    {
+      key: 'agreement',
+      name: 'Service agreement',
+      kind: 'agreement',
+      description: 'Adobe Sign–style PDF: parties, terms, signature, and date signed.',
+      content: starterTemplateContent('agreement'),
     },
     {
       key: 'followup_email',
@@ -332,6 +346,61 @@ function contactsEntity(id: string): PackFlowBundle['entityDefs'][number] {
       { key: 'phone', label: 'Phone', value_type: 'string', required: false, sort_order: 2 },
       { key: 'message', label: 'Message', value_type: 'string', required: false, sort_order: 3 },
       { key: 'payload', label: 'Form payload', value_type: 'object', required: false, sort_order: 4 },
+    ],
+  }
+}
+
+function rsvpsEntity(id: string): PackFlowBundle['entityDefs'][number] {
+  return {
+    id,
+    key: 'rsvps',
+    name: 'RSVPs',
+    description: 'Event RSVP responses.',
+    kind: 'dynamic',
+    attributes: [
+      { key: 'id', label: 'Id', value_type: 'string', required: true, is_identifier: true, is_unique: true, sort_order: -1 },
+      { key: 'name', label: 'Name', value_type: 'string', required: true, sort_order: 0 },
+      { key: 'email', label: 'Email', value_type: 'string', required: true, sort_order: 1 },
+      { key: 'guests', label: 'Guests', value_type: 'number', required: false, sort_order: 2 },
+      { key: 'attendance', label: 'Attendance', value_type: 'string', required: true, sort_order: 3 },
+      { key: 'notes', label: 'Notes', value_type: 'string', required: false, sort_order: 4 },
+    ],
+  }
+}
+
+function applicationsEntity(id: string): PackFlowBundle['entityDefs'][number] {
+  return {
+    id,
+    key: 'applications',
+    name: 'Applications',
+    description: 'Job applications from the chatbot.',
+    kind: 'dynamic',
+    attributes: [
+      { key: 'id', label: 'Id', value_type: 'string', required: true, is_identifier: true, is_unique: true, sort_order: -1 },
+      { key: 'name', label: 'Name', value_type: 'string', required: true, sort_order: 0 },
+      { key: 'email', label: 'Email', value_type: 'string', required: true, sort_order: 1 },
+      { key: 'phone', label: 'Phone', value_type: 'string', required: false, sort_order: 2 },
+      { key: 'role', label: 'Role', value_type: 'string', required: true, sort_order: 3 },
+      { key: 'experience', label: 'Experience', value_type: 'string', required: false, sort_order: 4 },
+      { key: 'cover_note', label: 'Cover note', value_type: 'string', required: false, sort_order: 5 },
+    ],
+  }
+}
+
+function ticketsEntity(id: string): PackFlowBundle['entityDefs'][number] {
+  return {
+    id,
+    key: 'tickets',
+    name: 'Tickets',
+    description: 'IT / helpdesk tickets from chat.',
+    kind: 'dynamic',
+    attributes: [
+      { key: 'id', label: 'Id', value_type: 'string', required: true, is_identifier: true, is_unique: true, sort_order: -1 },
+      { key: 'name', label: 'Name', value_type: 'string', required: true, sort_order: 0 },
+      { key: 'email', label: 'Email', value_type: 'string', required: true, sort_order: 1 },
+      { key: 'category', label: 'Category', value_type: 'string', required: true, sort_order: 2 },
+      { key: 'priority', label: 'Priority', value_type: 'string', required: false, sort_order: 3 },
+      { key: 'summary', label: 'Summary', value_type: 'string', required: true, sort_order: 4 },
     ],
   }
 }
@@ -742,6 +811,412 @@ function buildContactForm(): PackFlowBundle {
   }
 }
 
+function buildFaqMenu(): PackFlowBundle {
+  const b = createPackBuilder()
+  const caseHours = 'case_hours'
+  const caseFaq = 'case_faq'
+  const caseContact = 'case_contact'
+  b.message(
+    'welcome',
+    'Welcome',
+    '{{templates.welcome_msg.text}}\n\n{{templates.main_menu.text}}',
+    { templateBindings: { welcome_msg: { name: '' } } },
+  )
+  b.question('ask_topic', 'Topic', 'Pick a topic to continue.', 'choice', {
+    output: 'topic',
+    config: { choices: ['Hours', 'FAQ', 'Talk to us'] },
+  })
+  b.switchStep('sw_topic', 'Route topic', '{{vars.topic}}', [
+    { id: caseHours, match: 'Hours', label: 'Hours' },
+    { id: caseFaq, match: 'FAQ', label: 'FAQ' },
+    { id: caseContact, match: 'Talk to us', label: 'Contact' },
+  ])
+  b.message('msg_hours', 'Hours', '{{templates.hours_main.text}}')
+  b.message('msg_faq', 'FAQ', '{{templates.help_faq.text}}', {
+    templateBindings: { help_faq: { brand: '{{vars.brand_name}}' } },
+  })
+  b.question('ask_name', 'Name', 'What is your name?', 'name', { output: 'visitor_name' })
+  b.question('ask_email', 'Email', 'What email should we use?', 'email', { output: 'email' })
+  b.question('ask_message', 'Message', 'How can we help?', 'long_text', { output: 'message' })
+  b.message(
+    'thanks_contact',
+    'Thanks',
+    'Thanks {{vars.visitor_name}} — we will follow up at {{vars.email}}.',
+  )
+  b.message('wrap', 'Anything else', 'Need something else? Restart the chat or pick another topic next time.')
+  b.end('end', 'End', 'FAQ navigator complete.')
+
+  b.chain(['welcome', 'ask_topic', 'sw_topic'])
+  b.link('sw_topic', 'msg_hours', caseHours, 'Hours')
+  b.link('sw_topic', 'msg_faq', caseFaq, 'FAQ')
+  b.link('sw_topic', 'ask_name', caseContact, 'Contact')
+  b.link('sw_topic', 'wrap', 'default', 'Default')
+  b.link('msg_hours', 'wrap')
+  b.link('msg_faq', 'wrap')
+  b.chain(['ask_name', 'ask_email', 'ask_message', 'thanks_contact', 'wrap'])
+  b.link('wrap', 'end')
+
+  return {
+    ...emptyPackBundle(),
+    nodes: b.nodes,
+    edges: b.edges,
+    globals: brandGlobals(),
+    templates: commonOrgTemplates(),
+  }
+}
+
+function buildAgentHandoff(): PackFlowBundle {
+  const b = createPackBuilder()
+  b.message(
+    'welcome',
+    'Welcome',
+    '{{templates.welcome_msg.text}}\n\n{{templates.terms_legal.text}}\n\nI can collect a few details, then connect you with a teammate.',
+    { templateBindings: { welcome_msg: { name: '' } } },
+  )
+  b.question('ask_name', 'Name', 'What is your name?', 'name', { output: 'visitor_name' })
+  b.question('ask_email', 'Email', 'What is the best email to reach you?', 'email', { output: 'email' })
+  b.question('ask_reason', 'Reason', 'What do you need help with?', 'choice', {
+    output: 'reason',
+    config: { choices: ['Billing', 'Technical issue', 'Account access', 'Other'] },
+  })
+  b.question('ask_details', 'Details', 'Add any details that will help the agent.', 'long_text', {
+    output: 'details',
+    required: false,
+  })
+  b.message(
+    'bridging',
+    'Bridging',
+    'Thanks {{vars.visitor_name}}. Connecting you with an agent about “{{vars.reason}}”…',
+  )
+  b.handoff(
+    'handoff',
+    'Handoff',
+    'An agent will join shortly. Summary: {{vars.reason}} — {{vars.details}}',
+  )
+  b.end('end', 'End', 'Handoff complete. Configure Inbox queues under Admin if needed.')
+  b.chain(['welcome', 'ask_name', 'ask_email', 'ask_reason', 'ask_details', 'bridging', 'handoff', 'end'])
+  return {
+    ...emptyPackBundle(),
+    nodes: b.nodes,
+    edges: b.edges,
+    globals: brandGlobals(),
+    templates: commonOrgTemplates(),
+  }
+}
+
+function buildEventRsvp(): PackFlowBundle {
+  const entityId = crypto.randomUUID()
+  const entity = rsvpsEntity(entityId)
+  const caseYes = 'case_yes'
+  const caseNo = 'case_no'
+  const caseMaybe = 'case_maybe'
+  const b = createPackBuilder()
+  b.message(
+    'welcome',
+    'Welcome',
+    '{{templates.welcome_msg.text}}\n\nYou are invited — tell us if you can make it.',
+    { templateBindings: { welcome_msg: { name: '' } } },
+  )
+  b.question('ask_name', 'Name', 'What is your name?', 'name', { output: 'visitor_name' })
+  b.question('ask_email', 'Email', 'What is your email?', 'email', { output: 'email' })
+  b.question('ask_attendance', 'Attendance', 'Will you attend?', 'choice', {
+    output: 'attendance',
+    config: { choices: ['Yes', 'No', 'Maybe'] },
+  })
+  b.question('ask_guests', 'Guests', 'How many guests (including you)?', 'number', {
+    output: 'guests',
+    required: false,
+    config: { min: 1, max: 10 },
+  })
+  b.question('ask_notes', 'Notes', 'Dietary needs or other notes (optional)', 'long_text', {
+    output: 'notes',
+    required: false,
+  })
+  b.entity('save_rsvp', 'Save RSVP', {
+    entityId,
+    operation: 'create',
+    outputVariable: 'rsvp',
+    fieldMap: {
+      name: '{{vars.visitor_name}}',
+      email: '{{vars.email}}',
+      guests: '{{vars.guests}}',
+      attendance: '{{vars.attendance}}',
+      notes: '{{vars.notes}}',
+    },
+  })
+  b.switchStep('sw_attendance', 'Route RSVP', '{{vars.attendance}}', [
+    { id: caseYes, match: 'Yes', label: 'Attending' },
+    { id: caseNo, match: 'No', label: 'Declined' },
+    { id: caseMaybe, match: 'Maybe', label: 'Maybe' },
+  ])
+  b.message(
+    'msg_yes',
+    'Confirmed',
+    'Wonderful, {{vars.visitor_name}} — we have you down for {{coalesce(vars.guests, "1")}} guest(s). See you there!',
+  )
+  b.message('msg_no', 'Declined', 'Thanks for letting us know, {{vars.visitor_name}}. You will be missed.')
+  b.message(
+    'msg_maybe',
+    'Maybe',
+    'Thanks {{vars.visitor_name}} — we will hold a tentative spot and check in closer to the date.',
+  )
+  b.end('end', 'End', 'RSVP saved under Data → RSVPs.')
+
+  b.chain(['welcome', 'ask_name', 'ask_email', 'ask_attendance', 'ask_guests', 'ask_notes', 'save_rsvp', 'sw_attendance'])
+  b.link('sw_attendance', 'msg_yes', caseYes, 'Yes')
+  b.link('sw_attendance', 'msg_no', caseNo, 'No')
+  b.link('sw_attendance', 'msg_maybe', caseMaybe, 'Maybe')
+  b.link('sw_attendance', 'msg_maybe', 'default', 'Default')
+  b.link('msg_yes', 'end')
+  b.link('msg_no', 'end')
+  b.link('msg_maybe', 'end')
+
+  return {
+    ...emptyPackBundle(),
+    nodes: b.nodes,
+    edges: b.edges,
+    globals: brandGlobals(),
+    templates: commonOrgTemplates(),
+    entityDefs: [entity],
+    entities: [{ id: entityId, key: entity.key }],
+  }
+}
+
+function buildJobApplication(): PackFlowBundle {
+  const entityId = crypto.randomUUID()
+  const entity = applicationsEntity(entityId)
+  const b = createPackBuilder()
+  b.message(
+    'welcome',
+    'Welcome',
+    '{{templates.welcome_msg.text}}\n\n{{templates.terms_legal.text}}\n\nApply for an open role in a few steps.',
+    { templateBindings: { welcome_msg: { name: '' } } },
+  )
+  b.question('ask_name', 'Name', 'What is your full name?', 'name', { output: 'visitor_name' })
+  b.question('ask_email', 'Email', 'What is your email?', 'email', { output: 'email' })
+  b.question('ask_phone', 'Phone', 'Phone number (optional)', 'phone', {
+    output: 'phone',
+    required: false,
+  })
+  b.question('ask_role', 'Role', 'Which role are you applying for?', 'choice', {
+    output: 'role',
+    config: {
+      choices: ['Customer success', 'Engineering', 'Sales', 'Operations', 'Other'],
+    },
+  })
+  b.question('ask_experience', 'Experience', 'Years of relevant experience', 'choice', {
+    output: 'experience',
+    config: { choices: ['0–1', '2–4', '5–8', '9+'] },
+  })
+  b.question('ask_cover', 'Cover note', 'Why are you a great fit? (short note)', 'long_text', {
+    output: 'cover_note',
+    required: false,
+  })
+  b.entity('save_app', 'Save application', {
+    entityId,
+    operation: 'create',
+    outputVariable: 'application',
+    fieldMap: {
+      name: '{{vars.visitor_name}}',
+      email: '{{vars.email}}',
+      phone: '{{vars.phone}}',
+      role: '{{vars.role}}',
+      experience: '{{vars.experience}}',
+      cover_note: '{{vars.cover_note}}',
+    },
+  })
+  b.message(
+    'thanks',
+    'Thanks',
+    'Thanks {{vars.visitor_name}} — we received your application for {{vars.role}} and will reply at {{vars.email}}.',
+  )
+  b.end('end', 'End', 'Application saved under Data → Applications.')
+  b.chain([
+    'welcome',
+    'ask_name',
+    'ask_email',
+    'ask_phone',
+    'ask_role',
+    'ask_experience',
+    'ask_cover',
+    'save_app',
+    'thanks',
+    'end',
+  ])
+  return {
+    ...emptyPackBundle(),
+    nodes: b.nodes,
+    edges: b.edges,
+    globals: brandGlobals(),
+    templates: commonOrgTemplates(),
+    entityDefs: [entity],
+    entities: [{ id: entityId, key: entity.key }],
+  }
+}
+
+function buildItHelpdesk(): PackFlowBundle {
+  const entityId = crypto.randomUUID()
+  const entity = ticketsEntity(entityId)
+  const caseUrgent = 'case_urgent'
+  const caseNormal = 'case_normal'
+  const caseLow = 'case_low'
+  const b = createPackBuilder()
+  b.message(
+    'welcome',
+    'Welcome',
+    '{{templates.welcome_msg.text}}\n\nLog an IT request and we will triage it.',
+    { templateBindings: { welcome_msg: { name: '' } } },
+  )
+  b.question('ask_name', 'Name', 'Your name', 'name', { output: 'visitor_name' })
+  b.question('ask_email', 'Email', 'Work email', 'email', { output: 'email' })
+  b.question('ask_category', 'Category', 'What kind of issue is this?', 'choice', {
+    output: 'category',
+    config: {
+      choices: ['Password / access', 'Hardware', 'Software', 'Network', 'Other'],
+    },
+  })
+  b.question('ask_priority', 'Priority', 'How urgent is this?', 'choice', {
+    output: 'priority',
+    config: { choices: ['Urgent', 'Normal', 'Low'] },
+  })
+  b.question('ask_summary', 'Summary', 'Describe the issue', 'long_text', { output: 'summary' })
+  b.entity('save_ticket', 'Save ticket', {
+    entityId,
+    operation: 'create',
+    outputVariable: 'ticket',
+    fieldMap: {
+      name: '{{vars.visitor_name}}',
+      email: '{{vars.email}}',
+      category: '{{vars.category}}',
+      priority: '{{vars.priority}}',
+      summary: '{{vars.summary}}',
+    },
+  })
+  b.switchStep('sw_priority', 'Route priority', '{{vars.priority}}', [
+    { id: caseUrgent, match: 'Urgent', label: 'Urgent' },
+    { id: caseNormal, match: 'Normal', label: 'Normal' },
+    { id: caseLow, match: 'Low', label: 'Low' },
+  ])
+  b.message(
+    'msg_urgent',
+    'Urgent',
+    'Ticket {{vars.ticket.id}} logged as urgent. Connecting you with support…',
+  )
+  b.handoff('handoff', 'Handoff', 'Urgent IT ticket: {{vars.category}} — {{vars.summary}}')
+  b.message(
+    'msg_normal',
+    'Normal',
+    'Ticket {{vars.ticket.id}} created. Our team will follow up at {{vars.email}} within one business day.',
+  )
+  b.message(
+    'msg_low',
+    'Low',
+    'Ticket {{vars.ticket.id}} queued. We will get to it when higher-priority work allows.',
+  )
+  b.end('end', 'End', 'Ticket saved under Data → Tickets.')
+
+  b.chain([
+    'welcome',
+    'ask_name',
+    'ask_email',
+    'ask_category',
+    'ask_priority',
+    'ask_summary',
+    'save_ticket',
+    'sw_priority',
+  ])
+  b.link('sw_priority', 'msg_urgent', caseUrgent, 'Urgent')
+  b.link('sw_priority', 'msg_normal', caseNormal, 'Normal')
+  b.link('sw_priority', 'msg_low', caseLow, 'Low')
+  b.link('sw_priority', 'msg_normal', 'default', 'Default')
+  b.link('msg_urgent', 'handoff')
+  b.link('handoff', 'end')
+  b.link('msg_normal', 'end')
+  b.link('msg_low', 'end')
+
+  return {
+    ...emptyPackBundle(),
+    nodes: b.nodes,
+    edges: b.edges,
+    globals: brandGlobals(),
+    templates: commonOrgTemplates(),
+    entityDefs: [entity],
+    entities: [{ id: entityId, key: entity.key }],
+  }
+}
+
+function buildProductOnboarding(): PackFlowBundle {
+  const caseSolo = 'case_solo'
+  const caseTeam = 'case_team'
+  const caseEnterprise = 'case_enterprise'
+  const b = createPackBuilder()
+  b.message(
+    'welcome',
+    'Welcome',
+    '{{templates.welcome_msg.text}}\n\nA quick tour so we can tailor {{vars.brand_name}} for you.',
+    { templateBindings: { welcome_msg: { name: '' } } },
+  )
+  b.question('ask_name', 'Name', 'What should we call you?', 'name', { output: 'visitor_name' })
+  b.question('ask_role', 'Role', 'What best describes your role?', 'choice', {
+    output: 'role',
+    config: { choices: ['Founder', 'Marketer', 'Support lead', 'Developer', 'Other'] },
+  })
+  b.question('ask_goal', 'Goal', 'What do you want to achieve first?', 'choice', {
+    output: 'goal',
+    config: {
+      choices: ['Answer FAQs', 'Capture leads', 'Take payments', 'Hand off to agents'],
+    },
+  })
+  b.question('ask_size', 'Team size', 'How big is your team?', 'choice', {
+    output: 'team_size',
+    config: { choices: ['Just me', '2–10', '11–50', '51+'] },
+  })
+  b.switchStep('sw_size', 'Route size', '{{vars.team_size}}', [
+    { id: caseSolo, match: 'Just me', label: 'Solo' },
+    { id: caseTeam, match: '2–10', label: 'Small team' },
+    { id: caseEnterprise, match: '51+', label: 'Larger org' },
+  ])
+  b.message(
+    'msg_solo',
+    'Solo tip',
+    'Great start, {{vars.visitor_name}}. Try the Essentials templates and publish a simple FAQ first.',
+  )
+  b.message(
+    'msg_team',
+    'Team tip',
+    'Nice — invite editors on Organisation → Users, then share a staging link before go-live.',
+  )
+  b.message(
+    'msg_enterprise',
+    'Org tip',
+    'For larger teams, set up SSO, queues, and compliance under Admin once you publish.',
+  )
+  b.message(
+    'next',
+    'Next steps',
+    'You said your first goal is “{{vars.goal}}”. Open Design to customise the flow, then Test before publishing.',
+  )
+  b.end('end', 'End', 'Onboarding complete — keep editing on Design and Templates.')
+
+  b.chain(['welcome', 'ask_name', 'ask_role', 'ask_goal', 'ask_size', 'sw_size'])
+  b.link('sw_size', 'msg_solo', caseSolo, 'Solo')
+  b.link('sw_size', 'msg_team', caseTeam, 'Team')
+  b.link('sw_size', 'msg_enterprise', caseEnterprise, 'Enterprise')
+  b.link('sw_size', 'msg_team', 'default', 'Default')
+  b.link('msg_solo', 'next')
+  b.link('msg_team', 'next')
+  b.link('msg_enterprise', 'next')
+  b.link('next', 'end')
+
+  return {
+    ...emptyPackBundle(),
+    nodes: b.nodes,
+    edges: b.edges,
+    globals: brandGlobals(),
+    templates: commonOrgTemplates(),
+  }
+}
+
 export const CHATBOT_STARTER_PACKS: ChatbotStarterPack[] = [
   {
     id: 'blank',
@@ -815,6 +1290,60 @@ export const CHATBOT_STARTER_PACKS: ChatbotStarterPack[] = [
     suggestedName: 'Contact us',
     suggestedDescription: 'Simple contact form with name, email, and message.',
     build: buildContactForm,
+  },
+  {
+    id: 'faq_menu',
+    name: 'FAQ navigator',
+    summary: 'Menu topics routed with a Switch step to hours, FAQ, or contact.',
+    includes: ['Choice menu', 'Switch routing', 'Hours & FAQ templates'],
+    suggestedName: 'FAQ assistant',
+    suggestedDescription: 'Guide visitors through hours, FAQ, or a short contact path.',
+    build: buildFaqMenu,
+  },
+  {
+    id: 'agent_handoff',
+    name: 'Agent handoff',
+    summary: 'Collect context, then escalate to a live agent in Inbox.',
+    includes: ['Triage questions', 'Handoff step', 'Common org templates'],
+    suggestedName: 'Live support',
+    suggestedDescription: 'Qualify the visitor, then hand off to your agent queue.',
+    build: buildAgentHandoff,
+  },
+  {
+    id: 'event_rsvp',
+    name: 'Event RSVP',
+    summary: 'Collect attendance, guests, and notes into an RSVPs entity.',
+    includes: ['RSVP questions', 'Switch on Yes/No/Maybe', 'RSVPs entity'],
+    suggestedName: 'Event RSVP',
+    suggestedDescription: 'Let guests confirm attendance for your next event.',
+    build: buildEventRsvp,
+  },
+  {
+    id: 'job_application',
+    name: 'Job application',
+    summary: 'Capture role, experience, and a cover note into Applications.',
+    includes: ['Career questions', 'Applications entity', 'Legal template'],
+    suggestedName: 'Careers chatbot',
+    suggestedDescription: 'Accept job applications with structured screening questions.',
+    build: buildJobApplication,
+  },
+  {
+    id: 'it_helpdesk',
+    name: 'IT helpdesk',
+    summary: 'Log tickets by category and priority; urgent cases hand off.',
+    includes: ['Ticket form', 'Priority switch', 'Handoff', 'Tickets entity'],
+    suggestedName: 'IT helpdesk',
+    suggestedDescription: 'Triage IT issues and escalate urgent tickets to agents.',
+    build: buildItHelpdesk,
+  },
+  {
+    id: 'product_onboarding',
+    name: 'Product onboarding',
+    summary: 'A short guided tour that branches tips by team size.',
+    includes: ['Onboarding questions', 'Switch tips', 'Brand globals'],
+    suggestedName: 'Getting started',
+    suggestedDescription: 'Welcome new users and point them to the right next step.',
+    build: buildProductOnboarding,
   },
 ]
 

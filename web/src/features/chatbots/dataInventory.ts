@@ -1,6 +1,6 @@
 import type { ConnectionWithConfig, FlowNodeType } from '@/shared/types/database'
 import {
-  getStepOutputVariable,
+  getStepOutputVariables,
   nodeTypeLabel,
   type DesignerNode,
 } from '@/features/designer/model/flowSchema'
@@ -66,8 +66,8 @@ export function collectChatbotDataInventory(args: {
   const stepRefs: DataInventoryEntry[] = []
 
   for (const node of nodes) {
-    const out = getStepOutputVariable(node)
-    if (out) {
+    const outs = getStepOutputVariables(node)
+    for (const out of outs) {
       const kindLabel =
         node.type === 'question'
           ? 'Question answer'
@@ -75,7 +75,13 @@ export function collectChatbotDataInventory(args: {
             ? 'HTTP response'
             : node.type === 'operation'
               ? 'Operation result'
-              : 'Set variable'
+              : node.type === 'sign_in'
+                ? 'Sign-in claim'
+                : node.type === 'entity'
+                  ? 'Entity result'
+                  : node.type === 'database'
+                    ? 'Database result'
+                    : 'Set variable'
       stepVars.push({
         id: `step-var:${node.id}:${out}`,
         kind: 'step_var',

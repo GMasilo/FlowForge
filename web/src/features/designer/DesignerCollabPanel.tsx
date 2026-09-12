@@ -16,6 +16,7 @@ import {
   type PeerStepLock,
   type PresenceEntry,
 } from '@/features/designer/collab/stepLocks'
+import { DesignerAsidePanel } from '@/features/designer/DesignerAsidePanel'
 
 type OrgMemberOption = {
   kind: 'member' | 'invite'
@@ -336,16 +337,23 @@ export function DesignerCollabPanel({
   }
 
   return (
-    <aside
-      className={cn(
-        'flex h-fit w-full flex-col gap-3 rounded-xl border border-[var(--color-border)]/70 bg-[var(--color-surface)]/80 p-3 lg:w-72',
-        'lg:sticky lg:top-[var(--ff-designer-aside-top,5rem)] lg:max-h-[calc(100vh-var(--ff-designer-aside-top,7.5rem)-1.5rem)] lg:overflow-y-auto',
-      )}
-    >      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]">
-          Collaborators
-        </p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
+    <DesignerAsidePanel
+      panelId="collab"
+      title="Collaborators"
+      subtitle={peers.length ? `${peers.length} here now` : 'Only you here'}
+      defaultOpen={false}
+      widthClass="lg:w-72"
+      badge={
+        peers.length > 1 ? (
+          <span className="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-800">
+            {peers.length}
+          </span>
+        ) : null
+      }
+    >
+      <div className="flex flex-col gap-4">
+      <div>
+        <div className="flex flex-wrap gap-1.5">
           {peers.length ? (
             peers.map((p) => (
               <span
@@ -359,7 +367,7 @@ export function DesignerCollabPanel({
               </span>
             ))
           ) : (
-            <span className="text-xs text-[var(--color-ink-muted)]">Only you here</span>
+            <span className="text-xs text-[var(--color-ink-muted)]">No one else is editing right now.</span>
           )}
         </div>
         {Object.keys(peerLocks).length ? (
@@ -565,6 +573,7 @@ export function DesignerCollabPanel({
         </ul>
       </div>
       <p className="text-[10px] text-[var(--color-ink-muted)]">Org {instanceId.slice(0, 8)}… · Step locks · merge saves</p>
-    </aside>
+      </div>
+    </DesignerAsidePanel>
   )
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
@@ -11,12 +11,21 @@ import {
 import { canAgentOperate, type ConversationSession, type ConversationTag } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import { Card } from '@/shared/ui/card'
+import { PAGE_HELP } from '@/shared/help/pageHelp'
 import { PageHeader } from '@/shared/ui/page-header'
 import { Badge } from '@/shared/ui/badge'
 import { Select } from '@/shared/ui/select'
 import { Input } from '@/shared/ui/input'
 import { Button } from '@/shared/ui/button'
+import {
+  PaginationBar,
+  clampPage,
+  pageCountFor,
+  slicePage,
+} from '@/shared/ui/list-controls'
 import { cn } from '@/shared/lib/utils'
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const
 
 type SessionRow = ConversationSession & { chatbots: { name: string } | null }
 
@@ -35,6 +44,8 @@ export function ConversationsPage() {
   const [query, setQuery] = useState('')
   const [tagName, setTagName] = useState('')
   const [tagFilter, setTagFilter] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(25)
 
   const sessions = useQuery({
     queryKey: ['conversation-sessions', instance.id],
@@ -126,6 +137,22 @@ export function ConversationsPage() {
     })
   }, [sessions.data, chatbotId, status, environment, query, tagFilter, assignments.data])
 
+  useEffect(() => {
+    setPage(1)
+  }, [chatbotId, status, environment, query, tagFilter])
+
+  const pageCount = pageCountFor(rows.length, pageSize)
+  const safePage = clampPage(page, pageCount)
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage)
+  }, [page, safePage])
+
+  const pageRows = useMemo(
+    () => slicePage(rows, safePage, pageSize),
+    [rows, safePage, pageSize],
+  )
+
   function exportCsv() {
     const header = ['id', 'started_at', 'chatbot', 'status', 'environment', 'publish_version', 'visitor_key', 'error_summary']
     const lines = [header.join(',')]
@@ -164,6 +191,7 @@ export function ConversationsPage() {
             ? `Escalated and assigned sessions for agents on ${instance.name}.`
             : `Search, filter, and export sessions for ${instance.name}.`
         }
+        help={PAGE_HELP.conversations}
         actions={
           <Button type="button" variant="secondary" size="sm" disabled={!rows.length} onClick={exportCsv}>
             <Download className="h-4 w-4" />
@@ -261,7 +289,7 @@ export function ConversationsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]/60">
-                {rows.map((s) => {
+                {pageRows.map((s) => {
                   const shown = displaySessionStatus(s)
                   return (
                     <tr key={s.id} className="hover:bg-[var(--color-accent-soft)]/40">
@@ -310,12 +338,29 @@ export function ConversationsPage() {
           </p>
         )}
       </Card>
-      {sessions.data?.length ? (
-        <div className="flex gap-2">
-          <Badge>
-            Showing {rows.length} of latest {sessions.data.length}
-          </Badge>
-        </div>
+
+      {rows.length ? (
+        <PaginationBar
+          page={safePage}
+          pageSize={pageSize}
+          total={rows.length}
+          label="conversations"
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          onPageChange={setPage}
+          onPageSizeChange={(next) => {
+            setPageSize(next as (typeof PAGE_SIZE_OPTIONS)[number])
+            setPage(1)
+          }}
+        />
+      ) : null}
+      {sessions.data?.length && rows.length < sessions.data.length ? (
+        <p className="text-[11px] text-[var(--color-ink-muted)]">
+          Filtered from the latest {sessions.data.length} sessions.
+        </p>
+      ) : sessions.data && sessions.data.length >= 500 ? (
+        <p className="text-[11px] text-[var(--color-ink-muted)]">
+          Showing the latest 500 sessions. Narrow filters to find older ones.
+        </p>
       ) : null}
     </div>
   )

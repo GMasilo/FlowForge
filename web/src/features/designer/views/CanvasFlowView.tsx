@@ -23,6 +23,7 @@ import {
   Database,
   Flag,
   GitBranch,
+  Split,
   Globe,
   HelpCircle,
   ImageIcon,
@@ -37,15 +38,20 @@ import {
   Repeat,
   Variable,
   Lock,
+  MousePointerClick,
+  CornerDownRight,
+  Server,
 } from 'lucide-react'
 import type { FlowNodeType } from '@/shared/types/database'
 import { readMediaFiles } from '@/features/designer/model/chatbotMedia'
 import {
   hasCustomStepSettingsForNode,
   nodeTypeLabel,
+  readSetVariableAssignments,
   stepSettingsSummary,
   type DesignerNode,
 } from '@/features/designer/model/flowSchema'
+import { parseSwitchCases, switchCaseLabel } from '@/features/designer/model/switchStep'
 import { useDesignerStore } from '@/features/designer/store/designerStore'
 import {
   CANVAS_NODE_WIDTH,
@@ -57,11 +63,16 @@ const icons: Record<FlowNodeType, typeof MessageSquare> = {
   message: MessageSquare,
   question: HelpCircle,
   http: Globe,
+  database: Server,
   email: Mail,
   integration: Plug,
   handoff: Headphones,
   transfer: ArrowRightLeft,
+  sign_in: Lock,
+  button: MousePointerClick,
+  skip_to: CornerDownRight,
   condition: GitBranch,
+  switch: Split,
   loop: Repeat,
   set_variable: Variable,
   operation: Calculator,
@@ -73,11 +84,16 @@ const typeColor: Record<FlowNodeType, string> = {
   message: 'var(--color-node-message)',
   question: 'var(--color-node-question)',
   http: 'var(--color-node-http)',
+  database: 'var(--color-node-http)',
   email: 'var(--color-node-email)',
   integration: 'var(--color-node-http)',
   handoff: 'var(--color-node-question)',
   transfer: 'var(--color-node-http)',
+  sign_in: 'var(--color-node-question)',
+  button: 'var(--color-node-question)',
+  skip_to: 'var(--color-node-condition)',
   condition: 'var(--color-node-condition)',
+  switch: 'var(--color-node-switch)',
   loop: 'var(--color-node-loop)',
   set_variable: 'var(--color-node-set)',
   operation: 'var(--color-node-operation)',
@@ -100,6 +116,8 @@ function stepPreview(node: DesignerNode): string {
       return truncate(String(c.prompt ?? c.question ?? ''))
     case 'http':
       return truncate(`${String(c.method ?? 'GET')} ${String(c.url ?? c.path ?? '')}`)
+    case 'database':
+      return truncate(`${String(c.operation ?? 'query')} · ${String(c.sql ?? 'SQL…')}`)
     case 'email':
       return truncate(String(c.to ?? c.subject ?? ''))
     case 'integration':
@@ -108,12 +126,33 @@ function stepPreview(node: DesignerNode): string {
       return truncate(String(c.message ?? 'Escalate to agent'))
     case 'transfer':
       return truncate(String(c.startNodeKey ? `Start at ${c.startNodeKey}` : 'Transfer to chatbot'))
+    case 'sign_in':
+      return truncate(String(c.prompt ?? c.mode ?? 'Sign in'))
+    case 'button': {
+      const buttons = Array.isArray(c.buttons) ? c.buttons : []
+      const labels = buttons
+        .map((b) => (b && typeof b === 'object' && 'label' in b ? String((b as { label?: unknown }).label ?? '') : ''))
+        .filter(Boolean)
+      return truncate(labels.length ? labels.join(' · ') : String(c.text ?? 'Button'))
+    }
+    case 'skip_to': {
+      const target = String(c.targetNodeKey ?? '').trim()
+      return truncate(target ? `→ ${target}` : 'Skip to…')
+    }
     case 'condition':
       return truncate(String(c.expression ?? c.left ?? 'If…'))
+    case 'switch':
+      return truncate(String(c.value ?? 'Switch…'))
     case 'loop':
       return truncate(String(c.collection ?? 'Each item'))
-    case 'set_variable':
-      return truncate(`${String(c.name ?? c.variable ?? 'var')} = …`)
+    case 'set_variable': {
+      const keys = readSetVariableAssignments(c)
+        .map((row) => row.variableKey.trim())
+        .filter(Boolean)
+      if (!keys.length) return truncate('Set variables…')
+      if (keys.length === 1) return truncate(`${keys[0]} = …`)
+      return truncate(`${keys.slice(0, 3).join(', ')}${keys.length > 3 ? '…' : ''} = …`)
+    }
     case 'operation':
       return truncate(String(c.operation ?? c.name ?? ''))
     case 'entity':
@@ -135,8 +174,20 @@ function edgeMeta(sourceHandle: string | null | undefined, label: string | null 
   if (sourceHandle === 'false' || label === 'No') {
     return { label: 'No', stroke: '#e11d48', labelColor: '#be123c' }
   }
+  if (sourceHandle === 'success' || label === 'Success') {
+    return { label: 'Success', stroke: '#059669', labelColor: '#047857' }
+  }
+  if (sourceHandle === 'fail' || label === 'Fail') {
+    return { label: 'Fail', stroke: '#e11d48', labelColor: '#be123c' }
+  }
   if (sourceHandle === 'body' || label === 'Each') {
     return { label: 'Each', stroke: '#0d9488', labelColor: '#0f766e' }
+  }
+  if (sourceHandle === 'default' || label === 'Default') {
+    return { label: 'Default', stroke: '#64748b', labelColor: '#475569' }
+  }
+  if (sourceHandle?.startsWith('case_') || label === 'Case') {
+    return { label: label && label !== 'Then' ? label : 'Case', stroke: '#d97706', labelColor: '#b45309' }
   }
   return { label: label ?? undefined, stroke: '#94a3b8', labelColor: '#64748b' }
 }
@@ -146,13 +197,18 @@ function FlowStepNode({ data, selected }: NodeProps) {
   const Icon = icons[type] ?? MessageSquare
   const color = typeColor[type]
   const isCondition = type === 'condition'
+  const isSwitch = type === 'switch'
   const isLoop = type === 'loop'
+  const isSignIn = type === 'sign_in'
   const preview = typeof data.preview === 'string' ? data.preview : ''
   const customSettings = Boolean(data.customSettings)
   const settingsTitle = typeof data.settingsSummary === 'string' ? data.settingsSummary : ''
   const issueCount = typeof data.issueCount === 'number' ? data.issueCount : 0
   const hasMedia = Boolean(data.hasMedia)
   const lockedBy = typeof data.lockedBy === 'string' ? data.lockedBy : ''
+  const switchHandles = Array.isArray(data.switchHandles)
+    ? (data.switchHandles as Array<{ id: string; label: string }>)
+    : []
 
   return (
     <div
@@ -162,7 +218,7 @@ function FlowStepNode({ data, selected }: NodeProps) {
           ? 'border-[var(--color-accent)] shadow-[0_0_0_3px_color-mix(in_oklab,var(--color-accent)_28%,transparent)]'
           : 'border-slate-200/90 hover:border-slate-300',
         lockedBy && 'border-amber-300/90 bg-amber-50/40',
-        (isCondition || isLoop) && 'mb-1',
+        (isCondition || isSwitch || isLoop || isSignIn) && 'mb-1',
       )}
       style={{ width: CANVAS_NODE_WIDTH }}
     >
@@ -240,6 +296,43 @@ function FlowStepNode({ data, selected }: NodeProps) {
           <Handle
             type="source"
             id="false"
+            position={Position.Bottom}
+            style={{ left: '72%' }}
+            className="!h-2.5 !w-2.5 !border-2 !border-white !bg-rose-600"
+          />
+        </>
+      ) : isSwitch ? (
+        switchHandles.map((h, i) => {
+          const n = Math.max(1, switchHandles.length)
+          const left = `${((i + 1) / (n + 1)) * 100}%`
+          const isDefault = h.id === 'default'
+          return (
+            <Handle
+              key={h.id}
+              type="source"
+              id={h.id}
+              position={Position.Bottom}
+              style={{ left }}
+              title={h.label}
+              className={cn(
+                '!h-2.5 !w-2.5 !border-2 !border-white',
+                isDefault ? '!bg-slate-500' : '!bg-amber-600',
+              )}
+            />
+          )
+        })
+      ) : isSignIn ? (
+        <>
+          <Handle
+            type="source"
+            id="success"
+            position={Position.Bottom}
+            style={{ left: '28%' }}
+            className="!h-2.5 !w-2.5 !border-2 !border-white !bg-emerald-600"
+          />
+          <Handle
+            type="source"
+            id="fail"
             position={Position.Bottom}
             style={{ left: '72%' }}
             className="!h-2.5 !w-2.5 !border-2 !border-white !bg-rose-600"
@@ -357,6 +450,16 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
             issueCount: issueCounts.get(n.id) ?? 0,
             hasMedia: readMediaFiles(n.config).length > 0,
             lockedBy: lock?.name ?? '',
+            switchHandles:
+              n.type === 'switch'
+                ? [
+                    ...parseSwitchCases(n.config.cases).map((c, idx) => ({
+                      id: c.id,
+                      label: switchCaseLabel(c, idx),
+                    })),
+                    { id: 'default', label: 'Default' },
+                  ]
+                : undefined,
           },
         }
       }),
@@ -401,7 +504,11 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
             ? 'Yes'
             : connection.sourceHandle === 'false'
               ? 'No'
-              : connection.sourceHandle === 'body'
+              : connection.sourceHandle === 'success'
+                ? 'Success'
+                : connection.sourceHandle === 'fail'
+                  ? 'Fail'
+                  : connection.sourceHandle === 'body'
                 ? 'Each'
                 : null,
       })

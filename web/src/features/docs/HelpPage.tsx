@@ -22,11 +22,15 @@ export function HelpPage() {
       </header>
 
       <div className="mt-8 flex flex-wrap gap-3">
-        <Link to="/docs" className={cn(buttonVariants({ variant: 'secondary', size: 'md' }), 'gap-2')}>
-          <BookOpen className="h-4 w-4" />
-          Documentation
-        </Link>
-        <Link to="/faq" className={cn(buttonVariants({ variant: 'secondary', size: 'md' }), 'gap-2')}>
+          <Link to="/docs" className={cn(buttonVariants({ variant: 'secondary', size: 'md' }), 'gap-2')}>
+            <BookOpen className="h-4 w-4" />
+            Documentation
+          </Link>
+          <Link to="/docs/api" className={cn(buttonVariants({ variant: 'secondary', size: 'md' }), 'gap-2')}>
+            <BookOpen className="h-4 w-4" />
+            Platform API
+          </Link>
+          <Link to="/faq" className={cn(buttonVariants({ variant: 'secondary', size: 'md' }), 'gap-2')}>
           <CircleHelp className="h-4 w-4" />
           FAQ
         </Link>
@@ -42,12 +46,12 @@ export function HelpPage() {
       <section className="mt-12">
         <h2 className="text-lg font-semibold text-slate-900">Guided topics</h2>
         <p className="mt-1 text-sm text-[var(--color-ink-muted)]">Jump straight into the relevant docs section.</p>
-        <ul className="mt-6 grid gap-4 sm:grid-cols-2">
+        <ul className="ff-stagger mt-6 grid gap-4 sm:grid-cols-2">
           {HELP_TOPICS.map((topic) => (
             <li key={topic.title}>
               <Link
                 to={topic.to}
-                className="group flex h-full flex-col rounded-2xl border border-transparent px-1 py-1 transition hover:border-teal-200/60 hover:bg-white/50"
+                className="ff-hover-lift group flex h-full flex-col rounded-2xl border border-transparent px-1 py-1 transition hover:border-teal-200/60 hover:bg-white/50"
               >
                 <span className="font-[family-name:var(--font-display)] text-[15px] font-semibold text-slate-900 group-hover:text-teal-900">
                   {topic.title}

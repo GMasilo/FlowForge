@@ -111,6 +111,7 @@ export function buildConversationAnalytics(args: {
   events: Array<Pick<ConversationEvent, 'session_id' | 'kind' | 'node_key' | 'payload' | 'seq'>>
   payments: AnalyticsPaymentRow[]
   chatbotId?: string | null
+  environment?: 'production' | 'staging' | null
   rangeDays?: number | null
   now?: Date
 }): ConversationAnalytics {
@@ -122,6 +123,9 @@ export function buildConversationAnalytics(args: {
   let sessions = args.chatbotId
     ? args.sessions.filter((s) => s.chatbot_id === args.chatbotId)
     : args.sessions
+  if (args.environment) {
+    sessions = sessions.filter((s) => (s.environment ?? 'production') === args.environment)
+  }
   if (cutoff != null) {
     sessions = sessions.filter((s) => {
       const t = Date.parse(s.created_at)
@@ -326,11 +330,12 @@ export function publishVersionLabel(publishVersion: number | null | undefined): 
 
 function filterSessionsForAnalytics(args: {
   sessions: Array<
-    Pick<ConversationSession, 'id' | 'publish_version' | 'created_at' | 'chatbot_id'> & {
+    Pick<ConversationSession, 'id' | 'publish_version' | 'created_at' | 'chatbot_id' | 'environment'> & {
       chatbots?: { name: string } | null
     }
   >
   chatbotId?: string | null
+  environment?: 'production' | 'staging' | null
   rangeDays?: number | null
   now?: Date
 }) {
@@ -341,6 +346,9 @@ function filterSessionsForAnalytics(args: {
   let sessions = args.chatbotId
     ? args.sessions.filter((s) => s.chatbot_id === args.chatbotId)
     : args.sessions
+  if (args.environment) {
+    sessions = sessions.filter((s) => (s.environment ?? 'production') === args.environment)
+  }
   if (cutoff != null) {
     sessions = sessions.filter((s) => {
       const t = Date.parse(s.created_at)
@@ -376,13 +384,14 @@ function computeDropOff(
 /** Drop-off for sessions matching one publish version label (after chatbot/range filters). */
 export function buildDropOffForVersion(args: {
   sessions: Array<
-    Pick<ConversationSession, 'id' | 'publish_version' | 'created_at' | 'chatbot_id'> & {
+    Pick<ConversationSession, 'id' | 'publish_version' | 'created_at' | 'chatbot_id' | 'environment'> & {
       chatbots?: { name: string } | null
     }
   >
   events: Array<Pick<ConversationEvent, 'session_id' | 'kind' | 'node_key'>>
   version: string
   chatbotId?: string | null
+  environment?: 'production' | 'staging' | null
   rangeDays?: number | null
   now?: Date
 }): { sessionCount: number; dropOff: DropOffRow[] } {
@@ -425,4 +434,74 @@ export function compareDropOff(
       deltaPct: l && r ? Math.round((r.pct - l.pct) * 10) / 10 : null,
     }
   })
+}
+
+export type TransferAnalytics = {
+  transferCount: number
+  failedCount: number
+  completedAfterTransfer: number
+  abandonedAfterTransfer: number
+  pairs: Array<{ from: string; to: string; count: number }>
+  failuresByReason: Array<{ reason: string; count: number }>
+}
+
+export function buildTransferAnalytics(args: {
+  sessions: Array<ConversationSession & { chatbots?: { name: string } | null }>
+  events: Array<Pick<ConversationEvent, 'session_id' | 'kind' | 'node_key' | 'payload' | 'seq'>>
+  chatbotNames?: Map<string, string>
+}): TransferAnalytics {
+  const nameOf = (id: string) => args.chatbotNames?.get(id) ?? id.slice(0, 8)
+  const sessionById = new Map(args.sessions.map((s) => [s.id, s]))
+  const transferredSessions = new Set<string>()
+  const pairMap = new Map<string, { from: string; to: string; count: number }>()
+  let failedCount = 0
+  const failReasons = new Map<string, number>()
+
+  for (const ev of args.events) {
+    if (ev.kind === 'session.transferred') {
+      transferredSessions.add(ev.session_id)
+      const p = asRecord(ev.payload)
+      const from = String(p.from_chatbot_id ?? '')
+      const to = String(p.to_chatbot_id ?? '')
+      if (from && to) {
+        const key = `${from}->${to}`
+        const row = pairMap.get(key) ?? { from, to, count: 0 }
+        row.count += 1
+        pairMap.set(key, row)
+      }
+    }
+    if (ev.kind === 'session.transfer_failed') {
+      failedCount += 1
+      const reason = String(asRecord(ev.payload).reason ?? 'unknown')
+      failReasons.set(reason, (failReasons.get(reason) ?? 0) + 1)
+    }
+  }
+
+  let completedAfterTransfer = 0
+  let abandonedAfterTransfer = 0
+  for (const id of transferredSessions) {
+    const s = sessionById.get(id)
+    if (!s) continue
+    const status = displaySessionStatus(s)
+    if (status === 'completed') completedAfterTransfer += 1
+    if (status === 'abandoned') abandonedAfterTransfer += 1
+  }
+
+  return {
+    transferCount: transferredSessions.size,
+    failedCount,
+    completedAfterTransfer,
+    abandonedAfterTransfer,
+    pairs: [...pairMap.values()]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12)
+      .map((p) => ({
+        from: nameOf(p.from),
+        to: nameOf(p.to),
+        count: p.count,
+      })),
+    failuresByReason: [...failReasons.entries()]
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count),
+  }
 }

@@ -1,19 +1,24 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { PlanLockedState } from '@/features/billing/PlanLockedState'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { downloadJson } from '@/shared/lib/downloadJson'
 import { supabase } from '@/shared/lib/supabase'
 import type { ConsentPolicy, DataRetentionPolicy } from '@/shared/types/database'
+import { instanceFeatureEnabled } from '@/shared/types/database'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { FieldError } from '@/shared/ui/field-error'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
+import { PAGE_HELP, SECTION_HELP } from '@/shared/help/pageHelp'
+import { SectionHeading } from '@/shared/ui/help-tooltip'
 import { PageHeader } from '@/shared/ui/page-header'
 import { Textarea } from '@/shared/ui/textarea'
 
 export function CompliancePage() {
   const { instance } = useRequiredInstance()
+  const complianceEnabled = instanceFeatureEnabled(instance, 'compliance')
   const qc = useQueryClient()
   const [visitorKey, setVisitorKey] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -25,6 +30,7 @@ export function CompliancePage() {
 
   const retention = useQuery({
     queryKey: ['data-retention', instance.id],
+    enabled: complianceEnabled,
     queryFn: async () => {
       const { data, error: qError } = await supabase
         .from('data_retention_policies')
@@ -38,6 +44,7 @@ export function CompliancePage() {
 
   const policies = useQuery({
     queryKey: ['consent-policies', instance.id],
+    enabled: complianceEnabled,
     queryFn: async () => {
       const { data, error: qError } = await supabase
         .from('consent_policies')
@@ -127,16 +134,21 @@ export function CompliancePage() {
 
   const pol = retention.data
 
+  if (!complianceEnabled) {
+    return <PlanLockedState feature="compliance" title="Compliance" />
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Compliance"
         description="Consent policies, retention, and GDPR export/delete for this organisation."
+        help={PAGE_HELP.compliance}
       />
       {error ? <FieldError>{error}</FieldError> : null}
 
       <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold">Data retention</h2>
+        <SectionHeading title="Data retention" help={SECTION_HELP.dataRetention} />
         <div className="grid gap-3 sm:grid-cols-2">
           {(
             [
@@ -176,7 +188,7 @@ export function CompliancePage() {
       </Card>
 
       <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold">Visitor data subject requests</h2>
+        <SectionHeading title="Visitor data subject requests" help={SECTION_HELP.visitorDsar} />
         <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => void exportVisitor(e)}>
           <label className="space-y-1 text-xs">
             <Label>Visitor key</Label>
@@ -192,7 +204,7 @@ export function CompliancePage() {
       </Card>
 
       <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold">Consent policies</h2>
+        <SectionHeading title="Consent policies" help={SECTION_HELP.consentPolicies} />
         <ul className="space-y-2 text-sm">
           {(policies.data ?? []).map((p) => (
             <li key={p.id} className="rounded-lg border border-[var(--color-border)]/60 px-3 py-2">

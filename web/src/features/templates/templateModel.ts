@@ -10,6 +10,8 @@ export const TEMPLATE_KINDS = [
   'legal',
   'receipt',
   'document',
+  'agreement',
+  'sso',
 ] as const
 
 export type TemplateKind = (typeof TEMPLATE_KINDS)[number]
@@ -51,7 +53,15 @@ export const COPY_TEMPLATE_KINDS = [
   'legal',
   'receipt',
   'document',
+  'agreement',
 ] as const satisfies readonly TemplateKind[]
+
+/** Downloadable file templates (PDF/Word/Excel) that use DocumentContent + {{templates.key.file}}. */
+export const FILE_TEMPLATE_KINDS = ['document', 'agreement'] as const satisfies readonly TemplateKind[]
+
+export function isFileTemplateKind(kind: string): kind is (typeof FILE_TEMPLATE_KINDS)[number] {
+  return (FILE_TEMPLATE_KINDS as readonly string[]).includes(kind)
+}
 
 export function isTemplateInputType(value: string): value is TemplateInputType {
   return (TEMPLATE_INPUT_TYPES as readonly string[]).includes(value)
@@ -108,6 +118,13 @@ export type DocumentField = {
   as: DocumentFieldAs
 }
 
+/** Column mapping for multi-row tables filled from an array variable. */
+export type DocumentTableColumn = {
+  /** Property on each row object (e.g. name) or 0-based index for array rows. */
+  key: string
+  label: string
+}
+
 export const DOCUMENT_LAYOUTS = ['flow', 'page'] as const
 export type DocumentLayout = (typeof DOCUMENT_LAYOUTS)[number]
 export const DOCUMENT_ORIENTATIONS = ['portrait', 'landscape'] as const
@@ -153,11 +170,38 @@ export type DocumentContent = {
   body: string
   footer: string
   fields: DocumentField[]
+  /** Expression resolving to an array of objects/arrays (e.g. {{inputs.lines}} or {{vars.items}}). */
+  tableRowsSource: string
+  tableColumns: DocumentTableColumn[]
   includeCart: boolean
   layout: DocumentLayout
   orientation: DocumentOrientation
   blocks: DocumentBlock[]
   inputs: TemplateInput[]
+}
+
+export type SsoProtocol = 'oidc' | 'saml'
+
+/** IdP config for visitor Sign-in SSO — stored on chatbot Templates, referenced by key. */
+export type SsoContent = {
+  protocol: SsoProtocol
+  providerName: string
+  buttonLabel: string
+  oidcIssuer: string
+  oidcClientId: string
+  /** Optional secret reference / value — prefer server vault for production. */
+  oidcClientSecret: string
+  oidcAuthorizationUrl: string
+  oidcTokenUrl: string
+  oidcJwksUrl: string
+  oidcScopes: string
+  samlEntityId: string
+  samlSsoUrl: string
+  samlCertificate: string
+  samlAcsUrl: string
+  emailClaim: string
+  userIdClaim: string
+  previewEmail: string
 }
 
 export type TemplateContent =
@@ -170,6 +214,7 @@ export type TemplateContent =
   | LegalContent
   | ReceiptContent
   | DocumentContent
+  | SsoContent
 
 export const TEMPLATE_KIND_META: Record<
   TemplateKind,
@@ -219,6 +264,16 @@ export const TEMPLATE_KIND_META: Record<
     label: 'Downloadable file',
     hint: 'PDF, Word, or Excel filled from answers — list layout or a visual A4 page (portrait or landscape)',
     insertField: 'file',
+  },
+  agreement: {
+    label: 'Agreement',
+    hint: 'Adobe Sign–style PDF: parties, terms, signature, and date signed — download after the visitor signs',
+    insertField: 'file',
+  },
+  sso: {
+    label: 'SSO / IdP',
+    hint: 'OIDC or SAML identity provider for Sign-in steps — configure here, then select on the step',
+    insertField: 'providerName',
   },
 }
 
@@ -345,6 +400,10 @@ export function emptyDocumentField(): DocumentField {
   return { label: '', value: '', as: 'text' }
 }
 
+export function emptyDocumentTableColumn(): DocumentTableColumn {
+  return { key: '', label: '' }
+}
+
 export function isDocumentFormat(value: string): value is DocumentFormat {
   return (DOCUMENT_FORMATS as readonly string[]).includes(value)
 }
@@ -412,6 +471,19 @@ function parseDocumentFields(raw: unknown): DocumentField[] {
   return fields.length ? fields : [emptyDocumentField()]
 }
 
+function parseDocumentTableColumns(raw: unknown): DocumentTableColumn[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => {
+      const row = asRecord(item)
+      return {
+        key: str(row.key),
+        label: str(row.label) || str(row.key),
+      } satisfies DocumentTableColumn
+    })
+    .filter((col) => col.key.trim() || col.label.trim())
+}
+
 export function parseDocumentContent(raw: Record<string, unknown> | DocumentContent): DocumentContent {
   const c = asRecord(raw)
   const format = isDocumentFormat(str(c.format)) ? (str(c.format) as DocumentFormat) : 'pdf'
@@ -423,6 +495,8 @@ export function parseDocumentContent(raw: Record<string, unknown> | DocumentCont
     body: str(c.body),
     footer: str(c.footer),
     fields: parseDocumentFields(c.fields),
+    tableRowsSource: str(c.tableRowsSource),
+    tableColumns: parseDocumentTableColumns(c.tableColumns),
     includeCart: c.includeCart === true,
     layout: str(c.layout) === 'page' ? 'page' : 'flow',
     orientation: isDocumentOrientation(str(c.orientation)) ? (str(c.orientation) as DocumentOrientation) : 'portrait',
@@ -481,12 +555,69 @@ export function emptyTemplateContent(kind: TemplateKind): TemplateContent {
         body: '',
         footer: '',
         fields: [emptyDocumentField()],
+        tableRowsSource: '',
+        tableColumns: [],
         includeCart: false,
         layout: 'flow',
         orientation: 'portrait',
         blocks: [],
         inputs: [],
       }
+    case 'agreement':
+      return emptyAgreementContent()
+    case 'sso':
+      return emptySsoContent()
+  }
+}
+
+export function emptyAgreementContent(): DocumentContent {
+  return {
+    format: 'pdf',
+    filename: 'agreement.pdf',
+    title: '',
+    intro: '',
+    body: '',
+    footer: '',
+    fields: [
+      { label: 'Signer name', value: '{{inputs.signer_name}}', as: 'text' },
+      { label: 'Signer email', value: '{{inputs.signer_email}}', as: 'text' },
+      { label: 'Signature', value: '{{inputs.signature}}', as: 'image' },
+      { label: 'Date signed', value: '{{inputs.signed_at}}', as: 'text' },
+    ],
+    tableRowsSource: '',
+    tableColumns: [],
+    includeCart: false,
+    layout: 'flow',
+    orientation: 'portrait',
+    blocks: [],
+    inputs: [
+      { key: 'signer_name', label: 'Signer name', type: 'string', required: true },
+      { key: 'signer_email', label: 'Signer email', type: 'string', required: true },
+      { key: 'signature', label: 'Signature', type: 'file', required: true },
+      { key: 'signed_at', label: 'Date signed', type: 'date', required: false },
+    ],
+  }
+}
+
+export function emptySsoContent(): SsoContent {
+  return {
+    protocol: 'oidc',
+    providerName: '',
+    buttonLabel: 'Continue with SSO',
+    oidcIssuer: '',
+    oidcClientId: '',
+    oidcClientSecret: '',
+    oidcAuthorizationUrl: '',
+    oidcTokenUrl: '',
+    oidcJwksUrl: '',
+    oidcScopes: 'openid email profile',
+    samlEntityId: '',
+    samlSsoUrl: '',
+    samlCertificate: '',
+    samlAcsUrl: '',
+    emailClaim: 'email',
+    userIdClaim: 'sub',
+    previewEmail: 'sso.user@example.com',
   }
 }
 
@@ -642,6 +773,8 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
           { label: 'Email', value: '{{inputs.email}}', as: 'text' },
           { label: 'Signature', value: '{{inputs.signature}}', as: 'image' },
         ],
+        tableRowsSource: '',
+        tableColumns: [],
         includeCart: false,
         layout: 'flow',
         orientation: 'portrait',
@@ -651,6 +784,69 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
           { key: 'email', label: 'Email', type: 'string', required: true },
           { key: 'signature', label: 'Signature', type: 'file', required: true },
         ],
+      }
+    case 'agreement':
+      return {
+        format: 'pdf',
+        filename: 'agreement-{{inputs.signer_name}}.pdf',
+        title: 'Service agreement',
+        intro:
+          'Please review this agreement carefully. By signing, you acknowledge the terms below and confirm your identity.',
+        body: [
+          '1. Parties',
+          'This agreement is between {{inputs.company_name}} (“Provider”) and {{inputs.signer_name}} (“Signer”), email {{inputs.signer_email}}.',
+          '',
+          '2. Scope',
+          '{{inputs.scope}}',
+          '',
+          '3. Acceptance',
+          'The Signer confirms they have read and agree to these terms. The electronic signature below has the same effect as a handwritten signature.',
+          '',
+          '4. Effective date',
+          'This agreement takes effect on the date signed below.',
+        ].join('\n'),
+        footer: 'Electronically signed via FlowForge · Keep a copy for your records.',
+        fields: [
+          { label: 'Provider / company', value: '{{inputs.company_name}}', as: 'text' },
+          { label: 'Signer name', value: '{{inputs.signer_name}}', as: 'text' },
+          { label: 'Signer email', value: '{{inputs.signer_email}}', as: 'text' },
+          { label: 'Signature', value: '{{inputs.signature}}', as: 'image' },
+          { label: 'Date signed', value: '{{inputs.signed_at}}', as: 'text' },
+        ],
+        tableRowsSource: '',
+        tableColumns: [],
+        includeCart: false,
+        layout: 'flow',
+        orientation: 'portrait',
+        blocks: [],
+        inputs: [
+          { key: 'company_name', label: 'Company / provider', type: 'string', required: true },
+          { key: 'signer_name', label: 'Signer name', type: 'string', required: true },
+          { key: 'signer_email', label: 'Signer email', type: 'string', required: true },
+          { key: 'scope', label: 'Scope / terms summary', type: 'string', required: true },
+          { key: 'signature', label: 'Signature', type: 'file', required: true },
+          { key: 'signed_at', label: 'Date signed', type: 'date', required: false },
+        ],
+      }
+    case 'sso':
+      return {
+        protocol: 'oidc',
+        providerName: 'Company SSO',
+        buttonLabel: 'Continue with SSO',
+        oidcIssuer: 'https://idp.example.com',
+        oidcClientId: '',
+        oidcClientSecret: '',
+        oidcAuthorizationUrl: 'https://idp.example.com/oauth2/authorize',
+        oidcTokenUrl: 'https://idp.example.com/oauth2/token',
+        oidcJwksUrl: 'https://idp.example.com/.well-known/jwks.json',
+        oidcScopes: 'openid email profile',
+        samlEntityId: '',
+        samlSsoUrl: '',
+        samlCertificate: '',
+        samlAcsUrl: '',
+        emailClaim: 'email',
+        userIdClaim: 'sub',
+        previewEmail: 'sso.user@example.com',
       }
   }
 }
@@ -769,7 +965,36 @@ export function parseTemplateContent(kind: TemplateKind, raw: unknown): Template
         inputs: parseTemplateInputs(c.inputs),
       }
     case 'document':
+    case 'agreement':
       return parseDocumentContent(c)
+    case 'sso':
+      return parseSsoContent(c)
+  }
+}
+
+export function parseSsoContent(raw: unknown): SsoContent {
+  const c = asRecord(raw)
+  const protocolRaw = str(c.protocol, 'oidc')
+  const protocol: SsoProtocol = protocolRaw === 'saml' ? 'saml' : 'oidc'
+  const empty = emptySsoContent()
+  return {
+    protocol,
+    providerName: str(c.providerName, empty.providerName),
+    buttonLabel: str(c.buttonLabel, empty.buttonLabel) || empty.buttonLabel,
+    oidcIssuer: str(c.oidcIssuer),
+    oidcClientId: str(c.oidcClientId),
+    oidcClientSecret: str(c.oidcClientSecret),
+    oidcAuthorizationUrl: str(c.oidcAuthorizationUrl),
+    oidcTokenUrl: str(c.oidcTokenUrl),
+    oidcJwksUrl: str(c.oidcJwksUrl),
+    oidcScopes: str(c.oidcScopes, empty.oidcScopes) || empty.oidcScopes,
+    samlEntityId: str(c.samlEntityId),
+    samlSsoUrl: str(c.samlSsoUrl),
+    samlCertificate: str(c.samlCertificate),
+    samlAcsUrl: str(c.samlAcsUrl),
+    emailClaim: str(c.emailClaim, 'email') || 'email',
+    userIdClaim: str(c.userIdClaim, 'sub') || 'sub',
+    previewEmail: str(c.previewEmail, empty.previewEmail) || empty.previewEmail,
   }
 }
 
@@ -857,7 +1082,8 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       const c = content as ReceiptContent
       return renderReceiptFromCart(c, null, null)
     }
-    case 'document': {
+    case 'document':
+    case 'agreement': {
       const c = content as DocumentContent
       const fields = c.fields
         .filter((f) => f.label.trim() || f.value.trim())
@@ -865,6 +1091,14 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       return [c.title.trim(), c.intro.trim(), ...fields, c.body.trim(), c.footer.trim()]
         .filter(Boolean)
         .join('\n')
+    }
+    case 'sso': {
+      const c = content as SsoContent
+      const name = c.providerName.trim() || 'SSO'
+      if (c.protocol === 'saml') {
+        return `${name} · SAML · ${c.samlSsoUrl.trim() || 'no SSO URL'}`
+      }
+      return `${name} · OIDC · ${c.oidcIssuer.trim() || c.oidcAuthorizationUrl.trim() || 'no issuer'}`
     }
   }
 }
@@ -907,7 +1141,7 @@ export function templateExprValue(args: {
   if (args.kind === 'receipt') {
     base.html = renderReceiptHtml(text)
   }
-  if (args.kind === 'document') {
+  if (args.kind === 'document' || args.kind === 'agreement') {
     const c = content as DocumentContent
     base.format = c.format
     base.filename = c.filename

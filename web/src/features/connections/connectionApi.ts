@@ -119,11 +119,16 @@ export async function listMarketplaceConnections(args: {
   instanceId: string
   chatbotId?: string | null
 }): Promise<MarketplaceConnection[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const userId = user?.id ?? null
+
   const { data: rows, error } = await supabase
     .from('connections')
     .select('*')
     .eq('instance_id', args.instanceId)
-    .in('visibility', ['global', 'shared'])
+    .is('deleted_at', null)
     .order('name')
   if (error) throw error
 
@@ -145,8 +150,13 @@ export async function listMarketplaceConnections(args: {
 
   const out: MarketplaceConnection[] = []
   for (const row of rows ?? []) {
-    // Hide private-owned duplicates that somehow have wrong visibility
-    if (row.visibility === 'private') continue
+    if (row.visibility === 'private') {
+      // Only the creator can install their own private connections via ForgeHub
+      if (!userId || row.created_by !== userId) continue
+    } else if (row.visibility !== 'global' && row.visibility !== 'shared') {
+      continue
+    }
+
     let share_user_ids: string[] | undefined
     if (row.visibility === 'shared') {
       const { data: shares } = await supabase
@@ -155,6 +165,7 @@ export async function listMarketplaceConnections(args: {
         .eq('connection_id', row.id)
       share_user_ids = (shares ?? []).map((s) => s.user_id)
     }
+
     out.push({
       ...row,
       chatbot_name: chatbotNames.get(row.chatbot_id) ?? null,
@@ -180,19 +191,26 @@ export async function createChatbotConnection(input: {
   visibility?: ConnectionVisibility
   createdBy: string
 }): Promise<ConnectionWithConfig> {
-  const { data: row, error } = await supabase
-    .from('connections')
-    .insert({
-      instance_id: input.instanceId,
-      chatbot_id: input.chatbotId,
-      name: input.name.trim(),
-      kind: input.kind,
-      visibility: input.visibility ?? 'private',
-      created_by: input.createdBy,
-    })
-    .select('*')
-    .single()
+  // Client-generated id + no RETURNING: SELECT policies that call
+  // can_see_connection_meta() fail on INSERT ... RETURNING (RLS recursion).
+  const id = crypto.randomUUID()
+  const { error } = await supabase.from('connections').insert({
+    id,
+    instance_id: input.instanceId,
+    chatbot_id: input.chatbotId,
+    name: input.name.trim(),
+    kind: input.kind,
+    visibility: input.visibility ?? 'private',
+    created_by: input.createdBy,
+  })
   if (error) throw error
+
+  const { data: row, error: readError } = await supabase
+    .from('connections')
+    .select('*')
+    .eq('id', id)
+    .single()
+  if (readError) throw readError
 
   const { error: secretError } = await supabase.from('connection_secrets').insert({
     connection_id: row.id,

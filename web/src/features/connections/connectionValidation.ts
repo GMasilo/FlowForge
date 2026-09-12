@@ -74,6 +74,22 @@ export function connectionInfoFromRow(c: ConnectionWithConfig): ConnectionValida
     }
   }
 
+  if (c.kind === 'database') {
+    return {
+      id: c.id,
+      name: c.name,
+      kind: 'database',
+      inputParams: [],
+      expectedResponse: defaultExpectedResponse(),
+      responsePaths: [
+        { path: 'ok', type: 'boolean', required: true },
+        { path: 'rowCount', type: 'number', required: true },
+        { path: 'rows', type: 'array', required: true },
+      ],
+      canManage: c.canManage,
+    }
+  }
+
   const cfg = parseEmailConfig(config)
   const nested = flattenSchemaPaths(
     cfg.expectedResponse.dataType === 'object' ? cfg.expectedResponse.schema : [],

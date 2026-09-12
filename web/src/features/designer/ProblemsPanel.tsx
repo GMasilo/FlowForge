@@ -16,6 +16,8 @@ import type { PreviewStepRun } from '@/features/designer/preview/previewRuntime'
 import type { ScenarioResult } from '@/features/designer/preview/scenarioEval'
 import { buildRunHistoryExport, safeDownloadBasename } from '@/features/designer/utils/flowTransfer'
 import { downloadJson } from '@/shared/lib/downloadJson'
+import { SECTION_HELP } from '@/shared/help/pageHelp'
+import { HelpTooltip } from '@/shared/ui/help-tooltip'
 import { cn } from '@/shared/lib/utils'
 
 type SidebarTab = 'problems' | 'run'
@@ -73,6 +75,29 @@ function RunSection({ title, data }: { title: string; data: Record<string, unkno
   )
 }
 
+function failureSummary(run: PreviewStepRun): string | null {
+  if (run.status !== 'Failed' && run.status !== 'TimedOut') return null
+  const out = run.outputs
+  const proc = run.processed
+  const parts: string[] = []
+  const status = out.status ?? proc.responseStatus
+  if (typeof status === 'number' && status > 0) parts.push(`HTTP ${status}`)
+  const url = typeof out.url === 'string' ? out.url : typeof proc.url === 'string' ? proc.url : null
+  if (url) parts.push(url)
+  const err =
+    (typeof out.error === 'string' && out.error) ||
+    (typeof proc.responseError === 'string' && proc.responseError) ||
+    (typeof proc.failureReason === 'string' && proc.failureReason) ||
+    null
+  if (err) parts.push(err)
+  const schemaErrors = out.schemaErrors ?? proc.schemaErrors
+  if (Array.isArray(schemaErrors) && schemaErrors.length) {
+    parts.push(`schema: ${schemaErrors.slice(0, 3).join('; ')}`)
+  }
+  if (run.status === 'TimedOut') parts.unshift('Timed out')
+  return parts.length ? parts.join(' · ') : run.status
+}
+
 function RunCard({
   run,
   active,
@@ -82,11 +107,16 @@ function RunCard({
   active: boolean
   onSelect: () => void
 }) {
-  const [open, setOpen] = useState(false)
   const ok = run.status === 'Succeeded'
   const skipped = run.status === 'Skipped'
   const timedOut = run.status === 'TimedOut'
   const failed = run.status === 'Failed'
+  const [open, setOpen] = useState(failed || timedOut)
+  const summary = failureSummary(run)
+
+  useEffect(() => {
+    if (failed || timedOut) setOpen(true)
+  }, [failed, timedOut, run.id])
 
   return (
     <div
@@ -116,7 +146,7 @@ function RunCard({
               {ok ? (
                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
               ) : skipped ? (
-                <CircleDot className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                <CircleDot className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
               ) : (
                 <XCircle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
               )}
@@ -125,6 +155,11 @@ function RunCard({
             <span className="mt-0.5 block truncate text-[10px] text-slate-500">
               {run.typeLabel} · {run.nodeKey}
             </span>
+            {summary ? (
+              <span className="mt-1 block whitespace-pre-wrap break-words text-[10px] font-medium leading-snug text-rose-700">
+                {summary}
+              </span>
+            ) : null}
             <span className="mt-1 flex items-center gap-1 text-[10px] font-medium text-slate-400">
               <Clock3 className="h-3 w-3" />
               {formatDuration(run.durationMs)}
@@ -154,6 +189,32 @@ function RunCard({
 
       {open ? (
         <div className="space-y-3 border-t border-slate-100 bg-slate-50/40 px-2.5 py-2.5">
+          {(failed || timedOut) && (run.type === 'http' || run.type === 'sign_in') ? (
+            <div className="space-y-1.5 rounded-lg border border-rose-200 bg-rose-50/80 px-2 py-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">Failure detail</p>
+              <dl className="space-y-1 font-mono text-[11px] leading-snug text-rose-950">
+                {(
+                  [
+                    ['method', run.processed.method ?? run.inputs.method],
+                    ['url', run.outputs.url ?? run.processed.url ?? run.inputs.url],
+                    ['status', run.outputs.status ?? run.processed.responseStatus],
+                    ['error', run.outputs.error ?? run.processed.responseError ?? run.processed.failureReason],
+                    ['schemaErrors', run.outputs.schemaErrors ?? run.processed.schemaErrors],
+                    ['response', run.outputs.data],
+                    ['requestBody', run.processed.body],
+                    ['invokeMs', run.processed.invokeMs],
+                  ] as Array<[string, unknown]>
+                )
+                  .filter(([, v]) => v !== undefined && v !== null && v !== '')
+                  .map(([key, value]) => (
+                    <div key={key}>
+                      <dt className="text-[10px] font-medium text-rose-700/80">{key}</dt>
+                      <dd className="mt-0.5 whitespace-pre-wrap break-words">{formatValue(value)}</dd>
+                    </div>
+                  ))}
+              </dl>
+            </div>
+          ) : null}
           <RunSection title="Inputs" data={run.inputs} />
           <RunSection title="Processed" data={run.processed} />
           <RunSection title="Outputs" data={run.outputs} />
@@ -219,6 +280,10 @@ export function ProblemsPanel({
           <h2 className="min-w-0 flex-1 text-sm font-semibold text-slate-800">
             {activeTab === 'run' ? 'Run history' : 'Problems'}
           </h2>
+          <HelpTooltip
+            content={activeTab === 'run' ? SECTION_HELP.runHistory : SECTION_HELP.problemsPanel}
+            label={activeTab === 'run' ? 'Help: Run history' : 'Help: Problems'}
+          />
           {activeTab === 'run' && runs.length ? (
             <button
               type="button"

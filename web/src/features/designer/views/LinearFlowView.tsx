@@ -8,6 +8,7 @@ import {
   Copy,
   ClipboardPaste,
   GitBranch,
+  Split,
   GripVertical,
   MessageSquare,
   HelpCircle,
@@ -25,7 +26,10 @@ import {
   ArrowRightLeft,
   Repeat,
   Database,
+  Server,
   Sparkles,
+  MousePointerClick,
+  CornerDownRight,
 } from 'lucide-react'
 import type { FlowNodeType } from '@/shared/types/database'
 import { hasCustomStepSettingsForNode, nodeTypeLabel, stepSettingsSummary } from '@/features/designer/model/flowSchema'
@@ -52,11 +56,16 @@ const icons: Record<FlowNodeType, typeof MessageSquare> = {
   message: MessageSquare,
   question: HelpCircle,
   http: Globe,
+  database: Server,
   email: Mail,
   integration: Plug,
   handoff: Headphones,
   transfer: ArrowRightLeft,
+  sign_in: Lock,
+  button: MousePointerClick,
+  skip_to: CornerDownRight,
   condition: GitBranch,
+  switch: Split,
   loop: Repeat,
   set_variable: Variable,
   operation: Calculator,
@@ -68,11 +77,16 @@ const typeColor: Record<FlowNodeType, string> = {
   message: 'var(--color-node-message)',
   question: 'var(--color-node-question)',
   http: 'var(--color-node-http)',
+  database: 'var(--color-node-http)',
   email: 'var(--color-node-email)',
   integration: 'var(--color-node-http)',
   handoff: 'var(--color-node-question)',
   transfer: 'var(--color-node-http)',
+  sign_in: 'var(--color-node-question)',
+  button: 'var(--color-node-question)',
+  skip_to: 'var(--color-node-condition)',
   condition: 'var(--color-node-condition)',
+  switch: 'var(--color-node-switch)',
   loop: 'var(--color-node-loop)',
   set_variable: 'var(--color-node-set)',
   operation: 'var(--color-node-operation)',
@@ -83,12 +97,17 @@ const typeColor: Record<FlowNodeType, string> = {
 const STEP_TYPES: FlowNodeType[] = [
   'message',
   'question',
+  'button',
   'http',
+  'database',
   'email',
   'integration',
   'handoff',
   'transfer',
+  'sign_in',
   'condition',
+  'switch',
+  'skip_to',
   'loop',
   'set_variable',
   'operation',
@@ -106,6 +125,9 @@ function countSteps(nodes: ScopeNode[]): number {
     n += 1
     if (node.kind === 'condition') {
       n += countSteps(node.yes) + countSteps(node.no) + countSteps(node.then)
+    } else if (node.kind === 'switch') {
+      for (const lane of node.cases) n += countSteps(lane.nodes)
+      n += countSteps(node.default) + countSteps(node.then)
     } else if (node.kind === 'loop') {
       n += countSteps(node.body) + countSteps(node.then)
     }
@@ -197,7 +219,7 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
 
   function addBranchStep(
     conditionId: string,
-    handle: 'true' | 'false' | 'body',
+    handle: string,
     type: FlowNodeType,
     seed?: AddNodeSeed,
   ) {
@@ -362,6 +384,25 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
               {idx > 0 ? <FlowConnector /> : null}
               {node.kind === 'condition' ? (
                 <ConditionBlock
+                  node={node}
+                  readOnly={readOnly}
+                  collapsed={!!collapsed[id]}
+                  onToggle={() => toggleCollapsed(id)}
+                  selectedNodeId={selectedNodeId}
+                  issueCounts={issueCounts}
+                  openMenu={openMenu}
+                  setOpenMenu={setOpenMenu}
+                  onSelect={selectNode}
+                  addBranchStep={addBranchStep}
+                  addAfterCondition={addAfterCondition}
+                  renderSequence={renderSequence}
+                  onCopy={() => copyNode(id)}
+                  onPaste={() => pasteAfter(id)}
+                  onDuplicate={() => duplicateNode(id)}
+                  canPaste={!!clipboard}
+                />
+              ) : node.kind === 'switch' ? (
+                <SwitchBlock
                   node={node}
                   readOnly={readOnly}
                   collapsed={!!collapsed[id]}
@@ -777,7 +818,7 @@ function ConditionBlock({
   openMenu: string | null
   setOpenMenu: (id: string | null) => void
   onSelect: (id: string) => void
-  addBranchStep: (conditionId: string, handle: 'true' | 'false' | 'body', type: FlowNodeType, seed?: AddNodeSeed) => void
+  addBranchStep: (conditionId: string, handle: string, type: FlowNodeType, seed?: AddNodeSeed) => void
   addAfterCondition: (conditionId: string, type: FlowNodeType, seed?: AddNodeSeed) => void
   renderSequence: (
     seq: ScopeNode[],
@@ -1012,6 +1053,189 @@ function ContainerActions({
   )
 }
 
+function SwitchBlock({
+  node,
+  readOnly,
+  collapsed,
+  onToggle,
+  selectedNodeId,
+  issueCounts,
+  openMenu,
+  setOpenMenu,
+  onSelect,
+  addBranchStep,
+  addAfterCondition,
+  renderSequence,
+  onCopy,
+  onPaste,
+  onDuplicate,
+  canPaste,
+}: {
+  node: Extract<ScopeNode, { kind: 'switch' }>
+  readOnly?: boolean
+  collapsed: boolean
+  onToggle: () => void
+  selectedNodeId: string | null
+  issueCounts: Map<string, number>
+  openMenu: string | null
+  setOpenMenu: (id: string | null) => void
+  onSelect: (id: string) => void
+  addBranchStep: (conditionId: string, handle: string, type: FlowNodeType, seed?: AddNodeSeed) => void
+  addAfterCondition: (conditionId: string, type: FlowNodeType, seed?: AddNodeSeed) => void
+  renderSequence: (
+    seq: ScopeNode[],
+    opts: {
+      emptyMenuId: string
+      onAddEmpty: (type: FlowNodeType, seed?: AddNodeSeed) => void
+      emptyHint: string
+      afterNodeId?: string | null
+    },
+  ) => ReactNode
+  onCopy: () => void
+  onPaste: () => void
+  onDuplicate: () => void
+  canPaste: boolean
+}) {
+  const switchId = node.item.node.id
+  const selected = selectedNodeId === switchId
+  const caseCount = node.cases.reduce((n, c) => n + countSteps(c.nodes), 0)
+  const edges = useDesignerStore((s) => s.edges)
+  const isFlowStart = !edges.some((e) => e.target === switchId)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const valuePreview = String(node.item.node.config.value ?? '').trim()
+
+  return (
+    <>
+      <div
+        className={cn(
+          'overflow-hidden rounded-xl border bg-[#f7f8fa] shadow-sm transition-colors',
+          selected ? 'border-amber-400/80 ring-2 ring-amber-400/20' : 'border-slate-300/90',
+        )}
+      >
+        <div className="flex items-stretch border-b border-slate-200/90 bg-white">
+          <button
+            type="button"
+            aria-label={collapsed ? 'Expand switch' : 'Collapse switch'}
+            onClick={onToggle}
+            className="flex w-9 shrink-0 items-center justify-center border-r border-slate-200/90 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+          >
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect(switchId)}
+            className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left"
+          >
+            <span
+              className="rounded-lg p-2 text-white shadow-sm"
+              style={{
+                background: `linear-gradient(135deg, ${typeColor.switch}, color-mix(in oklab, ${typeColor.switch} 70%, #0ea5e9))`,
+              }}
+            >
+              <Split className="h-3.5 w-3.5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-slate-800">
+                {node.item.node.label || node.item.node.key}
+              </span>
+              <span className="block truncate text-[11px] text-slate-500">
+                Switch · {node.item.node.key}
+                {collapsed
+                  ? ` · ${node.cases.length} cases · ${caseCount} steps`
+                  : valuePreview
+                    ? ` · ${valuePreview}`
+                    : ' · Cases + Default'}
+              </span>
+            </span>
+            {hasCustomStepSettingsForNode(node.item.node.config, isFlowStart) ? (
+              <span
+                title={stepSettingsSummary(node.item.node.config)}
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 ring-1 ring-sky-200/80"
+              >
+                <Clock3 className="h-3 w-3" />
+                After
+              </span>
+            ) : null}
+            {(issueCounts.get(switchId) ?? 0) > 0 ? (
+              <span className="rounded-md bg-[var(--color-danger-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--color-danger)]">
+                {issueCounts.get(switchId)}
+              </span>
+            ) : null}
+          </button>
+          {!readOnly ? (
+            <ContainerActions
+              open={menuOpen}
+              setOpen={setMenuOpen}
+              canPaste={canPaste}
+              onCopy={onCopy}
+              onPaste={onPaste}
+              onDuplicate={onDuplicate}
+            />
+          ) : null}
+        </div>
+
+        {!collapsed ? (
+          <div className="space-y-3 p-3">
+            {node.cases.map((lane) => (
+              <BranchLane
+                key={lane.id}
+                tone="case"
+                title={lane.label}
+                subtitle={lane.match ? `= ${lane.match}` : 'Match value'}
+                empty={!lane.nodes.length}
+              >
+                {renderSequence(lane.nodes, {
+                  emptyMenuId: `case-${switchId}-${lane.id}`,
+                  emptyHint: `Add to ${lane.label}`,
+                  afterNodeId: switchId,
+                  onAddEmpty: (type, seed) => addBranchStep(switchId, lane.id, type, seed),
+                })}
+              </BranchLane>
+            ))}
+
+            <BranchLane tone="default" title="Default" subtitle="If no case matches" empty={!node.default.length}>
+              {renderSequence(node.default, {
+                emptyMenuId: `default-${switchId}`,
+                emptyHint: 'Add to Default',
+                afterNodeId: switchId,
+                onAddEmpty: (type, seed) => addBranchStep(switchId, 'default', type, seed),
+              })}
+            </BranchLane>
+          </div>
+        ) : null}
+      </div>
+
+      {!readOnly ? (
+        <>
+          <FlowConnector faint />
+          <AddStepControl
+            menuId={`after-switch-${switchId}`}
+            openMenu={openMenu}
+            setOpenMenu={setOpenMenu}
+            afterNodeId={switchId}
+            onAdd={(type, seed) => {
+              addAfterCondition(switchId, type, seed)
+              setOpenMenu(null)
+            }}
+            hint="Add step after switch"
+          />
+        </>
+      ) : null}
+      {node.then.length ? (
+        <>
+          <FlowConnector />
+          {renderSequence(node.then, {
+            emptyMenuId: `then-switch-${switchId}`,
+            emptyHint: 'Add after switch',
+            afterNodeId: switchId,
+            onAddEmpty: (type, seed) => addAfterCondition(switchId, type, seed),
+          })}
+        </>
+      ) : null}
+    </>
+  )
+}
+
 function LoopBlock({
   node,
   readOnly,
@@ -1039,7 +1263,7 @@ function LoopBlock({
   openMenu: string | null
   setOpenMenu: (id: string | null) => void
   onSelect: (id: string) => void
-  addBranchStep: (conditionId: string, handle: 'true' | 'false' | 'body', type: FlowNodeType, seed?: AddNodeSeed) => void
+  addBranchStep: (conditionId: string, handle: string, type: FlowNodeType, seed?: AddNodeSeed) => void
   addAfterCondition: (conditionId: string, type: FlowNodeType, seed?: AddNodeSeed) => void
   renderSequence: (
     seq: ScopeNode[],
@@ -1189,7 +1413,7 @@ function BranchLane({
   empty,
   children,
 }: {
-  tone: 'yes' | 'no' | 'then' | 'body'
+  tone: 'yes' | 'no' | 'then' | 'body' | 'case' | 'default'
   title: string
   subtitle: string
   empty?: boolean
@@ -1214,11 +1438,23 @@ function BranchLane({
               panel: 'border-teal-200/80 bg-teal-50/40',
               badge: 'bg-teal-700 text-white',
             }
-          : {
-              rail: 'bg-slate-500',
-              panel: 'border-slate-300/80 bg-white',
-              badge: 'bg-slate-700 text-white',
-            }
+          : tone === 'case'
+            ? {
+                rail: 'bg-amber-500',
+                panel: 'border-amber-200/80 bg-amber-50/40',
+                badge: 'bg-amber-700 text-white',
+              }
+            : tone === 'default'
+              ? {
+                  rail: 'bg-slate-400',
+                  panel: 'border-slate-300/80 bg-slate-50/70',
+                  badge: 'bg-slate-600 text-white',
+                }
+              : {
+                  rail: 'bg-slate-500',
+                  panel: 'border-slate-300/80 bg-white',
+                  badge: 'bg-slate-700 text-white',
+                }
 
   return (
     <div className={cn('flex overflow-hidden rounded-lg border', styles.panel)}>

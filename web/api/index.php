@@ -16,6 +16,7 @@ $path = '/' . trim((string) $path, '/');
 $map = [
     '/health' => __DIR__ . '/health.php',
     '/http/execute' => __DIR__ . '/http/execute.php',
+    '/database/execute' => __DIR__ . '/database/execute.php',
     '/integration/execute' => __DIR__ . '/integration/execute.php',
     '/email/send' => __DIR__ . '/email/send.php',
     '/email/test' => __DIR__ . '/email/test.php',
@@ -35,16 +36,29 @@ $map = [
     '/payment/start' => __DIR__ . '/payment/start.php',
     '/payment/notify' => __DIR__ . '/payment/notify.php',
     '/payment/status' => __DIR__ . '/payment/status.php',
+    '/chat/appearance' => __DIR__ . '/chat/appearance.php',
+    '/chat/sso_callback' => __DIR__ . '/chat/sso_callback.php',
     '/template/view' => __DIR__ . '/template/view.php',
     '/template/download' => __DIR__ . '/template/download.php',
     '/template/export' => __DIR__ . '/template/export.php',
     '/template/import' => __DIR__ . '/template/import.php',
     '/scim/v2/Users' => __DIR__ . '/scim/v2/Users.php',
     '/scim/v2/ServiceProviderConfig' => __DIR__ . '/scim/v2/Users.php',
+    '/openapi.json' => __DIR__ . '/openapi.php',
+    '/openapi' => __DIR__ . '/openapi.php',
+    '/postman.json' => __DIR__ . '/postman.php',
+    '/postman-environment.json' => __DIR__ . '/postman.php',
+    '/docs' => __DIR__ . '/docs.php',
+    '/v1' => __DIR__ . '/v1.php',
 ];
 
 if (isset($map[$path])) {
     require $map[$path];
+    exit;
+}
+
+if (str_starts_with($path, '/v1')) {
+    require __DIR__ . '/v1.php';
     exit;
 }
 

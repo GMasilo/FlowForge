@@ -1,7 +1,8 @@
-import { Search, X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
+import { Select } from '@/shared/ui/select'
 import { cn } from '@/shared/lib/utils'
 
 export function SearchField({
@@ -113,4 +114,242 @@ export function toggleId(selected: Set<string>, id: string, on: boolean): Set<st
 
 export function setAllIds(ids: string[], on: boolean): Set<string> {
   return on ? new Set(ids) : new Set()
+}
+
+export const DEFAULT_PAGE_SIZE_OPTIONS = [12, 24, 48] as const
+
+export function clampPage(page: number, pageCount: number): number {
+  if (pageCount <= 0) return 1
+  return Math.min(Math.max(1, page), pageCount)
+}
+
+export function pageCountFor(total: number, pageSize: number): number {
+  if (total <= 0 || pageSize <= 0) return 1
+  return Math.max(1, Math.ceil(total / pageSize))
+}
+
+export function slicePage<T>(items: T[], page: number, pageSize: number): T[] {
+  const start = (Math.max(1, page) - 1) * pageSize
+  return items.slice(start, start + pageSize)
+}
+
+export function PaginationBar({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  onPageSizeChange,
+  pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
+  className,
+  label = 'items',
+}: {
+  page: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
+  pageSizeOptions?: readonly number[]
+  className?: string
+  label?: string
+}) {
+  const pageCount = pageCountFor(total, pageSize)
+  const safePage = clampPage(page, pageCount)
+  const from = total === 0 ? 0 : (safePage - 1) * pageSize + 1
+  const to = Math.min(total, safePage * pageSize)
+
+  if (total <= 0) return null
+
+  return (
+    <div
+      className={cn(
+        'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between',
+        className,
+      )}
+    >
+      <p className="text-xs text-[var(--color-ink-muted)]">
+        Showing <span className="font-medium tabular-nums text-[var(--color-ink)]">{from}</span>
+        {'–'}
+        <span className="font-medium tabular-nums text-[var(--color-ink)]">{to}</span>
+        {' of '}
+        <span className="font-medium tabular-nums text-[var(--color-ink)]">{total}</span>
+        {` ${label}`}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {onPageSizeChange ? (
+          <label className="inline-flex items-center gap-1.5 text-xs text-[var(--color-ink-muted)]">
+            <span className="whitespace-nowrap">Per page</span>
+            <Select
+              aria-label="Items per page"
+              className="h-8 w-[4.5rem] py-1 text-xs"
+              value={String(pageSize)}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            >
+              {pageSizeOptions.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : null}
+        <div className="inline-flex items-center gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="h-8 px-2"
+            disabled={safePage <= 1}
+            aria-label="Previous page"
+            onClick={() => onPageChange(safePage - 1)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="min-w-[5.5rem] text-center text-xs font-medium tabular-nums text-[var(--color-ink)]">
+            {safePage} / {pageCount}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="h-8 px-2"
+            disabled={safePage >= pageCount}
+            aria-label="Next page"
+            onClick={() => onPageChange(safePage + 1)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Progressive reveal: show `batchSize` at a time, append on demand. Resets when `resetKey` changes. */
+export function useLazyReveal(total: number, batchSize: number, resetKey?: string | number) {
+  const [visibleCount, setVisibleCount] = useState(() => Math.max(1, batchSize))
+
+  useEffect(() => {
+    setVisibleCount(Math.max(1, batchSize))
+  }, [batchSize, resetKey])
+
+  useEffect(() => {
+    setVisibleCount((prev) => {
+      if (total <= 0) return Math.max(1, batchSize)
+      return Math.min(Math.max(prev, batchSize), total)
+    })
+  }, [total, batchSize])
+
+  const shown = total <= 0 ? 0 : Math.min(visibleCount, total)
+  const hasMore = shown < total
+
+  function loadMore() {
+    setVisibleCount((prev) => Math.min(prev + Math.max(1, batchSize), Math.max(total, 0)))
+  }
+
+  return { visibleCount: shown, hasMore, loadMore }
+}
+
+export function LazyLoadSentinel({
+  enabled,
+  onVisible,
+  observeKey,
+  rootMargin = '240px',
+  className,
+}: {
+  enabled: boolean
+  onVisible: () => void
+  /** Change when content grows so a still-visible sentinel can fire again. */
+  observeKey?: string | number
+  rootMargin?: string
+  className?: string
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const onVisibleRef = useRef(onVisible)
+  onVisibleRef.current = onVisible
+
+  useEffect(() => {
+    if (!enabled) return
+    const el = ref.current
+    if (!el) return
+    let cancelled = false
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (cancelled) return
+        if (entries.some((entry) => entry.isIntersecting)) onVisibleRef.current()
+      },
+      { root: null, rootMargin, threshold: 0 },
+    )
+    observer.observe(el)
+    return () => {
+      cancelled = true
+      observer.disconnect()
+    }
+  }, [enabled, rootMargin, observeKey])
+
+  if (!enabled) return null
+  return <div ref={ref} className={cn('h-px w-full', className)} aria-hidden />
+}
+
+export function LazyLoadBar({
+  shown,
+  total,
+  batchSize,
+  hasMore,
+  onLoadMore,
+  onBatchSizeChange,
+  batchSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
+  className,
+  label = 'items',
+}: {
+  shown: number
+  total: number
+  batchSize: number
+  hasMore: boolean
+  onLoadMore: () => void
+  onBatchSizeChange?: (batchSize: number) => void
+  batchSizeOptions?: readonly number[]
+  className?: string
+  label?: string
+}) {
+  if (total <= 0) return null
+
+  return (
+    <div
+      className={cn(
+        'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between',
+        className,
+      )}
+    >
+      <p className="text-xs text-[var(--color-ink-muted)]">
+        Showing <span className="font-medium tabular-nums text-[var(--color-ink)]">{shown}</span>
+        {' of '}
+        <span className="font-medium tabular-nums text-[var(--color-ink)]">{total}</span>
+        {` ${label}`}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {onBatchSizeChange ? (
+          <label className="inline-flex items-center gap-1.5 text-xs text-[var(--color-ink-muted)]">
+            <span className="whitespace-nowrap">Batch</span>
+            <Select
+              aria-label="Items per load"
+              className="h-8 w-[4.5rem] py-1 text-xs"
+              value={String(batchSize)}
+              onChange={(e) => onBatchSizeChange(Number(e.target.value))}
+            >
+              {batchSizeOptions.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : null}
+        {hasMore ? (
+          <Button type="button" size="sm" variant="secondary" className="h-8" onClick={onLoadMore}>
+            Load more
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  )
 }

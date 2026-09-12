@@ -80,6 +80,14 @@ export function LoginPage() {
             <Link className="hover:text-[var(--color-accent)]" to="/faq">
               FAQ
             </Link>
+            <span className="text-[var(--color-border)]">·</span>
+            <Link className="hover:text-[var(--color-accent)]" to="/terms">
+              Terms
+            </Link>
+            <span className="text-[var(--color-border)]">·</span>
+            <Link className="hover:text-[var(--color-accent)]" to="/privacy">
+              Privacy
+            </Link>
           </p>
         </>
       }

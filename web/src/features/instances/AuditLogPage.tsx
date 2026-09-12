@@ -4,6 +4,7 @@ import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { canAdmin, type AuditEvent } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import { Card } from '@/shared/ui/card'
+import { PAGE_HELP } from '@/shared/help/pageHelp'
 import { PageHeader } from '@/shared/ui/page-header'
 import { Navigate } from 'react-router-dom'
 
@@ -35,6 +36,7 @@ export function AuditLogPage() {
       <PageHeader
         title="Audit log"
         description={`Security and admin activity for ${instance.name}.`}
+        help={PAGE_HELP.audit}
       />
 
       <Card className="overflow-hidden p-0">

@@ -3,6 +3,7 @@ import type { IntegrationProvider } from '@/shared/types/database'
 export type IntegrationActionId =
   | 'slack.post_message'
   | 'teams.post_message'
+  | 'sheets.create_spreadsheet'
   | 'sheets.append_row'
   | 'storage.upload_text'
   | 'notion.create_page'
@@ -54,6 +55,23 @@ export const INTEGRATION_ACTIONS: IntegrationActionDef[] = [
       { key: 'spreadsheetId', label: 'Spreadsheet ID', placeholder: 'Leave blank for integration default' },
       { key: 'range', label: 'Range', placeholder: 'Sheet1!A1' },
       { key: 'values', label: 'Values', multiline: true, placeholder: 'a,b,c or ["a","b"]', hint: 'Comma-separated or JSON array; templates allowed' },
+    ],
+  },
+  {
+    id: 'sheets.create_spreadsheet',
+    label: 'Create spreadsheet',
+    description: 'Create a new Google Spreadsheet and optionally write a first row of values.',
+    providers: ['google_sheets'],
+    fields: [
+      { key: 'title', label: 'Title', placeholder: 'Submission {{vars.id}}' },
+      { key: 'sheetTitle', label: 'First sheet name', placeholder: 'Sheet1' },
+      {
+        key: 'values',
+        label: 'Initial row (optional)',
+        multiline: true,
+        placeholder: 'a,b,c or ["a","b"]',
+        hint: 'Comma-separated or JSON array written as the first row after create',
+      },
     ],
   },
   {

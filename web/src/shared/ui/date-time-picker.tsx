@@ -15,12 +15,16 @@ import {
   endOfMonth,
   format,
   getDay,
+  getMonth,
+  getYear,
   isAfter,
   isBefore,
   isSameDay,
   isSameMonth,
   isValid,
   parse,
+  setMonth,
+  setYear,
   startOfDay,
   startOfMonth,
   subMonths,
@@ -95,6 +99,37 @@ function isDateDisabled(day: Date, minDate: Date | null, maxDate: Date | null): 
   if (minDate && isBefore(day, minDate)) return true
   if (maxDate && isAfter(day, maxDate)) return true
   return false
+}
+
+function yearOptions(minDate: Date | null, maxDate: Date | null, viewYear: number): number[] {
+  const now = new Date().getFullYear()
+  let start = minDate ? getYear(minDate) : now - 100
+  let end = maxDate ? getYear(maxDate) : now + 25
+  if (viewYear < start) start = viewYear
+  if (viewYear > end) end = viewYear
+  if (end < start) end = start
+  const years: number[] = []
+  for (let y = start; y <= end; y += 1) years.push(y)
+  return years
+}
+
+function monthDisabled(year: number, monthIndex: number, minDate: Date | null, maxDate: Date | null): boolean {
+  const first = startOfMonth(new Date(year, monthIndex, 1))
+  const last = endOfMonth(first)
+  if (minDate && isAfter(minDate, last)) return true
+  if (maxDate && isBefore(maxDate, first)) return true
+  return false
+}
+
+function clampViewMonth(month: Date, minDate: Date | null, maxDate: Date | null): Date {
+  let next = startOfMonth(month)
+  if (minDate && isBefore(endOfMonth(next), startOfMonth(minDate))) {
+    next = startOfMonth(minDate)
+  }
+  if (maxDate && isAfter(startOfMonth(next), startOfMonth(maxDate))) {
+    next = startOfMonth(maxDate)
+  }
+  return next
 }
 
 function clampTime(
@@ -416,22 +451,71 @@ export function DateTimePicker({
           <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-teal-50/90 to-transparent" />
           {mode !== 'time' ? (
             <div className="relative mb-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="mb-2 flex items-center justify-between gap-1.5">
                 <button
                   type="button"
-                  className="rounded-xl p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-teal-700"
-                  onClick={() => setViewMonth((m) => subMonths(m, 1))}
+                  className="shrink-0 rounded-xl p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-teal-700 disabled:opacity-40"
+                  onClick={() =>
+                    setViewMonth((m) => clampViewMonth(subMonths(m, 1), minDate, maxDate))
+                  }
+                  disabled={Boolean(minDate && isSameMonth(viewMonth, minDate))}
                   aria-label="Previous month"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <p className="font-[family-name:var(--font-display)] text-sm font-semibold text-slate-800">
-                  {format(viewMonth, 'MMMM yyyy')}
-                </p>
+                <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
+                  <label className="sr-only" htmlFor={`${reactId}-month`}>
+                    Month
+                  </label>
+                  <select
+                    id={`${reactId}-month`}
+                    value={getMonth(viewMonth)}
+                    aria-label="Month"
+                    className="max-w-[8.5rem] truncate rounded-lg border border-slate-200 bg-white px-1.5 py-1 font-[family-name:var(--font-display)] text-sm font-semibold text-slate-800 shadow-sm outline-none transition hover:border-teal-300 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                    onChange={(e) => {
+                      const monthIndex = Number(e.target.value)
+                      setViewMonth((m) =>
+                        clampViewMonth(setMonth(m, monthIndex), minDate, maxDate),
+                      )
+                    }}
+                  >
+                    {Array.from({ length: 12 }, (_, monthIndex) => (
+                      <option
+                        key={monthIndex}
+                        value={monthIndex}
+                        disabled={monthDisabled(getYear(viewMonth), monthIndex, minDate, maxDate)}
+                      >
+                        {format(new Date(2000, monthIndex, 1), 'MMMM')}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="sr-only" htmlFor={`${reactId}-year`}>
+                    Year
+                  </label>
+                  <select
+                    id={`${reactId}-year`}
+                    value={getYear(viewMonth)}
+                    aria-label="Year"
+                    className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 font-[family-name:var(--font-display)] text-sm font-semibold text-slate-800 shadow-sm outline-none transition hover:border-teal-300 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                    onChange={(e) => {
+                      const year = Number(e.target.value)
+                      setViewMonth((m) => clampViewMonth(setYear(m, year), minDate, maxDate))
+                    }}
+                  >
+                    {yearOptions(minDate, maxDate, getYear(viewMonth)).map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <button
                   type="button"
-                  className="rounded-xl p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-teal-700"
-                  onClick={() => setViewMonth((m) => addMonths(m, 1))}
+                  className="shrink-0 rounded-xl p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-teal-700 disabled:opacity-40"
+                  onClick={() =>
+                    setViewMonth((m) => clampViewMonth(addMonths(m, 1), minDate, maxDate))
+                  }
+                  disabled={Boolean(maxDate && isSameMonth(viewMonth, maxDate))}
                   aria-label="Next month"
                 >
                   <ChevronRight className="h-4 w-4" />

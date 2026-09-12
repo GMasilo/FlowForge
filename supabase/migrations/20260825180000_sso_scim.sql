@@ -1,4 +1,4 @@
-create extension if not exists "pgcrypto";
+create extension if not exists pgcrypto with schema extensions;
 
 -- Phase 4: SSO (OIDC + SAML) configs + SCIM tokens / JIT membership helpers
 
@@ -207,9 +207,9 @@ begin
     raise exception 'Not allowed';
   end if;
 
-  v_raw := encode(gen_random_bytes(32), 'hex');
+  v_raw := encode(extensions.gen_random_bytes(32), 'hex');
   v_prefix := left(v_raw, 8);
-  v_hash := encode(digest(v_raw, 'sha256'), 'hex');
+  v_hash := encode(extensions.digest(v_raw, 'sha256'), 'hex');
 
   insert into public.instance_scim_tokens (instance_id, name, token_hash, token_prefix, created_by)
   values (p_instance_id, coalesce(nullif(trim(p_name), ''), 'default'), v_hash, v_prefix, auth.uid())
@@ -249,7 +249,7 @@ begin
   if p_token is null or length(p_token) < 16 then
     return null;
   end if;
-  v_hash := encode(digest(p_token, 'sha256'), 'hex');
+  v_hash := encode(extensions.digest(p_token, 'sha256'), 'hex');
   select instance_id into v_instance
   from public.instance_scim_tokens
   where token_hash = v_hash and revoked_at is null

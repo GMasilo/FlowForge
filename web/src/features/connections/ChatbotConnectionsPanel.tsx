@@ -7,15 +7,23 @@ import {
   defaultEmailConfig,
   defaultHttpConfig,
   defaultPaymentConfig,
+  defaultDatabaseConfig,
   parseEmailConfig,
   parseHttpConfig,
   parsePaymentConfig,
+  parseDatabaseConfig,
   connectionConfigToJson,
   type EmailConnectionConfig,
   type HttpConnectionConfig,
   type PaymentConnectionConfig,
+  type DatabaseConnectionConfig,
 } from '@/features/connections/connectionConfig'
-import { EmailConnectionFields, HttpConnectionFields, PaymentConnectionFields } from '@/features/connections/ConnectionFormFields'
+import {
+  EmailConnectionFields,
+  HttpConnectionFields,
+  PaymentConnectionFields,
+  DatabaseConnectionFields,
+} from '@/features/connections/ConnectionFormFields'
 import { ExpectedResponseEditor, InputParamsEditor } from '@/features/connections/SchemaEditors'
 import {
   createChatbotConnection,
@@ -44,6 +52,7 @@ type FormState = {
   http: HttpConnectionConfig
   email: EmailConnectionConfig
   payment: PaymentConnectionConfig
+  database: DatabaseConnectionConfig
 }
 
 function blankForm(): FormState {
@@ -55,6 +64,7 @@ function blankForm(): FormState {
     http: defaultHttpConfig(),
     email: defaultEmailConfig(),
     payment: defaultPaymentConfig(),
+    database: defaultDatabaseConfig(),
   }
 }
 
@@ -176,6 +186,7 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
       http: row.kind === 'http' ? parseHttpConfig(row.config) : defaultHttpConfig(),
       email: row.kind === 'email' ? parseEmailConfig(row.config) : defaultEmailConfig(),
       payment: row.kind === 'payment' ? parsePaymentConfig(row.config) : defaultPaymentConfig(),
+      database: row.kind === 'database' ? parseDatabaseConfig(row.config) : defaultDatabaseConfig(),
     })
     setOpen(true)
     setSectionOpen(true)
@@ -187,7 +198,7 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
       open={sectionOpen}
       onOpenChange={setSectionOpen}
       title="Connections"
-      description="Owned by this chatbot. Private by default — promote to global or share with people for ForgeHub."
+      description="Owned by this chatbot. Private by default — you can still install them onto other chatbots from ForgeHub. Promote to global or share with people to list them for others."
       badge={
         owned.data?.length ? (
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
@@ -231,6 +242,7 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
                 <option value="http">HTTP</option>
                 <option value="email">Email (SMTP)</option>
                 <option value="payment">Payment</option>
+                <option value="database">Database</option>
               </Select>
             </div>
           </div>
@@ -241,7 +253,7 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
               value={form.visibility}
               onChange={(e) => setForm((f) => ({ ...f, visibility: e.target.value as ConnectionVisibility }))}
             >
-              <option value="private">Private — this chatbot only</option>
+              <option value="private">Private — not listed for others (you can still install elsewhere)</option>
               <option value="global">Global — listed in organisation ForgeHub</option>
               <option value="shared">Shared — listed for selected people</option>
             </Select>
@@ -295,6 +307,11 @@ export function ChatbotConnectionsPanel({ chatbotId }: { chatbotId: string }) {
             <PaymentConnectionFields
               value={form.payment}
               onChange={(payment) => setForm((f) => ({ ...f, payment }))}
+            />
+          ) : form.kind === 'database' ? (
+            <DatabaseConnectionFields
+              value={form.database}
+              onChange={(database) => setForm((f) => ({ ...f, database }))}
             />
           ) : (
             <>

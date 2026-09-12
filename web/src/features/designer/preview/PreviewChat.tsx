@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns'
-import { MessageCircle, Minimize2, RotateCcw, Send, Sparkles, X } from 'lucide-react'
+import { MessageCircle, Minimize2, RotateCcw, Send, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { useDesignerStore } from '@/features/designer/store/designerStore'
@@ -9,9 +9,12 @@ import {
   createInitialPreviewState,
   runConnectionStep,
   runEntityStep,
+  runIntegrationStep,
   sendOtpEmailChallenge,
   skipPreviewQuestion,
   submitPreviewAnswer,
+  submitPreviewSuggestion,
+  handlePreviewButtonInteract,
   refreshCaptchaChallenge,
   tickPreview,
   timeoutPreviewQuestion,
@@ -52,11 +55,25 @@ import { FileAnswerField } from '@/features/chat/FileAnswerField'
 import { SignatureAnswerField } from '@/features/chat/SignatureAnswerField'
 import { ImageChoiceAnswerField, imageChoiceCardsFromCatalog, imageChoicePayloadFromSelection } from '@/features/chat/ImageChoiceAnswerField'
 import { ExtendedAnswerPanel, isExtendedAnswerType } from '@/features/chat/ExtendedAnswerPanel'
+import { SignInAnswerField } from '@/features/chat/SignInAnswerField'
+import { completeSignInStep, parseSignInConfig, sendSignInOtpChallenge } from '@/features/designer/model/signInStep'
 import { UserMessageBubble } from '@/features/chat/UserMessageBubble'
 import { ChatMessageBody } from '@/features/chat/ChatMessageBody'
+import { SuggestionResponseChips } from '@/features/chat/SuggestionResponseChips'
+import { ButtonStepChips } from '@/features/chat/ButtonStepChips'
+import {
+  emitFlowEvent,
+  emitRunFunction,
+  parseListenerPayload,
+} from '@/features/chat/flowEvents'
+import {
+  type ButtonListenerEvent,
+  type ResolvedButtonOption,
+} from '@/features/designer/model/buttonStep'
+import { ChatBubbleMeta, messageCopyText } from '@/features/chat/ChatBubbleMeta'
 import { ChatMediaPlayerProvider } from '@/features/chat/ChatMediaPlayer'
 import { useChatbotMedia } from '@/features/designer/MediaLibraryPanel'
-import { mediaKeyFromFilename } from '@/features/designer/model/chatbotMedia'
+import { mediaKeyFromFilename, chatTextHasSocialEmbed } from '@/features/designer/model/chatbotMedia'
 import { chatbotTemplatesQueryKey, fetchChatbotTemplates } from '@/features/templates/templateApi'
 import {
   chatbotTestScenariosQueryKey,
@@ -72,6 +89,13 @@ import {
   normalizeFileAccept,
   normalizeMaxFiles,
 } from '@/features/designer/model/conversationFiles'
+import {
+  chatRootStyle,
+  ensureChatFontFace,
+  resolveChatBranding,
+} from '@/features/chatbots/chatbotBranding'
+import { ChatLogoGlyph } from '@/features/chatbots/chatbotLogoIcons'
+import { ChatStoriesRing } from '@/features/chat/ChatStoriesRing'
 import { fetchUrlPreview, getPaymentStatus, isFlowForgeApiConfigured, startPaymentIntent } from '@/shared/lib/flowforgeApi'
 import { supabase } from '@/shared/lib/supabase'
 import { Button } from '@/shared/ui/button'
@@ -129,7 +153,31 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
       return data.name as string
     },
   })
+  const chatbotBranding = useQuery({
+    queryKey: ['chatbot-branding', chatbotId],
+    enabled: !!chatbotId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('chatbots').select('settings').eq('id', chatbotId!).single()
+      if (error) throw error
+      return data.settings
+    },
+  })
   const displayBotName = graphOverride?.name ?? botName.data ?? 'Preview'
+  const branding = useMemo(
+    () =>
+      resolveChatBranding({
+        settings: chatbotBranding.data,
+        instanceId: instanceId || null,
+        chatbotId: chatbotId || null,
+      }),
+    [chatbotBranding.data, instanceId, chatbotId],
+  )
+
+  useEffect(() => {
+    if (branding.resolvedFontFamily && branding.resolvedFontUrl) {
+      ensureChatFontFace(branding.resolvedFontFamily, branding.resolvedFontUrl)
+    }
+  }, [branding.resolvedFontFamily, branding.resolvedFontUrl])
 
   const globals = useQuery({
     // Distinct from ChatbotSettingsPage's ['chatbot-variables'] which caches the row array.
@@ -155,23 +203,23 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
       const rows = await listChatbotConnections(chatbotId!)
       const map: Record<string, Record<string, unknown>> = {}
       for (const row of rows) {
+        let cfg: Record<string, unknown> | null = null
         if (
           row.config &&
           typeof row.config === 'object' &&
           !Array.isArray(row.config) &&
           String((row.config as Record<string, unknown>).smtpHost ?? (row.config as Record<string, unknown>).baseUrl ?? '').trim()
         ) {
-          map[row.id] = row.config as Record<string, unknown>
-          continue
-        }
-        if (row.kind === 'email') {
-          const cfg = await loadEmailConnectionConfig(row.id, chatbotId!)
-          if (cfg) map[row.id] = cfg
+          cfg = row.config as Record<string, unknown>
+        } else if (row.kind === 'email') {
+          const loaded = await loadEmailConnectionConfig(row.id, chatbotId!)
+          if (loaded) cfg = loaded as Record<string, unknown>
         } else {
           const { loadConnectionConfigForUse } = await import('@/features/connections/connectionApi')
-          const cfg = await loadConnectionConfigForUse(row.id, chatbotId!)
-          if (cfg) map[row.id] = cfg
+          const loaded = await loadConnectionConfigForUse(row.id, chatbotId!)
+          if (loaded) cfg = loaded as Record<string, unknown>
         }
+        if (cfg) map[row.id] = { ...cfg, name: row.name }
       }
       return map
     },
@@ -232,7 +280,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     setGraphOverride(null)
     setSessionKey((k) => k + 1)
     onScenarioResult?.(null)
-    setState(createInitialPreviewState(storeNodes, storeEdges, mergedGlobals(), mediaCatalog, templatesMap))
+    setState(createInitialPreviewState(storeNodes, storeEdges, mergedGlobals(), mediaCatalog, templatesMap, chatbotId))
     setDraft('')
     setSelectedChoices([])
     otpSentForWait.current = null
@@ -242,7 +290,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     if (!ready || !open) return
     setGraphOverride(null)
     onScenarioResult?.(null)
-    setState(createInitialPreviewState(storeNodes, storeEdges, mergedGlobals(), mediaCatalog, templatesMap))
+    setState(createInitialPreviewState(storeNodes, storeEdges, mergedGlobals(), mediaCatalog, templatesMap, chatbotId))
     setDraft('')
     setSelectedChoices([])
     otpSentForWait.current = null
@@ -277,7 +325,14 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     // Cosmetics when delay is 0; otherwise honor configured delay before the step runs
     const waitMs = delaySeconds > 0 ? Math.round(delaySeconds * 1000) : 480
 
-    if (node?.type === 'http' || node?.type === 'email' || node?.type === 'entity' || node?.type === 'transfer') {
+    if (
+      node?.type === 'http' ||
+      node?.type === 'email' ||
+      node?.type === 'database' ||
+      node?.type === 'entity' ||
+      node?.type === 'integration' ||
+      node?.type === 'transfer'
+    ) {
       if (connectionBusy.current) return
       let started = false
       const timer = window.setTimeout(() => {
@@ -304,8 +359,10 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 return result.state
               })
             : node.type === 'entity'
-              ? runEntityStep(state, nodes, edges)
-              : runConnectionStep(state, nodes, edges, connectionsById, connectionCtx)
+              ? runEntityStep(state, nodes, edges, connectionCtx)
+              : node.type === 'integration'
+                ? runIntegrationStep(state, nodes, edges, connectionCtx)
+                : runConnectionStep(state, nodes, edges, connectionsById, connectionCtx)
         void run
           .then((next) => setState(next))
           .catch((err) => {
@@ -442,8 +499,14 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: 'smooth' })
   }, [state?.messages, state?.phase])
 
+  function scrollChatToBottom(behavior: ScrollBehavior = 'smooth') {
+    const el = scrollerRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior })
+  }
+
   useEffect(() => {
-    if (open && state?.phase.kind === 'waiting_input') inputRef.current?.focus()
+    if (open && (state?.phase.kind === 'waiting_input' || state?.phase.kind === 'waiting_suggestion')) inputRef.current?.focus()
   }, [open, state?.phase])
 
   useEffect(() => {
@@ -552,6 +615,8 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
   }, [open, state?.messages])
 
   const waiting = state?.phase.kind === 'waiting_input' ? state.phase : null
+  const waitingSuggestion = state?.phase.kind === 'waiting_suggestion' ? state.phase : null
+  const waitingButton = state?.phase.kind === 'waiting_button' ? state.phase : null
   const waitingNode = waiting ? nodes.find((n) => n.id === waiting.nodeId) : null
   const waitingOptional = !!waitingNode && !isAnswerRequired(waitingNode.config)
   const waitingTimeoutSec = waitingNode ? readTimeoutSeconds(waitingNode.config) : 0
@@ -577,7 +642,9 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
   const isFile = waiting?.answerType === 'file'
   const isSignature = waiting?.answerType === 'signature'
   const isImageChoice = waiting?.answerType === 'image_choice'
+  const isSignIn = waiting?.answerType === 'sign_in' || waitingNode?.type === 'sign_in'
   const isExtended = isExtendedAnswerType(waiting?.answerType ?? '')
+  const signInMode = parseSignInConfig(waitingNode?.config).mode
   const inputConstraints = resolveAnswerInputConstraints(
     waiting?.answerType ?? 'text',
     (waitingNode?.config ?? {}) as Record<string, unknown>,
@@ -627,6 +694,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     isFile ||
     isSignature ||
     isImageChoice ||
+    isSignIn ||
     isExtended
   const answerStoreCtx = {
     instanceId,
@@ -635,6 +703,53 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
   }
   const imageChoiceCards = imageChoiceCardsFromCatalog(waitingCfg, mediaCatalog)
   const imageChoiceLayout = readImageChoiceLayout(waitingCfg)
+
+  function onSuggestionPick(text: string) {
+    if (!state) return
+    setDraft('')
+    setState(submitPreviewSuggestion(state, nodes, edges, text))
+  }
+
+  function onButtonInteract(event: ButtonListenerEvent, button: ResolvedButtonOption) {
+    if (!state || state.phase.kind !== 'waiting_button') return
+    const { state: next, sideEffects } = handlePreviewButtonInteract(
+      state,
+      nodes,
+      edges,
+      event,
+      button,
+    )
+    for (const effect of sideEffects) {
+      if (effect.type === 'emit_event') {
+        emitFlowEvent({
+          eventName: effect.eventName,
+          value: effect.value,
+          payload: effect.payload,
+          nodeKey: effect.nodeKey,
+        })
+      } else if (effect.type === 'run_function_host') {
+        emitRunFunction({
+          name: effect.name,
+          args:
+            typeof effect.args === 'string'
+              ? parseListenerPayload(effect.args)
+              : effect.args,
+          value: effect.value,
+          nodeKey: effect.nodeKey,
+        })
+      }
+    }
+    setState(next)
+  }
+
+  function onSubmitSuggestion(e: FormEvent) {
+    e.preventDefault()
+    if (!state || !waitingSuggestion) return
+    if (!draft.trim()) return
+    const answer = draft.trim()
+    setDraft('')
+    setState(submitPreviewSuggestion(state, nodes, edges, answer))
+  }
 
   function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -728,28 +843,61 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     <div
       data-designer-skip-undo
       className="pointer-events-none fixed right-5 bottom-5 z-[100] flex flex-col items-end gap-3"
+      style={chatRootStyle(branding)}
     >
       {open ? (
         <div
           className={cn(
             'pointer-events-auto relative flex h-[min(640px,72vh)] w-[min(100vw-2.5rem,380px)] flex-col overflow-hidden',
-            'rounded-[1.75rem] border border-white/70 bg-white/95 shadow-[0_25px_80px_-20px_rgb(15_23_42_/_0.45)] backdrop-blur-2xl',
+            'rounded-[1.75rem] border border-[var(--color-border)]/70 bg-[var(--color-surface)]/95 shadow-[0_25px_80px_-20px_rgb(15_23_42_/_0.45)] backdrop-blur-2xl',
             'animate-[ff-rise_0.4s_var(--ease-spring)]',
           )}
+          style={chatRootStyle(branding)}
         >
           <ChatMediaPlayerProvider>
           <div className="relative overflow-hidden rounded-t-[1.75rem] border-b border-white/40 px-4 py-3.5">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600" />
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  'linear-gradient(to bottom right, var(--ff-chat-header), var(--ff-chat-header-2))',
+              }}
+            />
             <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/15 blur-2xl" />
-            <div className="pointer-events-none absolute -bottom-10 left-10 h-24 w-24 rounded-full bg-cyan-300/30 blur-2xl" />
-            <div className="relative flex items-center justify-between gap-3 text-white">
+            <div className="pointer-events-none absolute -bottom-10 left-10 h-24 w-24 rounded-full bg-white/20 blur-2xl" />
+            <div
+              className="relative flex items-center justify-between gap-3"
+              style={{ color: 'var(--ff-chat-header-fg)' }}
+            >
               <div className="flex min-w-0 items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-2xl bg-white/20 shadow-inner ring-1 ring-white/30 backdrop-blur">
-                  <Sparkles className="h-4 w-4" />
-                </span>
+                <ChatStoriesRing
+                  stories={branding.resolvedStories}
+                  chatbotId={activeChatbotId || chatbotId || 'preview'}
+                  size="md"
+                  viewerMode="absolute"
+                >
+                  <span className="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-white/20 shadow-inner ring-1 ring-white/30 backdrop-blur">
+                    {branding.resolvedLogoUrl ? (
+                      <img src={branding.resolvedLogoUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <ChatLogoGlyph id={branding.resolvedLogoIcon} className="h-4 w-4" />
+                    )}
+                  </span>
+                </ChatStoriesRing>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75">Preview</p>
-                  <h2 className="truncate font-[family-name:var(--font-display)] text-base font-semibold leading-tight">
+                  {branding.showEyebrow ? (
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-75">
+                      Preview
+                    </p>
+                  ) : null}
+                  <h2
+                    className={cn(
+                      'truncate text-base font-semibold leading-tight',
+                      branding.resolvedFontFamily
+                        ? undefined
+                        : 'font-[family-name:var(--font-display)]',
+                    )}
+                  >
                     {displayBotName}
                   </h2>
                 </div>
@@ -802,13 +950,17 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
 
           <div
             ref={scrollerRef}
-            className="ff-hide-scrollbar relative flex-1 space-y-3.5 overflow-y-auto bg-gradient-to-b from-slate-50/80 via-white to-cyan-50/40 px-3.5 py-4"
+            className="ff-hide-scrollbar relative flex-1 space-y-3.5 overflow-y-auto px-3.5 py-4"
+            style={{
+              background:
+                'linear-gradient(to bottom, var(--ff-chat-page-bg), color-mix(in srgb, var(--ff-chat-page-bg-2) 40%, white))',
+            }}
           >
             {!state?.messages.length && state?.phase.kind === 'typing' ? (
               <p className="text-center text-xs text-[var(--color-ink-muted)]">Starting conversation…</p>
             ) : null}
 
-            {state?.messages.map((m) => (
+            {state?.messages.map((m, msgIndex) => (
               <div
                 key={m.id}
                 className={cn(
@@ -817,45 +969,109 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 )}
               >
                 {m.role === 'system' ? (
-                  <div className="max-w-[92%] rounded-full bg-slate-200/70 px-3 py-1 text-center text-[11px] text-slate-600">
+                  <div className="max-w-[92%] rounded-full bg-[var(--color-surface-2)]/70 px-3 py-1 text-center text-[11px] text-[var(--color-ink-muted)]">
                     {m.text}
                   </div>
                 ) : (
                   <div
                     className={cn(
-                      'max-w-[88%] px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
-                      m.role === 'user'
-                        ? 'rounded-[1.25rem] rounded-br-md bg-gradient-to-br from-teal-600 to-cyan-600 text-white'
-                        : 'rounded-[1.25rem] rounded-bl-md border border-slate-200/80 bg-white text-slate-800',
+                      'px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
+                      m.role !== 'user' && chatTextHasSocialEmbed(m.text)
+                        ? 'w-full max-w-xl sm:max-w-2xl'
+                        : 'max-w-[88%]',
                     )}
+                    style={
+                      m.role === 'user'
+                        ? {
+                            background:
+                              'linear-gradient(to bottom right, var(--ff-chat-bubble-user), var(--ff-chat-bubble-user-2))',
+                            color: 'var(--ff-chat-bubble-user-fg)',
+                            borderRadius: 'var(--ff-chat-bubble-radius)',
+                            borderBottomRightRadius: '0.35rem',
+                          }
+                        : {
+                            background: 'var(--ff-chat-bubble-bot)',
+                            color: 'var(--ff-chat-bubble-bot-fg)',
+                            borderRadius: 'var(--ff-chat-bubble-radius)',
+                            borderBottomLeftRadius: '0.35rem',
+                            border: '1px solid color-mix(in srgb, var(--ff-chat-bubble-bot-fg) 12%, transparent)',
+                          }
+                    }
                   >
                     {m.role === 'user' ? (
                       <UserMessageBubble message={m} />
                     ) : (
                       <>
-                        <ChatMessageBody text={m.text} attachments={m.media} />
+                        <ChatMessageBody
+                          text={m.text}
+                          attachments={m.media}
+                          typingStyle={branding.typingStyle}
+                          animateTypewriter={
+                            branding.typingStyle === 'typewriter' &&
+                            m.role === 'bot' &&
+                            msgIndex === (state?.messages.length ?? 0) - 1
+                          }
+                          onTypewriterProgress={() => scrollChatToBottom('auto')}
+                          onTypewriterComplete={() => scrollChatToBottom('smooth')}
+                        />
+                        {m.suggestions?.length ? (
+                          <SuggestionResponseChips
+                            suggestions={m.suggestions}
+                            disabled={!waitingSuggestion}
+                            onSelect={onSuggestionPick}
+                          />
+                        ) : null}
+                        {m.buttons?.length ? (
+                          <ButtonStepChips
+                            buttons={m.buttons}
+                            disabled={!waitingButton}
+                            onInteract={onButtonInteract}
+                          />
+                        ) : null}
                       </>
                     )}
                   </div>
                 )}
-                <time
-                  dateTime={m.createdAt}
-                  className={cn(
-                    'px-1 text-[10px] font-medium tracking-wide text-slate-400',
-                    m.role === 'user' ? 'text-right' : m.role === 'system' ? 'text-center' : 'text-left',
-                  )}
-                >
-                  {prettyTimestamp(m.createdAt)}
-                </time>
+                {m.role !== 'system' ? (
+                  <ChatBubbleMeta
+                    createdAt={m.createdAt}
+                    copyText={messageCopyText(m)}
+                    align={m.role === 'user' ? 'end' : 'start'}
+                    formatTime={prettyTimestamp}
+                  />
+                ) : (
+                  <time
+                    dateTime={m.createdAt}
+                    className="px-1 text-center text-[10px] font-medium tracking-wide text-slate-400"
+                  >
+                    {prettyTimestamp(m.createdAt)}
+                  </time>
+                )}
               </div>
             ))}
 
             {state?.phase.kind === 'typing' ? (
               <div className="flex flex-col items-start gap-1">
-                <div className="flex items-center gap-1.5 rounded-[1.25rem] rounded-bl-md border border-slate-200/80 bg-white px-3.5 py-3 shadow-sm">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-500 [animation-delay:0ms]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-500 [animation-delay:150ms]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-500 [animation-delay:300ms]" />
+                <div
+                  className="flex items-center gap-1.5 px-3.5 py-3 shadow-sm ring-1 ring-black/5"
+                  style={{
+                    background: 'var(--ff-chat-bubble-bot)',
+                    borderRadius: 'var(--ff-chat-bubble-radius)',
+                    borderBottomLeftRadius: '0.35rem',
+                  }}
+                >
+                  <span
+                    className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:0ms]"
+                    style={{ background: 'var(--ff-chat-accent)' }}
+                  />
+                  <span
+                    className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:150ms]"
+                    style={{ background: 'var(--ff-chat-accent)' }}
+                  />
+                  <span
+                    className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:300ms]"
+                    style={{ background: 'var(--ff-chat-accent)' }}
+                  />
                 </div>
               </div>
             ) : null}
@@ -866,7 +1082,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           </div>
 
           {waiting && waiting.answerType === 'boolean' ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <div className="flex gap-2">
                 <Button className="flex-1 rounded-2xl" onClick={() => setState(submitPreviewAnswer(state!, nodes, edges, 'true'))}>
                   Yes
@@ -891,7 +1107,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isThumbs ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <ThumbsAnswerField
                 onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
               />
@@ -907,7 +1123,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isMood ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <MoodAnswerField
                 onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
               />
@@ -923,7 +1139,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isLikert ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <LikertAnswerField
                 choices={likertChoices}
                 onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
@@ -940,7 +1156,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isNumberedChoice ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <NumberedChoiceAnswerField
                 choices={numberedChoices}
                 onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
@@ -957,7 +1173,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isRating && ratingOptions.length ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <div className="flex flex-wrap gap-2">
                 {ratingOptions.map((n) => (
                   <button
@@ -982,7 +1198,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isStars ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <StarsAnswerField
                 min={starsMin}
                 max={starsMax}
@@ -1000,7 +1216,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isNps ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <NpsAnswerField
                 min={npsMin}
                 max={npsMax}
@@ -1028,7 +1244,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isFile ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <FileAnswerField
                 accept={normalizeFileAccept(waitingCfg.fileAccept)}
                 maxFiles={normalizeMaxFiles(waitingCfg.maxFiles)}
@@ -1047,7 +1263,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isSignature ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <SignatureAnswerField
                 storeCtx={answerStoreCtx}
                 onSubmit={(value) => setState(submitPreviewAnswer(state!, nodes, edges, value))}
@@ -1064,7 +1280,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isImageChoice ? (
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <ImageChoiceAnswerField
                 className={imageChoiceLayout === 'gallery' ? '-mx-3.5' : undefined}
                 layout={imageChoiceLayout}
@@ -1120,8 +1336,154 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
             </div>
           ) : null}
 
+          {waiting && isSignIn && waitingNode ? (
+            <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
+              <SignInAnswerField
+                key={`${waitingNode.id}-${state?.signInAttempts?.attempts ?? 0}-${state?.otpChallenge?.attempts ?? 0}-${waiting.validationError ?? ''}`}
+                mode={signInMode}
+                error={waiting.validationError}
+                nodeConfig={waitingNode.config}
+                templatesByKey={{ ...(state?.templates ?? {}), ...templatesMap }}
+                chatbotId={chatbotId || undefined}
+                nodeId={waitingNode.id}
+                ssoLaunch="simulate"
+                otpSent={
+                  !!state?.otpChallenge &&
+                  state.otpChallenge.nodeId === waitingNode.id &&
+                  (state.otpChallenge.delivery === 'sent' || state.otpChallenge.delivery === 'mocked')
+                }
+                otpSending={otpSending}
+                onChangeEmail={() =>
+                  setState((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          otpChallenge: null,
+                          phase:
+                            prev.phase.kind === 'waiting_input'
+                              ? { ...prev.phase, validationError: undefined }
+                              : prev.phase,
+                        }
+                      : prev,
+                  )
+                }
+                onSendCode={(email) => {
+                  if (!state) return
+                  if (otpSendBusy.current) return
+                  otpSendBusy.current = true
+                  setOtpSending(true)
+                  void (async () => {
+                    let map = { ...connectionsById }
+                    const connectionId = String(waitingNode.config.connectionId ?? '').trim()
+                    try {
+                      if (connectionId && !String(map[connectionId]?.smtpHost ?? '').trim() && chatbotId) {
+                        const cfg = await loadEmailConnectionConfig(connectionId, chatbotId)
+                        if (cfg) map = { ...map, [connectionId]: cfg }
+                      }
+                    } catch (err) {
+                      const message = err instanceof Error ? err.message : 'Failed to load email connection'
+                      setState((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              messages: [
+                                ...prev.messages,
+                                {
+                                  id: crypto.randomUUID(),
+                                  role: 'system',
+                                  text: `OTP email error: ${message}`,
+                                  createdAt: new Date().toISOString(),
+                                },
+                              ],
+                              phase:
+                                prev.phase.kind === 'waiting_input'
+                                  ? { ...prev.phase, validationError: message }
+                                  : prev.phase,
+                            }
+                          : prev,
+                      )
+                      return
+                    }
+                    try {
+                      const next = await sendSignInOtpChallenge({
+                        state,
+                        node: waitingNode,
+                        email,
+                        connectionsById: map,
+                        chatbotId: chatbotId || undefined,
+                        instanceId: instanceId || undefined,
+                        resend: true,
+                      })
+                      setState(next)
+                    } catch (err) {
+                      const message = err instanceof Error ? err.message : 'Failed to send code'
+                      setState((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              phase:
+                                prev.phase.kind === 'waiting_input'
+                                  ? { ...prev.phase, validationError: message }
+                                  : prev.phase,
+                            }
+                          : prev,
+                      )
+                    }
+                  })().finally(() => {
+                    otpSendBusy.current = false
+                    setOtpSending(false)
+                  })
+                }}
+                onSubmit={(payload) => {
+                  if (!state) return
+                  return completeSignInStep({
+                    state,
+                    node: waitingNode,
+                    edges,
+                    nodes,
+                    credentials: payload,
+                    otpExpected: state.otpChallenge?.code ?? null,
+                    chatbotId: chatbotId || undefined,
+                    instanceId: instanceId || undefined,
+                    sessionId: null,
+                    httpPath: String(waitingNode.config.path ?? '/'),
+                    templatesByKey: { ...(state.templates ?? {}), ...templatesMap },
+                  })
+                    .then((next) => setState(next))
+                    .catch((err) => {
+                      setState((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              messages: [
+                                ...prev.messages,
+                                {
+                                  id: crypto.randomUUID(),
+                                  role: 'system',
+                                  text: err instanceof Error ? err.message : 'Sign-in failed',
+                                  createdAt: new Date().toISOString(),
+                                },
+                              ],
+                              phase:
+                                prev.phase.kind === 'waiting_input'
+                                  ? {
+                                      ...prev.phase,
+                                      validationError:
+                                        err instanceof Error ? err.message : 'Sign-in failed',
+                                    }
+                                  : prev.phase,
+                            }
+                          : prev,
+                      )
+                      throw err
+                    })
+                }}
+              />
+            </div>
+          ) : null}
+
           {waiting && isExtended ? (
-            <div className="ff-hide-scrollbar flex min-h-0 max-h-[min(32rem,70%)] flex-col overflow-y-auto border-t border-slate-100 bg-white/90 px-3.5 py-3">
+            <div className="ff-hide-scrollbar flex min-h-0 max-h-[min(32rem,70%)] flex-col overflow-y-auto border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
               <ExtendedAnswerPanel
                 answerType={waiting.answerType}
                 config={waitingCfg}
@@ -1176,10 +1538,32 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
             </div>
           ) : null}
 
+          {waitingSuggestion ? (
+            <div className="rounded-b-[1.75rem] border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-3 py-3">
+              <form onSubmit={onSubmitSuggestion} className="flex items-end gap-2">
+                <input
+                  className="h-11 flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="Or type your own reply…"
+                />
+                <Button
+                  type="submit"
+                  size="md"
+                  disabled={!draft.trim()}
+                  aria-label="Send"
+                  className="h-11 w-11 shrink-0 rounded-2xl !px-0"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </form>
+            </div>
+          ) : null}
+
           {waiting &&
           waiting.answerType !== 'boolean' &&
           !usesDedicatedAnswerUi ? (
-            <div className="rounded-b-[1.75rem] border-t border-slate-100 bg-white/95 px-3 py-3">
+            <div className="rounded-b-[1.75rem] border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-3 py-3">
               <form onSubmit={onSubmit} className="flex items-end gap-2">
                 {isChoiceType ? (
                   <ChoiceAnswerField
@@ -1265,7 +1649,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                   <textarea
                     ref={inputRef as RefObject<HTMLTextAreaElement>}
                     className={cn(
-                      'flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm outline-none transition focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15',
+                      'flex-1 resize-none rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15',
                       waiting.answerType === 'address' ? 'min-h-[108px]' : 'min-h-[88px]',
                     )}
                     value={draft}
@@ -1307,7 +1691,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 ) : (
                   <input
                     ref={inputRef as RefObject<HTMLInputElement>}
-                    className="h-11 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm outline-none transition focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15"
+                    className="h-11 flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15"
                     value={draft}
                     onChange={(e) => {
                       const next = e.target.value
@@ -1409,15 +1793,15 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
             </div>
           ) : null}
 
-          {!waiting && state?.phase.kind !== 'finished' && state?.phase.kind !== 'waiting_input' ? (
-            <div className="border-t border-slate-100 bg-white/80 px-4 py-2.5 text-center text-[11px] text-slate-400">
+          {!waiting && !waitingSuggestion && !waitingButton && state?.phase.kind !== 'finished' && state?.phase.kind !== 'waiting_input' ? (
+            <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)]/80 px-4 py-2.5 text-center text-[11px] text-[var(--color-ink-muted)]">
               Flow is running…
             </div>
           ) : null}
 
           {varEntries.length ? (
-            <details className="border-t border-slate-100 bg-slate-50/90 px-4 py-2 text-xs">
-              <summary className="cursor-pointer font-medium text-slate-500">Variables ({varEntries.length})</summary>
+            <details className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/90 px-4 py-2 text-xs">
+              <summary className="cursor-pointer font-medium text-[var(--color-ink-muted)]">Variables ({varEntries.length})</summary>
               <ul className="mt-2 max-h-24 space-y-1 overflow-y-auto font-mono text-[11px]">
                 {varEntries.map(([k, v]) => (
                   <li key={k} className="truncate">
@@ -1437,14 +1821,21 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
         aria-label={open ? 'Close chat preview' : 'Open chat preview'}
         className={cn(
           'pointer-events-auto group relative grid h-14 w-14 place-items-center rounded-[1.35rem] text-white transition-all duration-300',
-          'bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600',
-          'shadow-[0_16px_40px_-12px_rgb(15_118_110_/_0.7)]',
-          'hover:scale-105 hover:shadow-[0_20px_48px_-12px_rgb(8_145_178_/_0.75)] active:scale-95',
+          'shadow-[0_16px_40px_-12px_rgb(15_23_42_/_0.45)]',
+          'hover:scale-105 active:scale-95',
           open && 'rotate-0',
         )}
+        style={{
+          background:
+            'linear-gradient(to bottom right, var(--ff-chat-header, #14b8a6), var(--ff-chat-header-2, #0891b2))',
+          color: 'var(--ff-chat-header-fg, #ffffff)',
+        }}
       >
         <span className="pointer-events-none absolute inset-0 rounded-[1.35rem] bg-white/10 opacity-0 transition group-hover:opacity-100" />
-        <span className="pointer-events-none absolute -inset-1 animate-[ff-pulse-soft_2.4s_ease-in-out_infinite] rounded-[1.55rem] bg-teal-400/25 blur-md" />
+        <span
+          className="pointer-events-none absolute -inset-1 animate-[ff-pulse-soft_2.4s_ease-in-out_infinite] rounded-[1.55rem] blur-md opacity-40"
+          style={{ background: 'var(--ff-chat-accent, #2dd4bf)' }}
+        />
         {open ? <Minimize2 className="relative h-5 w-5" /> : <MessageCircle className="relative h-6 w-6" />}
       </button>
     </div>,

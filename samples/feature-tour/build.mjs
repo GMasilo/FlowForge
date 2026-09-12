@@ -68,7 +68,7 @@ const templates = [
     description: 'Opening copy with a guest name input.',
     content: {
       inputs: [{ key: 'name', label: 'Guest name', type: 'string', required: true }],
-      text: 'Hi {{inputs.name}} — welcome to the ForgeHub feature tour. I will walk you through every FlowForge response type, plus templates, data, and logic steps.',
+      text: 'Hi **{{titleCase(inputs.name)}}** — welcome to the **ForgeHub** feature tour.\n\nI will walk you through every FlowForge response type, plus {color:accent}templates{/color}, data, **expressions**, and logic steps.\n\nToday is {{formatDate(utcNow(), "EEEE, MMM d yyyy")}} ({{prettify(utcNow(), "relative")}}).',
     },
   },
   {
@@ -81,7 +81,7 @@ const templates = [
       title: 'This tour covers',
       items: [
         { label: 'Identity', description: 'Name, contact, ID, address', value: 'identity' },
-        { label: 'Scales', description: 'Ratings, NPS, mood, sliders', value: 'scales' },
+        { label: 'Expressions', description: 'Functions, dates, formatting', value: 'expr' },
         { label: 'Shop', description: 'Catalog, cart, payment, receipt', value: 'shop' },
         { label: 'Data', description: 'Entities, variables, HTTP, email', value: 'data' },
       ],
@@ -123,7 +123,11 @@ const templates = [
       items: [
         {
           question: 'What is this chatbot?',
-          answer: 'A single flow that uses every question type, template kind, and data step FlowForge ships.',
+          answer: 'A single flow that uses every question type, template kind, expression function, and data step FlowForge ships.',
+        },
+        {
+          question: 'What about expressions?',
+          answer: 'Messages use {{…}} templates with functions like coalesce, if, formatDate, join, round, titleCase, and markdown such as **bold** or {color:accent}accent{/color}.',
         },
         {
           question: 'Do I need connections?',
@@ -337,7 +341,7 @@ const nodes = [
   message(
     'welcome',
     'Welcome',
-    '{{templates.welcome_msg.text}}\n\n{{templates.tour_menu.text}}\n\n{{templates.studio_hours.text}}\n\n{{templates.help_faq.text}}\n\n{{templates.terms_of_use.text}}',
+    '{{templates.welcome_msg.text}}\n\n{{templates.tour_menu.text}}\n\n{{templates.studio_hours.text}}\n\n{{templates.help_faq.text}}\n\n{{templates.terms_of_use.text}}\n\nTip: optional steps can be skipped where allowed. Watch for {color:accent}**expressions**{/color} like `{{formatDate(utcNow(), "MMM d")}}` and markdown formatting in later messages.',
     {
       delaySeconds: 1,
       templateBindings: {
@@ -358,7 +362,7 @@ const nodes = [
     { output: 'terms_ok', config: { confirmLabel: 'I agree — this is a demo' } },
   ),
 
-  message('sec_identity', 'Identity', 'First, identity and contact — name, email, phone, address, ID, and a few extras.'),
+  message('sec_identity', 'Identity', '**First:** identity and contact — name, email, phone, address, ID, and a few extras.\n\n{color:muted}Answers become `vars.*` you can reuse in expressions.{/color}'),
   question('ask_name', 'Name', 'What is your full name?', 'name', { output: 'visitor_name' }),
   question('ask_nickname', 'Nickname', 'What should I call you? (short text)', 'text', {
     output: 'nickname',
@@ -390,7 +394,28 @@ const nodes = [
   question('ask_website', 'Website', 'Personal or company URL (optional).', 'url', { output: 'website', required: false }),
   question('ask_color', 'Color', 'Pick a favourite colour.', 'color', { output: 'favorite_color' }),
 
-  message('sec_when', 'When & where', 'Dates, times, an appointment, and an optional GPS location.'),
+  message(
+    'msg_fmt_identity',
+    'Formatting preview',
+    [
+      '**Text functions & chat formatting**',
+      '',
+      'Hello **{{titleCase(vars.visitor_name)}}** (aka *{{capitalize(vars.nickname)}}*).',
+      '',
+      '- Lower: `{{toLower(vars.nickname)}}` · Upper: `{{toUpper(vars.nickname)}}`',
+      '- Slug: `{{slugify(vars.visitor_name)}}` · Trim+concat: `{{trim(concat(vars.visitor_name, " / ", vars.nickname))}}`',
+      '- Email domain check: {{if(contains(vars.email, "@"), "✅ looks like an email", "⚠️ missing @")}}',
+      '- Masked local part: `{{replace(vars.email, "@", " at ")}}`',
+      '- Bio length: **{{length(coalesce(vars.bio, ""))}}** chars {{if(empty(vars.bio), "(skipped)", "")}}',
+      '- Pad ID: `{{padStart(vars.national_id, 16, "0")}}` · Slice: `{{slice(vars.national_id, 0, 4)}}…`',
+      '',
+      '{color:accent}Accent{/color} · {color:success}success{/color} · {color:warning}warning{/color} · {color:danger}danger{/color} · ~~struck~~ · [FlowForge docs](https://example.com)',
+      '',
+      'Brand via coalesce: **{{coalesce(vars.brand_name, "ForgeHub")}}** · Support: `{{vars.support_email}}`',
+    ].join('\n'),
+  ),
+
+  message('sec_when', 'When & where', '**Next:** dates, times, an appointment, and an optional GPS location.\n\n{color:muted}Later we format these with `formatDate`, `prettify`, `dateAdd`, and `dateDiff`.{/color}'),
   question('ask_birthday', 'Birthday', 'What is your date of birth?', 'date', { output: 'birthday' }),
   question('ask_time', 'Time', 'What time of day works best for a callback?', 'time', { output: 'preferred_time' }),
   question('ask_datetime', 'Date & time', 'Pick a date and time for a follow-up.', 'datetime', { output: 'callback_at' }),
@@ -400,7 +425,24 @@ const nodes = [
     required: false,
   }),
 
-  message('sec_feel', 'Scales & numbers', 'Every numeric and sentiment control: yes/no, thumbs, mood, Likert, ratings, sliders, money.'),
+  message(
+    'msg_fmt_dates',
+    'Date expressions',
+    [
+      '**Date & time functions**',
+      '',
+      '- Birthday: **{{formatDate(vars.birthday, "MMM d, yyyy")}}** ({{prettify(vars.birthday, "date")}})',
+      '- Preferred time: `{{vars.preferred_time}}`',
+      '- Follow-up: **{{prettify(vars.callback_at)}}** · pattern `{{formatDate(vars.callback_at, "EEE d MMM · HH:mm")}}`',
+      '- Reminder window: **{{formatDate(dateAdd(vars.callback_at, -1, "days"), "MMM d")}}** (one day before)',
+      '- Days until follow-up: **{{dateDiff(vars.callback_at, utcNow(), "days")}}**',
+      '- Server now (UTC): `{{utcNow()}}` · relative: *{{prettify(utcNow(), "relative")}}*',
+      '',
+      '{{if(empty(vars.location), "{color:muted}Location skipped — optional GPS.{/color}", "{color:success}Location captured for this demo.{/color}")}}',
+    ].join('\n'),
+  ),
+
+  message('sec_feel', 'Scales & numbers', '**Every numeric control:** yes/no, thumbs, mood, Likert, ratings, sliders, money.\n\n{color:muted}We will `round` / `clamp` / `if` on these values in the expression lab.{/color}'),
   question('ask_subscribe', 'Subscribe', 'Should we email you a recap after the tour?', 'boolean', { output: 'subscribe' }),
   question('ask_thumbs', 'Thumbs', 'Thumbs up or down on this tour so far?', 'thumbs', { output: 'thumbs' }),
   question('ask_mood', 'Mood', 'How are you feeling about FlowForge?', 'mood', { output: 'mood' }),
@@ -438,7 +480,7 @@ const nodes = [
     config: { min: 0, max: 100, step: 1 },
   }),
 
-  message('sec_pick', 'Choices', 'Lists, autocomplete, ranking, a matrix, and picture cards.'),
+  message('sec_pick', 'Choices', '**Lists & picks:** multi-select, autocomplete, ranking, matrix, and picture cards.\n\n{color:muted}`join`, `first`, `last`, `unique`, and `at` shine once lists are filled.{/color}'),
   question('ask_interests', 'Interests', 'Which areas do you care about? (multi-select)', 'choice', {
     output: 'interests',
     config: {
@@ -448,6 +490,23 @@ const nodes = [
       choices: ['Flows', 'Templates', 'Entities', 'Payments', 'Analytics', 'Expressions'],
     },
   }),
+
+  message(
+    'msg_fmt_lists',
+    'List expressions',
+    [
+      '**Array & list functions**',
+      '',
+      '- Count: **{{length(vars.interests)}}** · Join: `{{join(vars.interests, " · ")}}`',
+      '- First: **{{first(vars.interests)}}** · Last: **{{last(vars.interests)}}** · At(0): `{{at(vars.interests, 0)}}`',
+      '- Unique: `{{join(unique(vars.interests), ", ")}}`',
+      '- Contains Analytics?: {{if(contains(vars.interests, "Analytics"), "{color:success}yes{/color}", "{color:muted}no{/color}")}}',
+      '- Cities available: `{{join(vars.featured_cities, ", ")}}` (from globals)',
+      '',
+      'Effort slider was **{{vars.effort}}**/100 → clamped sample `{{clamp(vars.effort, 10, 90)}}` · rounded `{{round(float(vars.effort) / 10, 1)}}`×10.',
+    ].join('\n'),
+  ),
+
   question('ask_city', 'City', 'Search and pick a city.', 'autocomplete', {
     output: 'city',
     config: { choicesFrom: '{{vars.featured_cities}}' },
@@ -481,7 +540,7 @@ const nodes = [
     },
   ),
 
-  message('sec_files', 'Files & extra', 'Uploads, signature, voice note, OTP, and a multi-field form.'),
+  message('sec_files', 'Files & extra', '**Uploads & verification:** files, signature, voice note, OTP, and a multi-field form.\n\n{color:muted}Form values become an object — we `toJson` / `parseJson` / path them next.{/color}'),
   question('ask_file', 'File', 'Upload a sample image or PDF (optional).', 'file', {
     output: 'upload',
     required: false,
@@ -520,7 +579,7 @@ const nodes = [
   message(
     'sec_shop',
     'Shop & pay',
-    'Next is the store catalog (Templates → Store catalog). Add items, checkout, then pay the cart total — that is product subtotal plus shipping and VAT.',
+    '**Next:** the store catalog (Templates → Store catalog). Add items, checkout, then pay the cart total — product subtotal plus shipping and VAT.\n\n{color:muted}Payment prompt uses `{{vars.cart.total}}` and `{{vars.cart.currency}}`.{/color}',
   ),
   question('ask_shop', 'Shop', 'Browse the ForgeHub catalog and checkout.', 'shop', {
     output: 'cart',
@@ -529,7 +588,7 @@ const nodes = [
   question(
     'ask_payment',
     'Payment',
-    'Pay {{vars.cart.total}} {{vars.cart.currency}} (self-confirm in Preview, or bind a Payment connection).',
+    'Pay **{{vars.cart.total}} {{vars.cart.currency}}** (self-confirm in Preview, or bind a Payment connection).',
     'payment',
     {
       output: 'payment',
@@ -542,6 +601,12 @@ const nodes = [
         paidButtonLabel: 'I have paid',
       },
     },
+  ),
+
+  message(
+    'sec_expr',
+    'Expression lab',
+    '**Expression lab** — set-variable + operation steps next, then a recap that uses math, string, JSON, and `if` helpers on your answers.',
   ),
 
   node('set_full_name', 'set_variable', 'Full name', {
@@ -593,6 +658,33 @@ const nodes = [
     outputVariable: 'email_display',
   }),
 
+  message(
+    'msg_expr_lab',
+    'Expression recap',
+    [
+      '**Functions & expressions recap**',
+      '',
+      '**Identity**',
+      '- Full name (trim+concat+coalesce): **{{vars.full_name}}**',
+      '- Upper via operation: `{{vars.full_name_upper}}` · Title: **{{titleCase(vars.full_name)}}**',
+      '- Reverse nickname: `{{reverse(vars.nickname)}}` · Starts with A?: {{if(startsWith(toUpper(vars.nickname), "A"), "yes", "no")}}',
+      '',
+      '**Numbers**',
+      '- Party {{vars.party_size}} → extra seat **{{vars.extra_seat}}** · budget `{{round(vars.budget, 2)}} {{vars.cart.currency}}`',
+      '- NPS {{vars.nps}} → band {{if(vars.nps >= 9, "{color:success}promoter{/color}", if(vars.nps >= 7, "{color:warning}passive{/color}", "{color:danger}detractor{/color}"))}}',
+      '- Confidence {{vars.confidence}}% · abs(effort-50)={{abs(vars.effort - 50)}} · min/max sample {{min(vars.nps, vars.stars, vars.rating)}} / {{max(vars.nps, vars.stars, vars.rating)}}',
+      '',
+      '**JSON**',
+      '- Company path: **{{vars.company_name}}** · Role: `{{vars.form_object.role}}`',
+      '- Keys: `{{join(keys(vars.profile_form), ", ")}}`',
+      '- Email display replace: `{{vars.email_display}}`',
+      '',
+      '**Priorities ranking** first item: **{{first(vars.priorities)}}** · City: **{{vars.city}}**',
+      '',
+      '{color:accent}Inline arithmetic{/color}: cart/party ≈ `{{if(vars.party_size > 0, round(vars.cart.total / vars.party_size, 2), "n/a")}}` per person.',
+    ].join('\n'),
+  ),
+
   node('cond_nps', 'condition', 'Promoter?', {
     left: '{{vars.nps}}',
     operator: 'gte',
@@ -601,12 +693,22 @@ const nodes = [
   message(
     'msg_promoter',
     'Promoter',
-    'NPS {{vars.nps}} — thank you, {{vars.nickname}}. You are a promoter. Uppercase name: {{vars.full_name_upper}}.',
+    [
+      '{color:success}**Promoter path**{/color} — NPS **{{vars.nps}}**.',
+      '',
+      'Thank you, *{{capitalize(vars.nickname)}}*. Uppercase badge: `{{vars.full_name_upper}}`.',
+      'Interests to echo next: {{join(vars.interests, ", ")}}.',
+    ].join('\n'),
   ),
   message(
     'msg_thanks',
     'Feedback',
-    'NPS {{vars.nps}} — thanks for the honest score, {{vars.nickname}}. We will keep building.',
+    [
+      '{color:warning}**Feedback path**{/color} — NPS **{{vars.nps}}**.',
+      '',
+      'Thanks for the honest score, *{{capitalize(vars.nickname)}}*. We will keep building.',
+      'Top priority from your ranking: **{{first(vars.priorities)}}**.',
+    ].join('\n'),
   ),
 
   node('loop_interests', 'loop', 'Each interest', {
@@ -614,7 +716,11 @@ const nodes = [
     itemVariable: 'item',
     indexVariable: 'index',
   }),
-  message('msg_interest', 'Interest item', 'Interest {{vars.index}}: {{vars.item}}'),
+  message(
+    'msg_interest',
+    'Interest item',
+    'Loop item **#{{vars.index}}**: {color:accent}{{vars.item}}{/color} · slug `{{slugify(vars.item)}}`',
+  ),
 
   node('list_programs', 'entity', 'List programs', {
     entityId: PROGRAMS_ID,
@@ -671,7 +777,17 @@ const nodes = [
   message(
     'msg_wrap',
     'Receipt & file',
-    'Visit {{vars.visit.id}} saved. Catalog had {{steps.list_programs.count}} programs. Extra seat count {{vars.extra_seat}}. Bio length {{vars.bio_length}}.\n\n{{templates.order_receipt.text}}\n\n{{templates.visit_pack.file}}',
+    [
+      '**Wrap-up**',
+      '',
+      'Visit **{{vars.visit.id}}** saved for **{{titleCase(vars.full_name)}}**.',
+      'Catalog listed **{{steps.list_programs.count}}** programs · Extra seats **{{vars.extra_seat}}** · Bio length **{{vars.bio_length}}**.',
+      'Generated at {{formatDate(utcNow(), "yyyy-MM-dd HH:mm")}} UTC ({{prettify(utcNow(), "relative")}}).',
+      '',
+      '{{templates.order_receipt.text}}',
+      '',
+      '{{templates.visit_pack.file}}',
+    ].join('\n'),
     {
       templateBindings: {
         order_receipt: {
@@ -687,8 +803,13 @@ const nodes = [
     },
   ),
   node('end_tour', 'end', 'End', {
-    message:
-      'Done, {{vars.full_name}}. You used every question type, all template kinds, entities, a condition, a loop, operations, HTTP, and email. Bind connections on Data if you want live HTTP, SMTP, OTP, or PayFast.',
+    message: [
+      '**Done**, {{vars.full_name}}.',
+      '',
+      'You used question types, templates, entities, a condition, a loop, operations, HTTP, email, and {color:accent}expressions{/color} (`coalesce`, `if`, `formatDate`, `join`, `round`, `titleCase`, …) plus chat formatting (**bold**, *italic*, `code`, colours).',
+      '',
+      'Bind connections on Data if you want live HTTP, SMTP, OTP, or PayFast.',
+    ].join('\n'),
   }),
 ]
 
@@ -722,12 +843,14 @@ const linearBefore = [
   'ask_postal',
   'ask_website',
   'ask_color',
+  'msg_fmt_identity',
   'sec_when',
   'ask_birthday',
   'ask_time',
   'ask_datetime',
   'ask_appointment',
   'ask_location',
+  'msg_fmt_dates',
   'sec_feel',
   'ask_subscribe',
   'ask_thumbs',
@@ -743,6 +866,7 @@ const linearBefore = [
   'ask_headcount',
   'sec_pick',
   'ask_interests',
+  'msg_fmt_lists',
   'ask_city',
   'ask_ranking',
   'ask_matrix',
@@ -756,6 +880,7 @@ const linearBefore = [
   'sec_shop',
   'ask_shop',
   'ask_payment',
+  'sec_expr',
   'set_full_name',
   'op_upper',
   'op_add',
@@ -764,6 +889,7 @@ const linearBefore = [
   'op_parse',
   'op_path',
   'op_replace',
+  'msg_expr_lab',
   'cond_nps',
 ]
 
@@ -802,7 +928,7 @@ const payload = {
     id: 'c1000000-0000-4000-8000-000000000001',
     name: 'ForgeHub Feature Tour',
     description:
-      'Walks through every FlowForge question type, template kind, entity operation, and logic step. Import from Chatbots → Import.',
+      'Walks through every FlowForge question type, template kind, expression function, chat formatting, entity operation, and logic step. Import from Chatbots → Import.',
   },
   flow: {
     id: 'f1000000-0000-4000-8000-000000000001',

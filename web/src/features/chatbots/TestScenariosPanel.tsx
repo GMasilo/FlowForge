@@ -17,6 +17,7 @@ import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Textarea } from '@/shared/ui/textarea'
 import { FieldError } from '@/shared/ui/field-error'
+import { SECTION_HELP } from '@/shared/help/pageHelp'
 import { CollapsibleSection } from '@/shared/ui/collapsible-section'
 
 function prettyJson(value: unknown): string {
@@ -86,6 +87,7 @@ export function TestScenariosPanel({ chatbotId }: { chatbotId: string }) {
     <CollapsibleSection
       title="Test scenarios"
       description="Fixture globals for Preview. After a run, Design checks that listed variables exist and step keys succeeded."
+      help={SECTION_HELP.testScenarios}
       defaultOpen={false}
       badge={
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">

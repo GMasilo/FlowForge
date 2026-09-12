@@ -12,6 +12,7 @@ import { Button } from '@/shared/ui/button'
 import { Badge } from '@/shared/ui/badge'
 import { Card } from '@/shared/ui/card'
 import { FieldError } from '@/shared/ui/field-error'
+import { PAGE_HELP } from '@/shared/help/pageHelp'
 import { PageHeader } from '@/shared/ui/page-header'
 import {
   BulkActionBar,
@@ -134,6 +135,7 @@ export function AdminChatbotsPage() {
       <PageHeader
         title="Chatbots"
         description={`Inventory and delete chatbots for ${instance.name}. Design work stays on the Chatbots home.`}
+        help={PAGE_HELP.adminChatbots}
         actions={
           <div className="flex flex-wrap gap-2">
             <Link to={instanceAdminPath(instance.id, 'recycle-bin')}>

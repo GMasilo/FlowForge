@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns'
-import { Send, Sparkles } from 'lucide-react'
+import { Send } from 'lucide-react'
 import {
   createInitialPreviewState,
   runConnectionStep,
   runEntityStep,
+  runIntegrationStep,
   sendOtpEmailChallenge,
   skipPreviewQuestion,
   submitPreviewAnswer,
+  submitPreviewSuggestion,
+  handlePreviewButtonInteract,
   refreshCaptchaChallenge,
   tickPreview,
   timeoutPreviewQuestion,
@@ -48,14 +51,42 @@ import { FileAnswerField } from '@/features/chat/FileAnswerField'
 import { SignatureAnswerField } from '@/features/chat/SignatureAnswerField'
 import { ImageChoiceAnswerField, imageChoiceCardsFromCatalog, imageChoicePayloadFromSelection } from '@/features/chat/ImageChoiceAnswerField'
 import { ExtendedAnswerPanel, isExtendedAnswerType } from '@/features/chat/ExtendedAnswerPanel'
+import { SignInAnswerField } from '@/features/chat/SignInAnswerField'
+import {
+  completeSignInStep,
+  parseSignInConfig,
+  sendSignInOtpChallenge,
+  clearPendingSsoLaunch,
+  readPendingSsoLaunch,
+  resolveSignInSsoTemplate,
+  normalizeSsoUserClaims,
+} from '@/features/designer/model/signInStep'
+import {
+  clearSsoCallbackResult,
+  readSsoCallbackResult,
+  type ChatSsoSnapshot,
+} from '@/features/chat/chatSsoSession'
 import { ChatMessageBody } from '@/features/chat/ChatMessageBody'
+import { SuggestionResponseChips } from '@/features/chat/SuggestionResponseChips'
+import { ButtonStepChips } from '@/features/chat/ButtonStepChips'
+import {
+  emitFlowEvent,
+  emitRunFunction,
+  parseListenerPayload,
+} from '@/features/chat/flowEvents'
+import {
+  type ButtonListenerEvent,
+  type ResolvedButtonOption,
+} from '@/features/designer/model/buttonStep'
 import { ChatMediaPlayerProvider } from '@/features/chat/ChatMediaPlayer'
 import { UserMessageBubble } from '@/features/chat/UserMessageBubble'
+import { ChatBubbleMeta, messageCopyText } from '@/features/chat/ChatBubbleMeta'
 import {
   constraintAttr,
   resolveAnswerInputConstraints,
 } from '@/features/chat/answerInputConstraints'
 import { FLOWFORGE_EMBED_SOURCE, postToEmbedParent } from '@/features/chat/embedBridge'
+import { abandonChatSessionOnUnload } from '@/features/chat/abandonChatSession'
 import {
   normalizeFileAccept,
   normalizeMaxFiles,
@@ -64,8 +95,19 @@ import { supabase } from '@/shared/lib/supabase'
 import { getPaymentStatus, instanceFileUrl, isFlowForgeApiConfigured, startPaymentIntent } from '@/shared/lib/flowforgeApi'
 import {
   catalogFromFilenames,
+  chatTextHasSocialEmbed,
   collectMediaFilenamesFromNodes,
 } from '@/features/designer/model/chatbotMedia'
+import {
+  chatRootStyle,
+  embedBrandingMessagePayload,
+  ensureChatFontFace,
+  resolveChatBranding,
+  type OrgChatBranding,
+  type ResolvedChatBranding,
+} from '@/features/chatbots/chatbotBranding'
+import { ChatLogoGlyph } from '@/features/chatbots/chatbotLogoIcons'
+import { ChatStoriesRing } from '@/features/chat/ChatStoriesRing'
 import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/lib/utils'
 import { parseChatEnvironment } from '@/shared/types/database'
@@ -84,6 +126,29 @@ function prettyTimestamp(iso: string): string {
   if (isYesterday(date)) return `Yesterday · ${time}`
   return format(date, 'MMM d · h:mm a')
 }
+
+/** Hide connection/entity status lines that belong in designer preview, not public chat. */
+function isPublicTechSystemMessage(text: string): boolean {
+  const t = text.trim()
+  return (
+    /^HTTP\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/i.test(t) ||
+    /^HTTP\s+(error|timed out)\b/i.test(t) ||
+    /^Entity\s+\S+\.(list|get|create|update|delete)\b/i.test(t) ||
+    /^Entity\s+error:/i.test(t) ||
+    /^Email\s+(to|sent|failed|error|timed out)\b/i.test(t) ||
+    /^Database\s+/i.test(t) ||
+    /^Integration\s+/i.test(t)
+  )
+}
+
+const PUBLIC_BUSY_STEP_TYPES = new Set([
+  'http',
+  'email',
+  'database',
+  'entity',
+  'integration',
+  'transfer',
+])
 
 function visitorKey(): string {
   const storageKey = 'flowforge.visitor_key'
@@ -121,10 +186,15 @@ async function appendEvent(
   })
 }
 
-async function escalateSession(sessionId: string, nodeKey?: string | null) {
+async function escalateSession(
+  sessionId: string,
+  nodeKey?: string | null,
+  queueId?: string | null,
+) {
   const { error } = await supabase.rpc('escalate_conversation_session', {
     p_session_id: sessionId,
     p_node_key: nodeKey ?? null,
+    p_queue_id: queueId?.trim() ? queueId.trim() : null,
   })
   if (error) throw error
 }
@@ -159,15 +229,48 @@ async function completeSession(
   }
 }
 
-export function PublicChatPage({ embed = false }: { embed?: boolean }) {
-  const { publicSlug } = useParams()
+/** Share one in-flight staging boot per token+visitor (React Strict Mode remounts). */
+const stagingBootInflight = new Map<string, Promise<Record<string, unknown>>>()
+
+async function fetchStagingTestBoot(token: string, visitorKey: string): Promise<Record<string, unknown>> {
+  const key = `${token.trim()}:${visitorKey}`
+  const existing = stagingBootInflight.get(key)
+  if (existing) return existing
+
+  const promise = (async () => {
+    const { data, error } = await supabase.rpc('start_staging_test_conversation', {
+      p_token: token,
+      p_visitor_key: visitorKey,
+    })
+    if (error) throw error
+    if (!data || typeof data !== 'object') throw new Error('Invalid session response')
+    return data as Record<string, unknown>
+  })()
+
+  stagingBootInflight.set(key, promise)
+  void promise.finally(() => {
+    stagingBootInflight.delete(key)
+  })
+  return promise
+}
+
+export function PublicChatPage({ embed = false, stagingTest = false }: { embed?: boolean; stagingTest?: boolean }) {
+  const { orgSlug, publicSlug, testToken } = useParams()
   const [searchParams] = useSearchParams()
-  const chatEnvironment = parseChatEnvironment(searchParams.get('env'))
+  const chatEnvironment = stagingTest ? 'staging' : parseChatEnvironment(searchParams.get('env'))
+  const embedKey = stagingTest
+    ? (testToken ?? '')
+    : orgSlug?.trim()
+      ? `${orgSlug.trim()}/${publicSlug ?? ''}`
+      : (publicSlug ?? '')
   const [bootError, setBootError] = useState<string | null>(null)
   const [botName, setBotName] = useState('Chat')
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [chatbotId, setChatbotId] = useState<string | null>(null)
   const [instanceId, setInstanceId] = useState<string | null>(null)
+  const [branding, setBranding] = useState<ResolvedChatBranding>(() =>
+    resolveChatBranding({}),
+  )
   const [nodes, setNodes] = useState<DesignerNode[]>([])
   const [edges, setEdges] = useState<DesignerEdge[]>([])
   const [state, setState] = useState<PreviewEngineState | null>(null)
@@ -175,6 +278,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   const [selectedChoices, setSelectedChoices] = useState<string[]>([])
   const [otpSending, setOtpSending] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const [storiesPortalEl, setStoriesPortalEl] = useState<HTMLElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
   const connectionBusy = useRef(false)
@@ -186,6 +290,36 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   const escalatedForSession = useRef<string | null>(null)
   const handoffEventSeq = useRef(0)
   const seenAgentEventIds = useRef(new Set<string>())
+  const bootSeqRef = useRef(0)
+  const sessionIdRef = useRef<string | null>(null)
+  const stateRef = useRef<PreviewEngineState | null>(null)
+  const embedRef = useRef(embed)
+
+  sessionIdRef.current = sessionId
+  stateRef.current = state
+  embedRef.current = embed
+
+  useEffect(() => {
+    function onPageHide(event: PageTransitionEvent) {
+      if (event.persisted) return
+      const id = sessionIdRef.current
+      if (!id || completedRef.current) return
+      const phase = stateRef.current?.phase
+      if (phase?.kind === 'finished') return
+      completedRef.current = true
+      abandonChatSessionOnUnload(id, stateRef.current?.vars)
+      if (embedRef.current) {
+        postToEmbedParent({
+          source: FLOWFORGE_EMBED_SOURCE,
+          type: 'complete',
+          status: 'abandoned',
+          sessionId: id,
+        })
+      }
+    }
+    window.addEventListener('pagehide', onPageHide)
+    return () => window.removeEventListener('pagehide', onPageHide)
+  }, [])
 
   useEffect(() => {
     if (!embed) return
@@ -221,26 +355,89 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   const connectionsById = useMemo(() => ({} as Record<string, Record<string, unknown>>), [])
 
   useEffect(() => {
-    if (!publicSlug) return
+    if (stagingTest) {
+      if (!testToken) return
+    } else if (!publicSlug) {
+      return
+    }
+    const seq = ++bootSeqRef.current
     let cancelled = false
+
+    // Full-page SSO return: restore the saved conversation instead of starting a new session.
+    const pending = readPendingSsoLaunch()
+    const storedResult = readSsoCallbackResult()
+    const params = new URLSearchParams(window.location.search)
+    const isSsoReturn = params.get('ff_sso') === '1' || !!storedResult
+    if (pending?.snapshot && isSsoReturn) {
+      const snap = pending.snapshot
+      if (cancelled || seq !== bootSeqRef.current) return
+      setBotName(snap.botName)
+      setSessionId(snap.sessionId)
+      setChatbotId(snap.chatbotId)
+      setInstanceId(snap.instanceId)
+      if (snap.branding) setBranding(snap.branding)
+      setNodes(snap.nodes)
+      setEdges(snap.edges)
+      setState({
+        ...snap.state,
+        chatbotId: snap.state.chatbotId ?? snap.chatbotId ?? null,
+      })
+      if (params.get('ff_sso') === '1') {
+        const clean = new URL(window.location.href)
+        clean.searchParams.delete('ff_sso')
+        window.history.replaceState({}, '', `${clean.pathname}${clean.search}${clean.hash}`)
+      }
+      return () => {
+        cancelled = true
+      }
+    }
+
     ;(async () => {
       try {
-        const { data, error } = await supabase.rpc('start_public_conversation_env', {
-          p_slug: publicSlug,
-          p_visitor_key: visitorKey(),
-          p_environment: chatEnvironment,
-        })
-        if (error) throw error
-        if (!data || typeof data !== 'object') throw new Error('Invalid session response')
-        const row = data as Record<string, unknown>
+        const row = stagingTest
+          ? await fetchStagingTestBoot(testToken!, visitorKey())
+          : await (async () => {
+              const { data, error } = await supabase.rpc('start_public_conversation_env', {
+                p_slug: publicSlug!,
+                p_visitor_key: visitorKey(),
+                p_environment: chatEnvironment,
+                p_org_slug: orgSlug?.trim() || null,
+              })
+              if (error) throw error
+              if (!data || typeof data !== 'object') throw new Error('Invalid session response')
+              return data as Record<string, unknown>
+            })()
         const graph = parsePublishedGraph(row.published_graph)
         const globalsMap: Record<string, unknown> = {}
         for (const g of graph.globals) globalsMap[g.key] = g.default_value
-        if (cancelled) return
+        if (cancelled || seq !== bootSeqRef.current) return
         setBotName(typeof row.name === 'string' ? row.name : 'Chat')
         setSessionId(String(row.session_id))
         setChatbotId(String(row.chatbot_id))
         setInstanceId(String(row.instance_id))
+        const orgBranding =
+          row.branding && typeof row.branding === 'object' && !Array.isArray(row.branding)
+            ? (row.branding as OrgChatBranding)
+            : null
+        const resolved = resolveChatBranding({
+          chatbotBranding: row.chatbot_branding,
+          org: orgBranding,
+          instanceId: String(row.instance_id),
+          chatbotId: String(row.chatbot_id),
+        })
+        setBranding(resolved)
+        if (resolved.resolvedFontFamily && resolved.resolvedFontUrl) {
+          ensureChatFontFace(resolved.resolvedFontFamily, resolved.resolvedFontUrl)
+        }
+        if (embed) {
+          const payload = embedBrandingMessagePayload(resolved)
+          postToEmbedParent({
+            source: FLOWFORGE_EMBED_SOURCE,
+            type: 'branding',
+            slug: embedKey,
+            ...payload,
+          })
+        }
         setNodes(graph.nodes)
         setEdges(graph.edges)
         const mediaCatalog =
@@ -261,7 +458,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
                   }),
               )
             : []
-        setState(createInitialPreviewState(graph.nodes, graph.edges, globalsMap, mediaCatalog, templatesExprMap(graph.templates ?? [])))
+        setState(createInitialPreviewState(graph.nodes, graph.edges, globalsMap, mediaCatalog, templatesExprMap(graph.templates ?? []), String(row.chatbot_id)))
         void appendEvent(String(row.session_id), 'session.started', null, {
           publish_version: row.publish_version ?? null,
           environment: chatEnvironment,
@@ -271,12 +468,12 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
           postToEmbedParent({
             source: FLOWFORGE_EMBED_SOURCE,
             type: 'ready',
-            slug: publicSlug,
+            slug: embedKey,
             sessionId: String(row.session_id),
           })
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && seq === bootSeqRef.current) {
           const message = rpcErrorMessage(err)
           setBootError(message)
           if (embed) {
@@ -288,7 +485,83 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     return () => {
       cancelled = true
     }
-  }, [publicSlug, embed, chatEnvironment])
+  }, [orgSlug, publicSlug, testToken, stagingTest, embed, chatEnvironment, embedKey])
+
+  // After SSO return (popup postMessage handled in SignInAnswerField; full-page uses stored result).
+  const ssoReturnHandled = useRef(false)
+  useEffect(() => {
+    if (!state || ssoReturnHandled.current) return
+    const result = readSsoCallbackResult()
+    if (!result) return
+    const pending = readPendingSsoLaunch()
+    if (!pending || result.state !== pending.state) return
+    const phase = state.phase
+    if (phase.kind !== 'waiting_input') return
+    const node = nodes.find((n) => n.id === phase.nodeId) ?? nodes.find((n) => n.id === pending.nodeId)
+    if (!node || node.type !== 'sign_in') return
+    const cfg = parseSignInConfig(node.config)
+    if (cfg.mode !== 'sso') return
+    const sso = resolveSignInSsoTemplate(cfg.ssoTemplateKey, state.templates)
+    if (!sso) return
+
+    ssoReturnHandled.current = true
+    clearSsoCallbackResult()
+    clearPendingSsoLaunch()
+
+    if (!result.ok || !result.claims) {
+      setState((prev) =>
+        prev
+          ? {
+              ...prev,
+              phase:
+                prev.phase.kind === 'waiting_input'
+                  ? {
+                      ...prev.phase,
+                      validationError: result.error || 'SSO sign-in failed',
+                    }
+                  : prev.phase,
+            }
+          : prev,
+      )
+      return
+    }
+
+    const claims = normalizeSsoUserClaims(result.claims, sso)
+    const claimEmail = String(claims.email ?? '').trim()
+    void completeSignInStep({
+      state,
+      node,
+      edges,
+      nodes,
+      credentials: {
+        email: claimEmail || 'sso.user@example.com',
+        ssoClaims: claims,
+      },
+      chatbotId: chatbotId || undefined,
+      instanceId: instanceId || undefined,
+      sessionId,
+      httpPath: String(node.config.path ?? '/'),
+      templatesByKey: state.templates,
+    })
+      .then((next) => setState(next))
+      .catch((err) => {
+        ssoReturnHandled.current = false
+        setState((prev) =>
+          prev
+            ? {
+                ...prev,
+                phase:
+                  prev.phase.kind === 'waiting_input'
+                    ? {
+                        ...prev.phase,
+                        validationError: err instanceof Error ? err.message : 'SSO return failed',
+                      }
+                    : prev.phase,
+              }
+            : prev,
+        )
+      })
+  }, [state, nodes, edges, chatbotId, instanceId, sessionId])
 
   // Tick / connection steps
   useEffect(() => {
@@ -297,7 +570,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     const delaySeconds = node ? readDelaySeconds(node.config) : 0
     const waitMs = delaySeconds > 0 ? Math.round(delaySeconds * 1000) : 480
 
-    if (node?.type === 'http' || node?.type === 'email' || node?.type === 'entity' || node?.type === 'transfer') {
+    if (node && PUBLIC_BUSY_STEP_TYPES.has(node.type)) {
       if (connectionBusy.current) return
       const timer = window.setTimeout(() => {
         if (connectionBusy.current) return
@@ -323,8 +596,10 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
                   return result.state
                 })
             : node.type === 'entity'
-              ? runEntityStep(state, nodes, edges)
-              : runConnectionStep(state, nodes, edges, connectionsById, connectionCtx)
+              ? runEntityStep(state, nodes, edges, connectionCtx)
+              : node.type === 'integration'
+                ? runIntegrationStep(state, nodes, edges, connectionCtx)
+                : runConnectionStep(state, nodes, edges, connectionsById, connectionCtx)
         void run
           .then((next) => setState(next))
           .catch((err) => {
@@ -415,10 +690,34 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       const fresh = state.runs.slice(lastLoggedRunCount.current)
       lastLoggedRunCount.current = state.runs.length
       for (const run of fresh) {
+        const processed =
+          run.processed && typeof run.processed === 'object' && !Array.isArray(run.processed)
+            ? (run.processed as Record<string, unknown>)
+            : {}
+        const inputs =
+          run.inputs && typeof run.inputs === 'object' && !Array.isArray(run.inputs)
+            ? (run.inputs as Record<string, unknown>)
+            : {}
         void appendEvent(sessionId, 'step.run', run.nodeKey, {
           type: run.type,
           status: run.status,
           outputs: run.outputs,
+          durationMs: run.durationMs,
+          startedAt: run.startedAt,
+          finishedAt: run.finishedAt,
+          connectionInvokeMs:
+            typeof processed.invokeMs === 'number' ? processed.invokeMs : undefined,
+          connectionId:
+            typeof inputs.connectionId === 'string' && inputs.connectionId.trim()
+              ? inputs.connectionId.trim()
+              : undefined,
+          processed: {
+            method: processed.method,
+            path: processed.path,
+            action: processed.action,
+            entityKey: processed.entityKey,
+            invokeMs: processed.invokeMs,
+          },
         })
       }
     }
@@ -457,7 +756,9 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     if (escalatedForSession.current === sessionId) return
     escalatedForSession.current = sessionId
     const node = nodes.find((n) => n.id === phase.nodeId)
-    void escalateSession(sessionId, node?.key ?? phase.nodeId).catch((err) => {
+    const queueId =
+      node?.type === 'handoff' ? String(node.config.queueId ?? '').trim() || null : null
+    void escalateSession(sessionId, node?.key ?? phase.nodeId, queueId).catch((err) => {
       console.error('Failed to escalate conversation for handoff', err)
       // Allow a retry on the next render if escalate failed.
       if (escalatedForSession.current === sessionId) escalatedForSession.current = null
@@ -533,8 +834,14 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: 'smooth' })
   }, [state?.messages, state?.phase])
 
+  function scrollChatToBottom(behavior: ScrollBehavior = 'smooth') {
+    const el = scrollerRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior })
+  }
+
   useEffect(() => {
-    if (state?.phase.kind === 'waiting_input') inputRef.current?.focus()
+    if (state?.phase.kind === 'waiting_input' || state?.phase.kind === 'waiting_suggestion') inputRef.current?.focus()
   }, [state?.phase])
 
   useEffect(() => {
@@ -560,7 +867,16 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   }, [state?.phase.kind === 'waiting_input' ? state.phase.nodeId : null])
 
   const waiting = state?.phase.kind === 'waiting_input' ? state.phase : null
+  const waitingSuggestion = state?.phase.kind === 'waiting_suggestion' ? state.phase : null
+  const waitingButton = state?.phase.kind === 'waiting_button' ? state.phase : null
   const waitingHandoff = state?.phase.kind === 'waiting_handoff' ? state.phase : null
+  const typingBusy =
+    state?.phase.kind === 'typing' && state.currentId
+      ? (() => {
+          const n = nodes.find((node) => node.id === state.currentId)
+          return !!n && PUBLIC_BUSY_STEP_TYPES.has(n.type)
+        })()
+      : false
   const waitingNode = waiting ? nodes.find((n) => n.id === waiting.nodeId) : null
   const waitingOptional = !!waitingNode && !isAnswerRequired(waitingNode.config)
   const waitingCfg = waitingNode?.config ?? {}
@@ -582,7 +898,9 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   const isFile = waiting?.answerType === 'file'
   const isSignature = waiting?.answerType === 'signature'
   const isImageChoice = waiting?.answerType === 'image_choice'
+  const isSignIn = waiting?.answerType === 'sign_in' || waitingNode?.type === 'sign_in'
   const isExtended = isExtendedAnswerType(waiting?.answerType ?? '')
+  const signInMode = parseSignInConfig(waitingNode?.config).mode
   const inputConstraints = resolveAnswerInputConstraints(
     waiting?.answerType ?? 'text',
     (waitingNode?.config ?? {}) as Record<string, unknown>,
@@ -631,6 +949,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
     isFile ||
     isSignature ||
     isImageChoice ||
+    isSignIn ||
     isExtended
   const answerStoreCtx = {
     instanceId: instanceId || undefined,
@@ -640,6 +959,55 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
   }
   const imageChoiceCards = imageChoiceCardsFromCatalog(waitingCfg, state?.mediaCatalog ?? [])
   const imageChoiceLayout = readImageChoiceLayout(waitingCfg)
+
+  function onSuggestionPick(text: string) {
+    if (!state) return
+    setDraft('')
+    setState(submitPreviewSuggestion(state, nodes, edges, text))
+  }
+
+  function onButtonInteract(event: ButtonListenerEvent, button: ResolvedButtonOption) {
+    if (!state || state.phase.kind !== 'waiting_button') return
+    const { state: next, sideEffects } = handlePreviewButtonInteract(
+      state,
+      nodes,
+      edges,
+      event,
+      button,
+    )
+    for (const effect of sideEffects) {
+      if (effect.type === 'emit_event') {
+        emitFlowEvent({
+          eventName: effect.eventName,
+          value: effect.value,
+          payload: effect.payload,
+          sessionId,
+          nodeKey: effect.nodeKey,
+        })
+      } else if (effect.type === 'run_function_host') {
+        emitRunFunction({
+          name: effect.name,
+          args:
+            typeof effect.args === 'string'
+              ? parseListenerPayload(effect.args)
+              : effect.args,
+          value: effect.value,
+          sessionId,
+          nodeKey: effect.nodeKey,
+        })
+      }
+    }
+    setState(next)
+  }
+
+  function onSubmitSuggestion(e: FormEvent) {
+    e.preventDefault()
+    if (!state || !waitingSuggestion) return
+    if (!draft.trim()) return
+    const answer = draft.trim()
+    setDraft('')
+    setState(submitPreviewSuggestion(state, nodes, edges, answer))
+  }
 
   function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -773,43 +1141,78 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
 
   return (
     <div
-      ref={rootRef}
+      ref={(el) => {
+        rootRef.current = el
+        if (el !== storiesPortalEl) setStoriesPortalEl(el)
+      }}
       className={cn(
         'relative flex flex-col',
-        embed
-          ? 'h-full min-h-[320px] overflow-hidden bg-white'
-          : 'h-full min-h-full overflow-hidden bg-gradient-to-br from-slate-50 via-teal-50/30 to-cyan-50/40',
+        embed ? 'h-full min-h-[320px] overflow-hidden' : 'h-full min-h-full overflow-hidden',
       )}
+      style={{
+        ...chatRootStyle(branding),
+        background: embed
+          ? 'var(--ff-chat-page-bg)'
+          : 'linear-gradient(to bottom right, var(--ff-chat-page-bg), var(--ff-chat-page-bg-2))',
+      }}
     >
       <ChatMediaPlayerProvider>
       <header
         className={cn(
-          'text-white shadow-sm',
-          embed
-            ? 'border-b border-teal-700/20 bg-teal-700 px-3 py-2.5'
-            : 'border-b border-white/60 bg-gradient-to-br from-teal-500 via-teal-600 to-cyan-600 px-4 py-4',
+          'shadow-sm',
+          embed ? 'border-b border-black/10 px-3 py-2.5' : 'border-b border-white/60 px-4 py-4',
         )}
+        style={{
+          background: embed
+            ? 'var(--ff-chat-header)'
+            : 'linear-gradient(to bottom right, var(--ff-chat-header), var(--ff-chat-header-2))',
+          color: 'var(--ff-chat-header-fg)',
+        }}
       >
         <div className={cn('flex items-center gap-3', embed ? '' : 'mx-auto max-w-2xl')}>
-          <span
-            className={cn(
-              'grid place-items-center rounded-2xl bg-white/20 ring-1 ring-white/30',
-              embed ? 'h-8 w-8' : 'h-10 w-10',
-            )}
+          <ChatStoriesRing
+            stories={branding.resolvedStories}
+            chatbotId={chatbotId || 'public'}
+            size={embed ? 'sm' : 'md'}
+            viewerMode={embed ? 'absolute' : 'fixed'}
+            portalTarget={embed ? storiesPortalEl : null}
           >
-            <Sparkles className={embed ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-          </span>
+            <span
+              className={cn(
+                'grid place-items-center overflow-hidden rounded-full bg-white/20 ring-1 ring-white/30',
+                embed ? 'h-8 w-8' : 'h-10 w-10',
+              )}
+            >
+              {branding.resolvedLogoUrl ? (
+                <img
+                  src={branding.resolvedLogoUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <ChatLogoGlyph
+                  id={branding.resolvedLogoIcon}
+                  className={embed ? 'h-3.5 w-3.5' : 'h-4 w-4'}
+                />
+              )}
+            </span>
+          </ChatStoriesRing>
           <div className="min-w-0">
-            {!embed ? (
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75">
-                {chatEnvironment === 'staging' ? 'Staging' : 'FlowForge'}
+            {!embed && branding.showEyebrow ? (
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-75">
+                {chatEnvironment === 'staging'
+                  ? 'Staging'
+                  : branding.eyebrow || 'FlowForge'}
               </p>
             ) : null}
             <div className="flex min-w-0 items-center gap-2">
               <h1
                 className={cn(
-                  'truncate font-[family-name:var(--font-display)] font-semibold',
+                  'truncate font-semibold',
                   embed ? 'text-sm' : 'text-lg',
+                  branding.resolvedFontFamily
+                    ? undefined
+                    : 'font-[family-name:var(--font-display)]',
                 )}
               >
                 {botName}
@@ -817,7 +1220,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
               {chatEnvironment === 'staging' ? (
                 <span
                   className={cn(
-                    'shrink-0 rounded-full bg-white/20 px-2 py-0.5 font-semibold uppercase tracking-wide text-white ring-1 ring-white/30',
+                    'shrink-0 rounded-full bg-white/20 px-2 py-0.5 font-semibold uppercase tracking-wide ring-1 ring-white/30',
                     embed ? 'text-[9px]' : 'text-[10px]',
                   )}
                 >
@@ -836,42 +1239,125 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
           embed ? 'w-full' : 'mx-auto w-full max-w-2xl',
         )}
       >
-        {state.messages.map((m) =>
-          m.role === 'user' ? (
-            <div key={m.id} className="flex justify-end">
-              <div className="max-w-[88%] rounded-[1.25rem] rounded-br-md bg-gradient-to-br from-teal-600 to-cyan-600 px-3.5 py-2.5 text-sm leading-relaxed text-white shadow-sm">
+        {state.messages.map((m, msgIndex) =>
+          m.role === 'system' && isPublicTechSystemMessage(m.text) ? null : m.role === 'user' ? (
+            <div key={m.id} className="flex flex-col items-end gap-1">
+              <div
+                className="max-w-[88%] px-3.5 py-2.5 text-sm leading-relaxed shadow-sm"
+                style={{
+                  background:
+                    'linear-gradient(to bottom right, var(--ff-chat-bubble-user), var(--ff-chat-bubble-user-2))',
+                  color: 'var(--ff-chat-bubble-user-fg)',
+                  borderRadius: 'var(--ff-chat-bubble-radius)',
+                  borderBottomRightRadius: '0.35rem',
+                }}
+              >
                 <UserMessageBubble message={m} />
               </div>
+              <ChatBubbleMeta
+                createdAt={m.createdAt}
+                copyText={messageCopyText(m)}
+                align="end"
+                formatTime={prettyTimestamp}
+              />
             </div>
           ) : m.role === 'system' ? (
             <p key={m.id} className="text-center text-xs text-slate-400">
               {m.text}
             </p>
           ) : (
-            <div
-              key={m.id}
-              className={cn(
-                'max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm',
-                m.role === 'agent'
-                  ? 'bg-violet-50 text-violet-950 ring-1 ring-violet-200/80'
-                  : 'bg-white text-slate-800 ring-1 ring-slate-200/80',
-              )}
-            >
-              {m.role === 'agent' ? (
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
-                  Agent
-                </p>
-              ) : null}
-              <ChatMessageBody text={m.text} attachments={m.media} />
-              <p className="mt-1 text-[10px] text-slate-400">{prettyTimestamp(m.createdAt)}</p>
+            <div key={m.id} className="flex flex-col items-start gap-1">
+              <div
+                className={cn(
+                  'px-3.5 py-2.5 text-sm shadow-sm',
+                  chatTextHasSocialEmbed(m.text)
+                    ? 'w-full max-w-xl sm:max-w-2xl'
+                    : 'max-w-[85%]',
+                  m.role === 'agent' ? 'ring-1 ring-violet-200/80' : 'ring-1 ring-black/5',
+                )}
+                style={
+                  m.role === 'agent'
+                    ? {
+                        background: '#f5f3ff',
+                        color: '#2e1065',
+                        borderRadius: 'var(--ff-chat-bubble-radius)',
+                      }
+                    : {
+                        background: 'var(--ff-chat-bubble-bot)',
+                        color: 'var(--ff-chat-bubble-bot-fg)',
+                        borderRadius: 'var(--ff-chat-bubble-radius)',
+                      }
+                }
+              >
+                {m.role === 'agent' ? (
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                    Agent
+                  </p>
+                ) : null}
+                <ChatMessageBody
+                  text={m.text}
+                  attachments={m.media}
+                  typingStyle={branding.typingStyle}
+                  animateTypewriter={
+                    branding.typingStyle === 'typewriter' &&
+                    m.role === 'bot' &&
+                    msgIndex === state.messages.length - 1
+                  }
+                  onTypewriterProgress={() => scrollChatToBottom('auto')}
+                  onTypewriterComplete={() => scrollChatToBottom('smooth')}
+                />
+                {m.suggestions?.length ? (
+                  <SuggestionResponseChips
+                    suggestions={m.suggestions}
+                    disabled={!waitingSuggestion}
+                    onSelect={onSuggestionPick}
+                  />
+                ) : null}
+                {m.buttons?.length ? (
+                  <ButtonStepChips
+                    buttons={m.buttons}
+                    disabled={!waitingButton}
+                    onInteract={onButtonInteract}
+                  />
+                ) : null}
+              </div>
+              <ChatBubbleMeta
+                createdAt={m.createdAt}
+                copyText={messageCopyText(m)}
+                align="start"
+                formatTime={prettyTimestamp}
+              />
             </div>
           ),
         )}
         {state.phase.kind === 'typing' ? (
-          <div className="inline-flex items-center gap-1 rounded-2xl bg-white px-3 py-2 text-slate-400 ring-1 ring-slate-200/80">
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-500 [animation-delay:0ms]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-500 [animation-delay:120ms]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-500 [animation-delay:240ms]" />
+          <div
+            className="inline-flex items-center gap-2 px-3 py-2 ring-1 ring-black/5"
+            style={{
+              background: 'var(--ff-chat-bubble-bot)',
+              color: 'var(--ff-chat-bubble-bot-fg)',
+              borderRadius: 'var(--ff-chat-bubble-radius)',
+            }}
+            aria-live="polite"
+            aria-label={typingBusy ? 'Please wait' : 'Typing'}
+          >
+            <span className="inline-flex items-center gap-1">
+              <span
+                className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:0ms]"
+                style={{ background: 'var(--ff-chat-accent)' }}
+              />
+              <span
+                className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:120ms]"
+                style={{ background: 'var(--ff-chat-accent)' }}
+              />
+              <span
+                className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:240ms]"
+                style={{ background: 'var(--ff-chat-accent)' }}
+              />
+            </span>
+            {typingBusy ? (
+              <span className="text-xs text-slate-500">Please wait…</span>
+            ) : null}
           </div>
         ) : null}
         {waitingHandoff ? (
@@ -887,7 +1373,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isThumbs ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <ThumbsAnswerField
@@ -898,7 +1384,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isMood ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <MoodAnswerField
@@ -909,7 +1395,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isLikert ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <LikertAnswerField
@@ -921,7 +1407,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isNumberedChoice ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -932,7 +1418,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         </div>
       ) : null}
       {waiting && isRating && ratingOptions.length ? (
-        <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-2 border-t border-slate-100 bg-white/90 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3">
           {ratingOptions.map((n) => (
             <button
               key={n}
@@ -948,7 +1434,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isStars ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <StarsAnswerField
@@ -961,7 +1447,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isNps ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -978,7 +1464,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isFile ? (
         <div
           className={cn(
-            'flex w-full flex-col gap-2 border-t border-slate-100 bg-white/90 px-4 py-3',
+            'flex w-full flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -999,7 +1485,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isSignature ? (
         <div
           className={cn(
-            'flex w-full flex-col gap-2 border-t border-slate-100 bg-white/90 px-4 py-3',
+            'flex w-full flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -1018,7 +1504,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waiting && isImageChoice ? (
         <div
           className={cn(
-            'flex w-full flex-col gap-2 border-t border-slate-100 bg-white/90 px-4 py-3',
+            'flex w-full flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -1074,10 +1560,140 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         </div>
       ) : null}
 
+      {waiting && isSignIn && waitingNode ? (
+        <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
+          <SignInAnswerField
+            key={`${waitingNode.id}-${state.signInAttempts?.attempts ?? 0}-${state.otpChallenge?.attempts ?? 0}-${waiting.validationError ?? ''}`}
+            mode={signInMode}
+            error={waiting.validationError}
+            nodeConfig={waitingNode.config}
+            templatesByKey={state.templates}
+            chatbotId={chatbotId || undefined}
+            nodeId={waitingNode.id}
+            ssoLaunch="redirect"
+            ssoSnapshot={
+              sessionId && chatbotId && instanceId
+                ? ({
+                    sessionId,
+                    chatbotId,
+                    instanceId,
+                    botName,
+                    publicSlug: publicSlug ?? null,
+                    testToken: testToken ?? null,
+                    embed,
+                    stagingTest,
+                    state,
+                    nodes,
+                    edges,
+                    branding,
+                  } satisfies ChatSsoSnapshot)
+                : null
+            }
+            otpSent={
+              !!state.otpChallenge &&
+              state.otpChallenge.nodeId === waitingNode.id &&
+              (state.otpChallenge.delivery === 'sent' || state.otpChallenge.delivery === 'mocked')
+            }
+            otpSending={otpSending}
+            onChangeEmail={() =>
+              setState((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      otpChallenge: null,
+                      phase:
+                        prev.phase.kind === 'waiting_input'
+                          ? { ...prev.phase, validationError: undefined }
+                          : prev.phase,
+                    }
+                  : prev,
+              )
+            }
+            onSendCode={(email) => {
+              if (otpSendBusy.current) return
+              otpSendBusy.current = true
+              setOtpSending(true)
+              void sendSignInOtpChallenge({
+                state,
+                node: waitingNode,
+                email,
+                connectionsById,
+                chatbotId: chatbotId || undefined,
+                instanceId: instanceId || undefined,
+                sessionId,
+                resend: true,
+              })
+                .then((next) => setState(next))
+                .catch((err) => {
+                  const message = err instanceof Error ? err.message : 'Failed to send code'
+                  setState((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          phase:
+                            prev.phase.kind === 'waiting_input'
+                              ? { ...prev.phase, validationError: message }
+                              : prev.phase,
+                        }
+                      : prev,
+                  )
+                })
+                .finally(() => {
+                  otpSendBusy.current = false
+                  setOtpSending(false)
+                })
+            }}
+            onSubmit={(payload) => {
+              return completeSignInStep({
+                state,
+                node: waitingNode,
+                edges,
+                nodes,
+                credentials: payload,
+                otpExpected: state.otpChallenge?.code ?? null,
+                chatbotId: chatbotId || undefined,
+                instanceId: instanceId || undefined,
+                sessionId,
+                httpPath: String(waitingNode.config.path ?? '/'),
+                templatesByKey: state.templates,
+              })
+                .then((next) => setState(next))
+                .catch((err) => {
+                  setState((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          messages: [
+                            ...prev.messages,
+                            {
+                              id: crypto.randomUUID(),
+                              role: 'system',
+                              text: err instanceof Error ? err.message : 'Sign-in failed',
+                              createdAt: new Date().toISOString(),
+                            },
+                          ],
+                          phase:
+                            prev.phase.kind === 'waiting_input'
+                              ? {
+                                  ...prev.phase,
+                                  validationError:
+                                    err instanceof Error ? err.message : 'Sign-in failed',
+                                }
+                              : prev.phase,
+                        }
+                      : prev,
+                  )
+                  throw err
+                })
+            }}
+          />
+        </div>
+      ) : null}
+
       {waiting && isExtended ? (
         <div
           className={cn(
-            'ff-hide-scrollbar flex w-full min-h-0 max-h-[min(36rem,70vh)] flex-col gap-2 overflow-y-auto border-t border-slate-100 bg-white/90 px-4 py-3',
+            'ff-hide-scrollbar flex w-full min-h-0 max-h-[min(36rem,70vh)] flex-col gap-2 overflow-y-auto border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -1145,7 +1761,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       !usesDedicatedAnswerUi ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/95 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <form onSubmit={onSubmit} className="flex items-end gap-2">
@@ -1317,8 +1933,29 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
         </div>
       ) : null}
 
+      {waitingSuggestion ? (
+        <div
+          className={cn(
+            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-4 py-3',
+            embed ? '' : 'mx-auto max-w-2xl',
+          )}
+        >
+          <form onSubmit={onSubmitSuggestion} className="flex items-end gap-2">
+            <input
+              className="h-11 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm outline-none focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/15"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Or type your own reply…"
+            />
+            <Button type="submit" size="md" disabled={!draft.trim()} aria-label="Send" className="h-11 w-11 shrink-0 rounded-2xl !px-0">
+              <Send className="h-4 w-4" />
+            </Button>
+          </form>
+        </div>
+      ) : null}
+
       {waiting?.answerType === 'boolean' ? (
-        <div className="mx-auto flex w-full max-w-2xl gap-2 border-t border-slate-100 bg-white/90 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-2xl gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3">
           <Button onClick={() => setState(submitPreviewAnswer(state, nodes, edges, 'true'))}>
             Yes
           </Button>
@@ -1334,7 +1971,7 @@ export function PublicChatPage({ embed = false }: { embed?: boolean }) {
       {waitingHandoff ? (
         <div
           className={cn(
-            'w-full border-t border-slate-100 bg-white/95 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >

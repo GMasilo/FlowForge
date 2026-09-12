@@ -1,6 +1,6 @@
 import {
   extractTemplateRefs,
-  getStepOutputVariable,
+  getStepOutputVariables,
   QUESTION_ANSWER_TYPE_OPTIONS,
   validateQuestionDateBounds,
   type DesignerEdge,
@@ -54,6 +54,10 @@ export interface ValidationContext {
   templateKeys?: string[] | null
   /** Template JSON content by key. null = not loaded yet. */
   templateContents?: Record<string, unknown> | null
+  /** Entity ids installed on the current chatbot. null = not loaded yet. */
+  installedEntityIds?: string[] | null
+  /** Integration ids installed on the current chatbot. null = not loaded yet. */
+  installedIntegrationIds?: string[] | null
 }
 
 function buildAdjacency(nodes: DesignerNode[], edges: DesignerEdge[]) {
@@ -215,7 +219,8 @@ function emailLegacyParam(node: DesignerNode, key: string): string {
 
 /** Config strings plus connection defaults used when a step leaves a param empty. */
 function collectNodeTemplateStrings(node: DesignerNode, ctx: ValidationContext): string[] {
-  const strings = collectJsonStrings(node.config)
+  const configForTemplates = activeTemplateConfig(node)
+  const strings = collectJsonStrings(configForTemplates)
   if (node.type !== 'http' && node.type !== 'email') return strings
   const connId = typeof node.config.connectionId === 'string' ? node.config.connectionId : ''
   const info = connId ? ctx.connectionsById?.[connId] : undefined
@@ -236,6 +241,52 @@ function collectNodeTemplateStrings(node: DesignerNode, ctx: ValidationContext):
   return strings
 }
 
+/**
+ * Drop mode-inactive OTP email fields so defaults like Sign-in `otpBody`
+ * (still stored when source is HTTP/entity/password) are not validated.
+ */
+function activeTemplateConfig(node: DesignerNode): Record<string, unknown> {
+  const config = { ...node.config }
+  const otpActive =
+    (node.type === 'question' && String(config.answerType ?? '') === 'otp') ||
+    (node.type === 'sign_in' && String(config.mode ?? '') === 'otp')
+  if (!otpActive) {
+    delete config.otpBody
+    delete config.otpSubject
+    delete config.otpTemplateKey
+  }
+  return config
+}
+
+function nodeAllowsOtpCodeRef(node: DesignerNode): boolean {
+  return (
+    (node.type === 'question' && String(node.config.answerType ?? '') === 'otp') ||
+    (node.type === 'sign_in' && String(node.config.mode ?? '') === 'otp')
+  )
+}
+
+/** Variable names referenced via {{vars.*}} (or bare {{name}}) anywhere in the flow. */
+function collectReferencedVarNames(nodes: DesignerNode[], ctx: ValidationContext): Set<string> {
+  const refs = new Set<string>()
+  const note = (rawRef: string) => {
+    const parsed = parseRef(normalizeRef(rawRef))
+    if (parsed?.kind === 'vars' && parsed.name) refs.add(parsed.name)
+  }
+  for (const node of nodes) {
+    const strings = collectNodeTemplateStrings(node, ctx)
+    for (const text of strings) {
+      for (const rawRef of extractTemplateRefs(text)) note(rawRef)
+    }
+    if (!ctx.templateContents) continue
+    for (const tmplKey of calledTemplateKeys(node, strings)) {
+      for (const inner of refsInsideTemplate(tmplKey, ctx.templateContents)) {
+        note(inner.rawRef)
+      }
+    }
+  }
+  return refs
+}
+
 /** `{{userName}}` in templates is treated as `{{vars.userName}}`. */
 function normalizeRef(rawRef: string): string {
   const t = rawRef.trim()
@@ -246,10 +297,11 @@ function normalizeRef(rawRef: string): string {
 
 function calledTemplateKeys(node: DesignerNode, strings: string[]): string[] {
   const keys = new Set<string>()
+  const otpActive = nodeAllowsOtpCodeRef(node)
   for (const key of [
     String(node.config.templateKey ?? '').trim(),
     String(node.config.shopTemplateKey ?? '').trim(),
-    String(node.config.otpTemplateKey ?? '').trim(),
+    otpActive ? String(node.config.otpTemplateKey ?? '').trim() : '',
   ]) {
     if (key) keys.add(key)
   }
@@ -332,15 +384,16 @@ export function validateFlow(
   const { outgoing, incoming } = buildAdjacency(nodes, edges)
   const roots = findRoots(nodes, incoming)
   const globalSet = new Set(ctx.globalVariables)
+  const referencedVars = collectReferencedVarNames(nodes, ctx)
 
   // All writers of each variable key (globals conceptually written at flow start)
   const writersByVar = new Map<string, DesignerNode[]>()
   for (const node of nodes) {
-    const out = getStepOutputVariable(node)
-    if (!out) continue
-    const list = writersByVar.get(out) ?? []
-    list.push(node)
-    writersByVar.set(out, list)
+    for (const out of getStepOutputVariables(node)) {
+      const list = writersByVar.get(out) ?? []
+      list.push(node)
+      writersByVar.set(out, list)
+    }
   }
 
   for (const node of nodes) {
@@ -353,16 +406,22 @@ export function validateFlow(
       const pred = nodeById.get(predId)
       if (!pred) continue
       availableStepKeys.add(pred.key)
-      const out = getStepOutputVariable(pred)
-      if (out) availableStepOutputs.add(out)
+      for (const out of getStepOutputVariables(pred)) {
+        availableStepOutputs.add(out)
+      }
     }
 
     // Overwrite is allowed: assigning a key that already exists is intentional.
-    const writtenHere = getStepOutputVariable(node)
-    if (writtenHere) {
+    // Only warn when something in the flow actually reads the variable — and skip
+    // Sign-in → Sign-in session rebinds (same default auth outputs by design).
+    for (const writtenHere of getStepOutputVariables(node)) {
+      if (!referencedVars.has(writtenHere) && !globalSet.has(writtenHere)) continue
       const priorWriters = (writersByVar.get(writtenHere) ?? []).filter(
         (w) => w.id !== node.id && guaranteed.has(w.id),
       )
+      if (node.type === 'sign_in' && priorWriters.length && priorWriters.every((w) => w.type === 'sign_in')) {
+        continue
+      }
       if (globalSet.has(writtenHere) || priorWriters.length) {
         issues.push({
           severity: 'warning',
@@ -377,18 +436,18 @@ export function validateFlow(
     }
 
     const strings = collectNodeTemplateStrings(node, ctx)
-    const isOtpQuestion = node.type === 'question' && String(node.config.answerType ?? '') === 'otp'
+    const allowsOtpCode = nodeAllowsOtpCodeRef(node)
 
     const checkRef = (rawRef: string, templateKey?: string) => {
       const normalized = normalizeRef(rawRef)
       const via = templateKey ? `Template "${templateKey}" uses ` : ''
       if (isOtpSpecialRef(normalized) || isOtpSpecialRef(rawRef)) {
-        if (!isOtpQuestion) {
+        if (!allowsOtpCode) {
           issues.push({
             severity: 'warning',
             nodeId: node.id,
             code: 'otp_ref_outside_otp',
-            message: `${via}"{{${rawRef.trim()}}}" only works in OTP question email subject/body`,
+            message: `${via}"{{${rawRef.trim()}}}" only works in OTP email subject/body (question OTP or Sign-in OTP)`,
           })
         }
         return
@@ -400,7 +459,7 @@ export function validateFlow(
           severity: 'error',
           nodeId: node.id,
           code: 'invalid_ref',
-          message: `Invalid reference "{{${rawRef}}}". Use {{vars.name}}, {{steps.key.path}}, {{media.key}}, {{templates.key}}, {{inputs.key}}, {{otp.code}}, or expressions like parseJson({{vars.jsonStr}})`,
+          message: `Invalid reference "{{${rawRef}}}". Use {{vars.name}}, {{steps.key.path}}, {{media.key}}, {{templates.key}}, {{inputs.key}}, {{otp.code}}, or expressions like {{embed("https://…")}} / parseJson(vars.jsonStr)`,
         })
         return
       }
@@ -635,15 +694,17 @@ export function validateFlow(
       }
     }
 
-    if (node.type === 'http' || node.type === 'email') {
+    if (node.type === 'http' || node.type === 'email' || node.type === 'database') {
       const conn = node.config.connectionId
+      const kindLabel =
+        node.type === 'http' ? 'HTTP' : node.type === 'email' ? 'Email' : 'Database'
       if (typeof conn !== 'string' || !conn) {
         issues.push({
           severity: 'error',
           nodeId: node.id,
           field: 'connectionId',
           code: 'missing_connection',
-          message: `${node.type === 'http' ? 'HTTP' : 'Email'} step requires a connection`,
+          message: `${kindLabel} step requires a connection`,
         })
       } else {
         const info = ctx.connectionsById?.[conn]
@@ -663,6 +724,17 @@ export function validateFlow(
             code: 'wrong_connection_kind',
             message: `Step expects a ${node.type} connection`,
           })
+        } else if (node.type === 'database') {
+          const sql = String(node.config.sql ?? '').trim()
+          if (!sql) {
+            issues.push({
+              severity: 'error',
+              nodeId: node.id,
+              field: 'sql',
+              code: 'missing_sql',
+              message: 'Database step requires SQL',
+            })
+          }
         } else {
           const paramValues =
             node.config.paramValues && typeof node.config.paramValues === 'object'
@@ -685,19 +757,29 @@ export function validateFlow(
             }
           }
 
-          if (info.expectedResponse.dataType === 'object') {
-            const fields = info.expectedResponse.schema.filter((f) => f.key.trim())
-            if (!fields.length) {
-              issues.push({
-                severity: 'warning',
-                nodeId: node.id,
-                field: 'connectionId',
-                code: 'connection_missing_schema',
-                message: 'Connection expects an object response but has no schema — designer refs may be incomplete',
-              })
-            }
-          }
+          // Object responses may omit a declared schema (opaque JSON); no warning.
         }
+      }
+    }
+
+    if (node.type === 'entity') {
+      const entityId = typeof node.config.entityId === 'string' ? node.config.entityId.trim() : ''
+      if (!entityId) {
+        issues.push({
+          severity: 'error',
+          nodeId: node.id,
+          field: 'entityId',
+          code: 'missing_entity',
+          message: 'Entity step requires an entity',
+        })
+      } else if (ctx.installedEntityIds && !ctx.installedEntityIds.includes(entityId)) {
+        issues.push({
+          severity: 'error',
+          nodeId: node.id,
+          field: 'entityId',
+          code: 'entity_not_installed',
+          message: 'Selected entity is not installed on this chatbot — install it from the Data tab',
+        })
       }
     }
 
@@ -710,6 +792,18 @@ export function validateFlow(
           field: 'integrationId',
           code: 'missing_integration',
           message: 'Integration step requires an integration',
+        })
+      } else if (
+        ctx.installedIntegrationIds &&
+        !ctx.installedIntegrationIds.includes(integrationId.trim())
+      ) {
+        issues.push({
+          severity: 'error',
+          nodeId: node.id,
+          field: 'integrationId',
+          code: 'integration_not_installed',
+          message:
+            'Selected integration is not installed on this chatbot — install it from the Data tab',
         })
       }
       const action = node.config.action
