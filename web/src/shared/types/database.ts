@@ -4538,6 +4538,17 @@ export type InstanceSsoConfig = PublicTables['instance_sso_configs']['Row']
 export type FlowComment = PublicTables['flow_comments']['Row']
 export type FlowChangeLog = PublicTables['flow_change_log']['Row']
 export type MarketplaceListing = PublicTables['marketplace_listings']['Row']
+export type CronRun = {
+  id: string
+  job_name: string
+  instance_id: string | null
+  started_at: string
+  completed_at: string | null
+  status: 'running' | 'success' | 'failed'
+  summary: Record<string, unknown>
+  error: string | null
+  created_at: string
+}
 
 export const EDITOR_ROLES: InstanceRole[] = ['owner', 'admin', 'editor']
 export const ADMIN_ROLES: InstanceRole[] = ['owner', 'admin']

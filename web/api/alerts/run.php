@@ -43,15 +43,46 @@ $now = time();
 $ym = gmdate('Y-m', $now);
 $utcWeekday = (int) gmdate('w', $now); // 0=Sun … 6=Sat
 
+// Record cron run start
+$runId = null;
+$runInsert = SupabaseRest::restInsertAsService(
+    $config,
+    'cron_runs',
+    [
+        'job_name' => 'alerts.run',
+        'instance_id' => null,
+        'started_at' => gmdate('c', $now),
+        'status' => 'running',
+        'summary' => [],
+    ],
+);
+if ($runInsert['ok'] && is_array($runInsert['data'] ?? null) && count($runInsert['data'])) {
+    $runId = (string) ($runInsert['data'][0]['id'] ?? '');
+}
+
 $instancesRes = SupabaseRest::restSelectAsService(
     $config,
     'instances',
     'select=id,name,contact_email,quota_max_conversations_month',
 );
 if (!$instancesRes['ok'] || !is_array($instancesRes['data'] ?? null)) {
+    $error = $instancesRes['error'] ?? 'Failed to list instances';
+    if ($runId) {
+        SupabaseRest::restPatchAsService(
+            $config,
+            'cron_runs',
+            'id=eq.' . rawurlencode($runId),
+            [
+                'completed_at' => gmdate('c', time()),
+                'status' => 'failed',
+                'summary' => [],
+                'error' => $error,
+            ],
+        );
+    }
     Response::json([
         'ok' => false,
-        'error' => $instancesRes['error'] ?? 'Failed to list instances',
+        'error' => $error,
     ], 502);
 }
 
@@ -325,6 +356,21 @@ foreach ($instancesRes['data'] as $instance) {
             }
         }
     }
+}
+
+// Update cron run record
+if ($runId) {
+    SupabaseRest::restPatchAsService(
+        $config,
+        'cron_runs',
+        'id=eq.' . rawurlencode($runId),
+        [
+            'completed_at' => gmdate('c', time()),
+            'status' => count($summary['errors']) > 0 ? 'failed' : 'success',
+            'summary' => $summary,
+            'error' => count($summary['errors']) > 0 ? implode('; ', array_slice($summary['errors'], 0, 5)) : null,
+        ],
+    );
 }
 
 Response::json(['ok' => true, 'summary' => $summary]);

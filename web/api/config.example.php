@@ -67,8 +67,14 @@ return [
     'public_api_url' => 'https://gkjtt.co.za/flowforge/api',
 
     // Secret for POST /alerts/run (cron). Use a long random string.
-    // curl -X POST -H "Authorization: Bearer …" https://…/flowforge/api/alerts/run
+    // Schedule example (every 30 min):
+    //   */30 * * * * curl -s -X POST -H "Authorization: Bearer $SECRET" https://…/flowforge/api/alerts/run
     'alerts_cron_secret' => 'aubibcnueoeirejf9c8a340etyujgwmvrwi0jgv940grv8hneiv430v3miorepvm',
+
+    // Secret for POST /retention/purge (cron). Use a long random string or reuse alerts_cron_secret.
+    // Schedule example (nightly at 2am UTC):
+    //   0 2 * * * curl -s -X POST -H "Authorization: Bearer $SECRET" https://…/flowforge/api/retention/purge
+    'retention_cron_secret' => 'aubibcnueoeirejf9c8a340etyujgwmvrwi0jgv940grv8hneiv430v3miorepvm',
 
     /*
      * Invite email SMTP — prefer Apache SetEnv DEFAULT_SYSTEM_*:

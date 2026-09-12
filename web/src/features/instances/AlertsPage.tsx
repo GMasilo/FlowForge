@@ -13,6 +13,7 @@ import {
   type AlertDelivery,
   type InstanceAlertRule,
   type InstanceAlertSettings,
+  type CronRun,
 } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
 import { displaySessionStatus } from '@/features/instances/conversationStatus'
@@ -93,6 +94,20 @@ export function AlertsPage() {
         .limit(40)
       if (qError) throw qError
       return (data ?? []) as AlertDelivery[]
+    },
+  })
+
+  const cronRuns = useQuery({
+    queryKey: ['cron-runs-latest', instance.id],
+    enabled: isAdmin && alertsEnabled,
+    queryFn: async () => {
+      const { data, error: qError } = await supabase
+        .from('cron_runs_latest')
+        .select('*')
+        .or(`instance_id.eq.${instance.id},instance_id.is.null`)
+        .in('job_name', ['alerts.run', 'retention.purge'])
+      if (qError) throw qError
+      return (data ?? []) as CronRun[]
     },
   })
 
@@ -515,6 +530,81 @@ export function AlertsPage() {
           <p className="p-4 text-sm text-[var(--color-ink-muted)]">
             No alert rules yet. Add one to monitor abandon rate, failures, or quota burn.
           </p>
+        )}
+      </Card>
+
+      <Card className="overflow-hidden p-0">
+        <div className="border-b border-[var(--color-border)]/60 px-4 py-3">
+          <h2 className="text-sm font-semibold text-[var(--color-ink)]">Cron jobs</h2>
+          <p className="text-xs text-[var(--color-ink-muted)]">
+            Last run status for scheduled ops cron jobs (alerts evaluation, retention purge).
+          </p>
+        </div>
+        {cronRuns.isLoading ? (
+          <p className="p-4 text-sm text-[var(--color-ink-muted)]">Loading…</p>
+        ) : (cronRuns.data ?? []).length ? (
+          <ul className="divide-y divide-[var(--color-border)]/60">
+            {(cronRuns.data ?? []).map((run) => {
+              const summary = run.summary as Record<string, unknown>
+              const isAlerts = run.job_name === 'alerts.run'
+              const isRetention = run.job_name === 'retention.purge'
+              return (
+                <li key={run.id} className="space-y-2 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Badge
+                      className={
+                        run.status === 'success'
+                          ? 'bg-emerald-50 text-emerald-800'
+                          : run.status === 'failed'
+                            ? 'bg-rose-50 text-rose-800'
+                            : 'bg-amber-50 text-amber-800'
+                      }
+                    >
+                      {run.status}
+                    </Badge>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-[var(--color-ink)]">
+                        {isAlerts ? 'Alerts evaluation' : isRetention ? 'Retention purge' : run.job_name}
+                      </p>
+                      <p className="text-xs text-[var(--color-ink-muted)]">
+                        {run.completed_at
+                          ? `Completed ${formatDistanceToNow(new Date(run.completed_at), { addSuffix: true })}`
+                          : `Started ${formatDistanceToNow(new Date(run.started_at), { addSuffix: true })}`}
+                      </p>
+                    </div>
+                  </div>
+                  {isAlerts && (
+                    <div className="pl-2 text-xs text-[var(--color-ink-muted)]">
+                      Instances: {String(summary.instances ?? 0)} · Rules: {String(summary.rules_checked ?? 0)} ·
+                      Triggered: {String(summary.triggered ?? 0)} · Notified: {String(summary.notified ?? 0)} ·
+                      Digests: {String(summary.digests ?? 0)}
+                      {Array.isArray(summary.errors) && summary.errors.length > 0
+                        ? ` · Errors: ${summary.errors.length}`
+                        : ''}
+                    </div>
+                  )}
+                  {isRetention && (
+                    <div className="pl-2 text-xs text-[var(--color-ink-muted)]">
+                      Policies: {String(summary.policies_checked ?? 0)} · Purged instances:{' '}
+                      {String(summary.instances_purged ?? 0)} · Sessions purged:{' '}
+                      {String(summary.total_sessions_purged ?? 0)}
+                      {Number(summary.skipped_legal_hold ?? 0) > 0
+                        ? ` · Skipped (legal hold): ${summary.skipped_legal_hold}`
+                        : ''}
+                      {Array.isArray(summary.errors) && summary.errors.length > 0
+                        ? ` · Errors: ${summary.errors.length}`
+                        : ''}
+                    </div>
+                  )}
+                  {run.error ? (
+                    <p className="pl-2 text-xs text-rose-700">Error: {run.error}</p>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p className="p-4 text-sm text-[var(--color-ink-muted)]">No cron runs yet.</p>
         )}
       </Card>
 

@@ -81,7 +81,8 @@ These are used internally by designer/public chat (not the Platform data contrac
 | POST | `/payment/status` | JWT or `session_id` | Poll payment intent status |
 | GET | `/chat/appearance` | none | Public embed branding for a slug |
 | POST | `/integration/execute` | JWT or `session_id` | Run a connected integration action |
-| GET/POST | `/alerts/run` | `alerts_cron_secret` | Evaluate alert rules (cron) |
+| GET/POST | `/alerts/run` | `alerts_cron_secret` | Evaluate alert rules and digests (cron) |
+| GET/POST | `/retention/purge` | `retention_cron_secret` | Purge expired conversation data (cron) |
 | * | `/scim/v2/*` | SCIM token | SCIM 2.0 Users provisioning |
 
 All authenticated JSON requests require:
@@ -124,6 +125,42 @@ List query: `GET /file/list?kind=media&instance_id=…&chatbot_id=…` (JWT). De
 - Email single-recipient limit (no blast/open-relay)
 - Secrets never written to responses/logs by the handlers
 
+## Cron jobs
+
+FlowForge ops cron jobs are plain PHP endpoints authenticated with shared secrets (Bearer tokens). Schedule them via the server's crontab or a hosted cron service.
+
+### Alerts cron (`/alerts/run`)
+
+Evaluates alert rules and sends threshold notifications + weekly digests for all instances.
+
+**Schedule**: Every 30 minutes (or as needed)
+**Auth**: `alerts_cron_secret` (Bearer or `?secret=`)
+
+```bash
+# Example crontab entry
+*/30 * * * * curl -s -X POST -H "Authorization: Bearer $ALERTS_SECRET" https://gkjtt.co.za/flowforge/api/alerts/run
+```
+
+**Summary**: Returns JSON with `instances`, `rules_checked`, `triggered`, `notified`, `digests`, `errors[]`. Each run is logged in `cron_runs` table for observability (visible in admin UI).
+
+### Retention purge cron (`/retention/purge`)
+
+Purges expired conversation data for instances with retention policies (skips legal hold).
+
+**Schedule**: Nightly (e.g. 2am UTC)
+**Auth**: `retention_cron_secret` (or reuse `alerts_cron_secret`)
+
+```bash
+# Example crontab entry
+0 2 * * * curl -s -X POST -H "Authorization: Bearer $RETENTION_SECRET" https://gkjtt.co.za/flowforge/api/retention/purge
+```
+
+**Summary**: Returns JSON with `policies_checked`, `instances_purged`, `total_sessions_purged`, `skipped_legal_hold`, `errors[]`. Each run is logged in `cron_runs` table.
+
+**Configuration**: Set `retention_cron_secret` in `config.php` (or reuse `alerts_cron_secret` as a shared ops secret). Instance admins configure retention policies under Compliance → Data Retention.
+
+**Observability**: Last-run status and summary counts are visible in the admin UI (Alerts page → Cron jobs section). Runs persist in the `cron_runs` table for audit trails.
+
 ## Deploy
 
 1. Upload the `web/api` folder to `https://gkjtt.co.za/flowforge/api/`
@@ -134,6 +171,7 @@ List query: `GET /file/list?kind=media&instance_id=…&chatbot_id=…` (JWT). De
    `sudo chown -R apache:apache files storage && sudo chmod -R 775 files storage`
    If `files/` is not writable, uploads fall back to `storage/files`. If `storage/` is not writable, rate limiting falls back to the system temp dir.
 6. Needs PHP 8.1+, `curl`, OpenSSL. PHP `upload_max_filesize` and `post_max_size` must be at least `files_max_bytes` (default 10 MiB).
+7. Configure cron secrets (`alerts_cron_secret`, `retention_cron_secret`) and schedule the cron endpoints (see Cron jobs section above).
 
 ## HTTP mock / tests
 
