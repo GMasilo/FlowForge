@@ -16,6 +16,19 @@ import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Select } from '@/shared/ui/select'
 
+function isValidUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
 interface HttpFieldsProps {
   value: HttpConnectionConfig
   onChange: (next: HttpConnectionConfig) => void
@@ -27,6 +40,8 @@ export function HttpConnectionFields({ value, onChange, disabled }: HttpFieldsPr
     onChange({ ...value, ...partial })
   }
 
+  const urlError = value.baseUrl.trim() && !isValidUrl(value.baseUrl.trim())
+
   return (
     <div className="space-y-4">
       <div>
@@ -37,10 +52,17 @@ export function HttpConnectionFields({ value, onChange, disabled }: HttpFieldsPr
           placeholder="https://api.example.com"
           required
           disabled={disabled}
+          className={urlError ? 'border-red-500' : ''}
         />
-        <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
-          Shared root for all requests using this connection.
-        </p>
+        {urlError ? (
+          <p className="mt-1 text-[11px] text-red-600">
+            Must be a valid URL starting with http:// or https://
+          </p>
+        ) : (
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Shared root for all requests using this connection.
+          </p>
+        )}
       </div>
 
       <div>
@@ -326,7 +348,11 @@ export function EmailConnectionFields({ value, onChange, disabled }: EmailFields
             required
             disabled={disabled}
             placeholder="noreply@example.com"
+            className={value.fromEmail.trim() && !isValidEmail(value.fromEmail.trim()) ? 'border-red-500' : ''}
           />
+          {value.fromEmail.trim() && !isValidEmail(value.fromEmail.trim()) ? (
+            <p className="mt-1 text-[11px] text-red-600">Invalid email format</p>
+          ) : null}
         </div>
         <div>
           <Label>From name</Label>
@@ -347,7 +373,11 @@ export function EmailConnectionFields({ value, onChange, disabled }: EmailFields
           onChange={(e) => patch({ replyTo: e.target.value })}
           disabled={disabled}
           placeholder="support@example.com"
+          className={value.replyTo.trim() && !isValidEmail(value.replyTo.trim()) ? 'border-red-500' : ''}
         />
+        {value.replyTo.trim() && !isValidEmail(value.replyTo.trim()) ? (
+          <p className="mt-1 text-[11px] text-red-600">Invalid email format</p>
+        ) : null}
       </div>
     </div>
   )

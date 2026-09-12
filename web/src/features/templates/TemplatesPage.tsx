@@ -1,11 +1,13 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
+  ArrowUpDown,
   Check,
   Clock3,
   Copy,
+  Download,
   FileDown,
   FilePenLine,
   KeyRound,
@@ -18,6 +20,7 @@ import {
   ShoppingCart,
   CircleHelp,
   Trash2,
+  Upload,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
@@ -27,6 +30,12 @@ import { mediaKeyFromFilename } from '@/features/designer/model/chatbotMedia'
 import { absoluteInstanceFileUrl } from '@/shared/lib/flowforgeApi'
 import { supabase } from '@/shared/lib/supabase'
 import { canEdit, type ChatbotTemplate } from '@/shared/types/database'
+import { useTemplateActions } from '@/features/templates/useTemplateActions'
+import {
+  getTemplatePreview,
+  sortTemplates,
+  readTemplateFromFile,
+} from '@/features/templates/templateHelpers'
 import {
   chatbotTemplatesQueryKey,
   createChatbotTemplate,
@@ -42,7 +51,6 @@ import {
   isTemplateKind,
   keyFromTemplateName,
   parseTemplateContent,
-  renderTemplateText,
   starterTemplateContent,
   templateInputsOf,
   TEMPLATE_KIND_META,
@@ -83,8 +91,7 @@ type EditorState = {
 
 function snippetPreview(row: ChatbotTemplate): string {
   if (!isTemplateKind(row.kind)) return ''
-  const text = renderTemplateText(row.kind, parseTemplateContent(row.kind, row.content))
-  return text.replace(/\s+/g, ' ').trim().slice(0, 120)
+  return getTemplatePreview(row, 120)
 }
 
 function CopyChip({ value }: { value: string }) {
@@ -119,8 +126,14 @@ export function TemplatesPage() {
   const editable = canEdit(role)
   const [query, setQuery] = useState('')
   const [kindFilter, setKindFilter] = useState<'all' | TemplateKind>('all')
+  const [sortBy, setSortBy] = useState<'name' | 'key' | 'kind' | 'updated'>('name')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [editor, setEditor] = useState<EditorState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const templateActions = useTemplateActions(chatbotId)
 
   const chatbot = useQuery({
     queryKey: ['chatbot', chatbotId],
@@ -170,7 +183,7 @@ export function TemplatesPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return (templates.data ?? []).filter((row) => {
+    let rows = (templates.data ?? []).filter((row) => {
       if (kindFilter !== 'all' && row.kind !== kindFilter) return false
       if (!q) return true
       return (
@@ -179,7 +192,8 @@ export function TemplatesPage() {
         (row.description ?? '').toLowerCase().includes(q)
       )
     })
-  }, [templates.data, kindFilter, query])
+    return sortTemplates(rows, sortBy, sortOrder)
+  }, [templates.data, kindFilter, query, sortBy, sortOrder])
 
   const save = useMutation({
     mutationFn: async (draft: EditorState) => {
@@ -254,6 +268,84 @@ export function TemplatesPage() {
       return
     }
     save.mutate(editor)
+  }
+
+  async function handleDuplicate(template: ChatbotTemplate) {
+    if (!chatbotId) return
+    try {
+      setError(null)
+      await templateActions.duplicate(template.id, `${template.name} (Copy)`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to duplicate template')
+    }
+  }
+
+  async function handleExport(templateIds: string[]) {
+    try {
+      setError(null)
+      await templateActions.export(templateIds)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export templates')
+    }
+  }
+
+  async function handleImportFile() {
+    if (!chatbotId) return
+    const file = fileInputRef.current?.files?.[0]
+    if (!file) return
+
+    try {
+      setError(null)
+      const data = await readTemplateFromFile(file)
+      await templateActions.import(chatbotId, data.templates, false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import templates')
+    }
+  }
+
+  function toggleSelection(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function selectAll() {
+    setSelected(new Set(filtered.map((t) => t.id)))
+  }
+
+  function clearSelection() {
+    setSelected(new Set())
+  }
+
+  async function handleBulkExport() {
+    if (selected.size === 0) return
+    await handleExport(Array.from(selected))
+    clearSelection()
+  }
+
+  async function handleBulkDelete() {
+    if (selected.size === 0) return
+    const confirmed = window.confirm(
+      `Delete ${selected.size} template${selected.size > 1 ? 's' : ''}? Steps that insert these keys will show empty text.`,
+    )
+    if (!confirmed) return
+
+    try {
+      setError(null)
+      await Promise.all(Array.from(selected).map((id) => deleteChatbotTemplate(id)))
+      if (chatbotId) await qc.invalidateQueries({ queryKey: chatbotTemplatesQueryKey(chatbotId) })
+      clearSelection()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete templates')
+    }
+  }
+
+  function cycleSortOrder() {
+    setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
   }
 
   if (chatbot.isLoading) {
@@ -415,28 +507,83 @@ export function TemplatesPage() {
             </Card>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[220px] flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-ink-muted)]" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search templates…"
-                className="pl-9"
-              />
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative min-w-[220px] flex-1">
+                <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-ink-muted)]" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search templates…"
+                  className="pl-9"
+                />
+              </div>
+              <Select
+                className="w-auto min-w-[160px]"
+                value={kindFilter}
+                onChange={(e) => setKindFilter(e.target.value as 'all' | TemplateKind)}
+              >
+                <option value="all">All types</option>
+                {TEMPLATE_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {TEMPLATE_KIND_META[kind].label}
+                  </option>
+                ))}
+              </Select>
+              <Select className="w-auto min-w-[140px]" value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
+                <option value="name">Sort by name</option>
+                <option value="key">Sort by key</option>
+                <option value="kind">Sort by type</option>
+                <option value="updated">Sort by updated</option>
+              </Select>
+              <Button size="sm" variant="ghost" onClick={cycleSortOrder} title={`Sort ${sortOrder === 'asc' ? 'descending' : 'ascending'}`}>
+                <ArrowUpDown className="h-4 w-4" />
+              </Button>
+              {editable ? (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".json,.txt"
+                    className="hidden"
+                    onChange={() => void handleImportFile()}
+                  />
+                  <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="h-4 w-4" />
+                    Import
+                  </Button>
+                </>
+              ) : null}
             </div>
-            <Select
-              className="w-auto min-w-[160px]"
-              value={kindFilter}
-              onChange={(e) => setKindFilter(e.target.value as 'all' | TemplateKind)}
-            >
-              <option value="all">All types</option>
-              {TEMPLATE_KINDS.map((kind) => (
-                <option key={kind} value={kind}>
-                  {TEMPLATE_KIND_META[kind].label}
-                </option>
-              ))}
-            </Select>
+
+            {selected.size > 0 ? (
+              <Card className="flex flex-wrap items-center justify-between gap-3 border-[var(--color-accent)]/30 bg-[var(--color-accent-soft)]/30 p-3">
+                <p className="text-sm font-medium text-[var(--color-ink)]">
+                  {selected.size} template{selected.size > 1 ? 's' : ''} selected
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => void handleBulkExport()}>
+                    <Download className="h-4 w-4" />
+                    Export selected
+                  </Button>
+                  {editable ? (
+                    <Button size="sm" variant="danger" onClick={() => void handleBulkDelete()}>
+                      <Trash2 className="h-4 w-4" />
+                      Delete selected
+                    </Button>
+                  ) : null}
+                  <Button size="sm" variant="ghost" onClick={clearSelection}>
+                    Clear
+                  </Button>
+                </div>
+              </Card>
+            ) : filtered.length > 0 && editable ? (
+              <div className="flex items-center gap-2 text-xs text-[var(--color-ink-muted)]">
+                <button type="button" onClick={selectAll} className="underline hover:text-[var(--color-accent)]">
+                  Select all {filtered.length}
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {templates.isLoading ? (
@@ -455,14 +602,30 @@ export function TemplatesPage() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((row) => {
                 const Icon = KIND_ICONS[row.kind]
+                const isSelected = selected.has(row.id)
                 return (
                   <div
                     key={row.id}
                     className={cn(
-                      'group relative rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-4 text-left shadow-[var(--shadow-soft)] transition',
-                      'hover:border-[var(--color-accent)]/50 hover:shadow-md',
+                      'group relative rounded-2xl border bg-[var(--color-surface)]/80 p-4 text-left shadow-[var(--shadow-soft)] transition',
+                      isSelected
+                        ? 'border-[var(--color-accent)] ring-2 ring-[var(--color-accent)]/20'
+                        : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/50 hover:shadow-md',
                     )}
                   >
+                    {editable ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleSelection(row.id)
+                        }}
+                        className="absolute top-3 right-3 z-10 grid h-5 w-5 place-items-center rounded border border-[var(--color-border)] bg-[var(--color-surface)] transition hover:border-[var(--color-accent)]"
+                        aria-label={isSelected ? 'Deselect template' : 'Select template'}
+                      >
+                        {isSelected ? <Check className="h-3 w-3 text-[var(--color-accent)]" /> : null}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => startEdit(row)}
@@ -483,8 +646,34 @@ export function TemplatesPage() {
                         {snippetPreview(row) || row.description || 'Empty'}
                       </p>
                     </div>
-                    <div className="relative mt-3">
+                    <div className="relative mt-3 flex flex-wrap items-center gap-2">
                       <CopyChip value={insertSnippet(row.key, row.kind)} />
+                      {editable ? (
+                        <div className="pointer-events-auto ml-auto flex gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void handleDuplicate(row)
+                            }}
+                            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-1.5 text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                            title="Duplicate template"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void handleExport([row.id])
+                            }}
+                            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-1.5 text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                            title="Export template"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 )
