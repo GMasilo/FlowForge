@@ -1173,9 +1173,19 @@ export const switchConfigSchema = z.object({
 })
 
 /** Jump to another step by key (same lookup as Button listener skip_to). */
+export const skipToVariableDefaultSchema = z.object({
+  variableKey: z.string().default(''),
+  value: z.string().default(''),
+})
+
 export const skipToConfigSchema = z.object({
   /** Target step key. Empty = continue on the next edge. */
   targetNodeKey: z.string().default(''),
+  /**
+   * Defaults applied when jumping for variables that bypassed steps would have set.
+   * Shown in the inspector when those vars are referenced after the jump.
+   */
+  variableDefaults: z.array(skipToVariableDefaultSchema).default([]),
 })
 
 export const CONDITION_OPERATOR_OPTIONS: Array<{
@@ -1650,7 +1660,10 @@ export function defaultConfig(type: FlowNodeType): Record<string, unknown> {
       }
     }
     case 'skip_to':
-      return { ...skipToConfigSchema.parse({ targetNodeKey: '' }), ...shared }
+      return {
+        ...skipToConfigSchema.parse({ targetNodeKey: '', variableDefaults: [] }),
+        ...shared,
+      }
     case 'end':
       return { ...endConfigSchema.parse({}), ...shared }
   }
@@ -1778,6 +1791,21 @@ export function getStepOutputVariables(node: DesignerNode): string[] {
       String(cfg.profileVariable ?? 'user').trim() || 'user',
       '_signed_in',
     ]
+  } else if (node.type === 'skip_to') {
+    const raw = cfg.variableDefaults
+    if (Array.isArray(raw)) {
+      base = [
+        ...new Set(
+          raw
+            .map((item) =>
+              item && typeof item === 'object' && !Array.isArray(item)
+                ? String((item as { variableKey?: unknown }).variableKey ?? '').trim()
+                : '',
+            )
+            .filter(Boolean),
+        ),
+      ]
+    }
   }
   return [...new Set([...base, ...fromOnRun])]
 }

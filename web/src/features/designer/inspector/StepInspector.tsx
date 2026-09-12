@@ -1,5 +1,5 @@
 import type { ConnectionWithConfig, FlowNodeType, IntegrationProvider } from '@/shared/types/database'
-import type { DesignerNode } from '@/features/designer/model/flowSchema'
+import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
 import {
   CONDITION_OPERATOR_OPTIONS,
   conditionConfigSchema,
@@ -82,6 +82,12 @@ import {
 } from '@/features/entities/entityApi'
 import { isEntityPrimaryKey } from '@/features/entities/entityPrimaryKey'
 import { coerceEntityValue } from '@/features/entities/entityValueValidation'
+import {
+  listSkipMissingVariables,
+  readSkipToTargetKey,
+  readSkipVariableDefaults,
+  upsertSkipVariableDefault,
+} from '@/features/designer/model/skipToStep'
 import { TemplateField, type TemplateSuggestion } from '@/features/designer/inspector/TemplateField'
 import { useTemplateSuggestions } from '@/features/designer/inspector/templateSuggestions'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -2839,6 +2845,113 @@ function VariableAssignField({
   )
 }
 
+function SkipToStepFields({
+  node,
+  readOnly,
+  patchConfig,
+  suggestions,
+  stepOptions,
+  nodes,
+  edges,
+}: {
+  node: DesignerNode
+  readOnly?: boolean
+  patchConfig: (partial: Record<string, unknown>) => void
+  suggestions: TemplateSuggestion[]
+  stepOptions: Array<{ key: string; label: string }>
+  nodes: DesignerNode[]
+  edges: DesignerEdge[]
+}) {
+  const targetKey = readSkipToTargetKey(node.config)
+  const target = useMemo(
+    () => (targetKey ? nodes.find((n) => n.key === targetKey) ?? null : null),
+    [nodes, targetKey],
+  )
+  const missing = useMemo(() => {
+    if (!target) return []
+    return listSkipMissingVariables(node.id, target.id, nodes, edges)
+  }, [edges, node.id, nodes, target])
+  const referencedMissing = useMemo(() => missing.filter((m) => m.referenced), [missing])
+  const defaults = useMemo(() => readSkipVariableDefaults(node.config), [node.config])
+  const defaultByKey = useMemo(
+    () => new Map(defaults.map((row) => [row.variableKey, row.value])),
+    [defaults],
+  )
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="skip-to-target">Skip to step</Label>
+        <Select
+          id="skip-to-target"
+          disabled={readOnly}
+          value={targetKey}
+          onChange={(e) => patchConfig({ targetNodeKey: e.target.value })}
+        >
+          <option value="">Next step (default)</option>
+          {stepOptions
+            .filter((s) => s.key !== node.key)
+            .map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label} ({s.key})
+              </option>
+            ))}
+        </Select>
+        <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+          Jump to this step instead of following the next edge. Steps in between are skipped.
+        </p>
+      </div>
+
+      {target && referencedMissing.length ? (
+        <div className="space-y-2">
+          <Label>Variables to set when skipping</Label>
+          <p className="text-[11px] text-[var(--color-ink-muted)]">
+            These are written by steps you jump over and are referenced after the jump. Set a value
+            here (literal or {'{{…}}'} expression); leave blank for null.
+          </p>
+          {referencedMissing.map((row) => (
+            <div
+              key={row.variableKey}
+              className="space-y-2 rounded-xl border border-[var(--color-border)]/60 bg-[var(--color-surface-2)]/40 p-3"
+            >
+              <div>
+                <p className="text-xs font-medium text-[var(--color-ink)]">
+                  {'{{vars.'}
+                  {row.variableKey}
+                  {'}}'}
+                </p>
+                <p className="text-[11px] text-[var(--color-ink-muted)]">
+                  Normally set by {row.fromStepLabel} ({row.fromStepKey})
+                </p>
+              </div>
+              <div>
+                <Label>Value when skipped</Label>
+                <TemplateField
+                  disabled={readOnly}
+                  multiline
+                  value={defaultByKey.get(row.variableKey) ?? ''}
+                  onChange={(v) =>
+                    patchConfig({
+                      variableDefaults: upsertSkipVariableDefault(node.config, row.variableKey, v),
+                    })
+                  }
+                  suggestions={suggestions}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : target ? (
+        <p className="text-[11px] text-[var(--color-ink-muted)]">
+          {missing.length
+            ? 'No variables from skipped steps are referenced after this jump.'
+            : 'No steps are bypassed on the path to this target (or the target is not reachable by edges).'}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function ButtonStepFields({
   node,
   readOnly,
@@ -3634,28 +3747,15 @@ export function StepInspector({
       ) : null}
 
       {node.type === 'skip_to' ? (
-        <div>
-          <Label htmlFor="skip-to-target">Skip to step</Label>
-          <Select
-            id="skip-to-target"
-            disabled={readOnly}
-            value={String(node.config.targetNodeKey ?? '')}
-            onChange={(e) => patchConfig({ targetNodeKey: e.target.value })}
-          >
-            <option value="">Next step (default)</option>
-            {stepOptions
-              .filter((s) => s.key !== node.key)
-              .map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label} ({s.key})
-                </option>
-              ))}
-          </Select>
-          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
-            Jump to this step instead of following the next edge. Same behaviour as Button → Skip to
-            step.
-          </p>
-        </div>
+        <SkipToStepFields
+          node={node}
+          readOnly={readOnly}
+          patchConfig={patchConfig}
+          suggestions={suggestions}
+          stepOptions={stepOptions}
+          nodes={nodes}
+          edges={edges}
+        />
       ) : null}
 
       {node.type === 'question' ? (

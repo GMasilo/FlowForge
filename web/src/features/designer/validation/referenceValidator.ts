@@ -15,6 +15,7 @@ import {
   outgoingMap,
   reachableIds,
 } from '@/features/designer/utils/conditionGraph'
+import { collectSkipTargetKeys } from '@/features/designer/model/skipToStep'
 
 /** Item/index vars from Every For each whose Each-item body contains this node. */
 function availableLoopLocals(
@@ -70,6 +71,20 @@ function buildAdjacency(nodes: DesignerNode[], edges: DesignerEdge[]) {
   for (const edge of edges) {
     outgoing.get(edge.source)?.push({ target: edge.target, handle: edge.sourceHandle ?? null })
     incoming.get(edge.target)?.push(edge.source)
+  }
+  // Treat skip jumps as alternate edges so variables on bypassed paths are not
+  // considered guaranteed at the skip target.
+  const byKey = new Map(nodes.map((n) => [n.key, n]))
+  for (const node of nodes) {
+    for (const targetKey of collectSkipTargetKeys(node)) {
+      if (!targetKey || targetKey === node.key) continue
+      const target = byKey.get(targetKey)
+      if (!target) continue
+      const already = (outgoing.get(node.id) ?? []).some((o) => o.target === target.id)
+      if (already) continue
+      outgoing.get(node.id)?.push({ target: target.id, handle: null })
+      incoming.get(target.id)?.push(node.id)
+    }
   }
   return { outgoing, incoming }
 }

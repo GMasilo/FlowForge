@@ -8,6 +8,7 @@ import {
   resolveQuestionChoices,
   resolveSuggestedResponses,
   readSetVariableAssignments,
+  getStepOutputVariables,
   type DesignerEdge,
   type DesignerNode,
   type RunAfterKey,
@@ -38,7 +39,11 @@ import { conversationFilesToMedia } from '@/features/designer/model/conversation
 import { validateQuestionAnswer } from '@/features/designer/model/answerValidation'
 import { captchaAnswersMatch, generateCaptchaPuzzle } from '@/features/designer/model/captchaChallenge'
 import { resolveMediaAttachments, mediaExprMap, stripFileEmbeds } from '@/features/designer/model/chatbotMedia'
-import { readSkipToTargetKey } from '@/features/designer/model/skipToStep'
+import {
+  nodesBypassedBySkipJump,
+  readSkipToTargetKey,
+  readSkipVariableDefaults,
+} from '@/features/designer/model/skipToStep'
 import { parseTemplateBindingMap, type TemplateBindingMap } from '@/features/templates/templateModel'
 import { findContinueRootIds } from '@/features/designer/utils/conditionGraph'
 import type { FlowNodeType } from '@/shared/types/database'
@@ -328,6 +333,78 @@ function nextNodeId(
     edges.find((e) => e.source === fromId && (!handle || e.sourceHandle === handle)) ??
     edges.find((e) => e.source === fromId)
   return match?.target ?? null
+}
+
+/**
+ * Mark jumped-over steps as skipped and ensure their output variables exist as null
+ * when they were never set (so later steps can use empty()/coalesce safely).
+ * Preserves values already written by an earlier Succeeded step.
+ */
+function applyBypassedSkipOutputs(
+  state: PreviewEngineState,
+  fromId: string,
+  targetId: string | null,
+  nodes: DesignerNode[],
+  edges: DesignerEdge[],
+  extraSkipped: DesignerNode[] = [],
+): PreviewEngineState {
+  if (!targetId && !extraSkipped.length) return state
+
+  const bypassed = targetId ? nodesBypassedBySkipJump(fromId, targetId, nodes, edges) : []
+  const seen = new Set<string>()
+  const toSkip: DesignerNode[] = []
+  for (const node of [...extraSkipped, ...bypassed]) {
+    if (seen.has(node.id)) continue
+    seen.add(node.id)
+    toSkip.push(node)
+  }
+  if (!toSkip.length) return state
+
+  const succeededIds = new Set(
+    state.runs.filter((r) => r.status === 'Succeeded').map((r) => r.nodeId),
+  )
+  const vars = { ...state.vars }
+  const stepOutputs = { ...state.stepOutputs }
+  let runs = state.runs
+  let changed = false
+
+  for (const node of toSkip) {
+    if (succeededIds.has(node.id)) continue
+    changed = true
+    for (const key of getStepOutputVariables(node)) {
+      if (!(key in vars)) vars[key] = null
+    }
+    stepOutputs[node.key] = {
+      response: null,
+      data: null,
+      skipped: true,
+      reason: 'bypassed_by_skip',
+    }
+    const alreadyLogged = runs.some((r) => r.nodeId === node.id && r.status === 'Skipped')
+    if (!alreadyLogged) {
+      runs = [
+        ...runs,
+        {
+          id: crypto.randomUUID(),
+          nodeId: node.id,
+          nodeKey: node.key,
+          nodeLabel: node.label || node.key,
+          type: node.type,
+          typeLabel: nodeTypeLabel(node.type),
+          status: 'Skipped',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          durationMs: 0,
+          inputs: {},
+          processed: { reason: 'bypassed_by_skip' },
+          outputs: { skipped: true },
+          savedAs: null,
+        },
+      ]
+    }
+  }
+
+  return changed ? { ...state, vars, stepOutputs, runs } : state
 }
 
 export interface LoopFrame {
@@ -978,6 +1055,8 @@ function skipDueToRunAfter(
     outputs: {},
     savedAs: null,
   })
+  // Null this step's outputs and any steps jumped over when redirecting.
+  next = applyBypassedSkipOutputs(next, node.id, skipTarget, nodes, edges, [node])
   // Condition/loop still need a next handle; use unlabeled (then) when skipping
   return resolveAfterStep(next, edges, nodes, skipTarget ?? nextNodeId(edges, node.id))
 }
@@ -1575,7 +1654,10 @@ export function tickPreview(
       },
     }
     next = appendRun(next, node, {
-      inputs: { targetNodeKey: skipKey || null },
+      inputs: {
+        targetNodeKey: skipKey || null,
+        variableDefaults: readSkipVariableDefaults(node.config),
+      },
       processed: {
         redirectedTo: skipTarget ? skipKey : null,
         fallback: skipTarget ? null : 'next',
@@ -1583,6 +1665,43 @@ export function tickPreview(
       outputs: { redirectedTo: skipTarget ? skipKey : null },
       savedAs: null,
     })
+    if (skipTarget) {
+      next = applyBypassedSkipOutputs(next, node.id, skipTarget, nodes, edges)
+      const defaults = readSkipVariableDefaults(node.config)
+      if (defaults.length) {
+        const vars = { ...next.vars }
+        const applied: Record<string, unknown> = {}
+        for (const row of defaults) {
+          const key = row.variableKey.trim()
+          if (!key) continue
+          const value = resolveValue(
+            row.value,
+            vars,
+            next.stepOutputs,
+            next.media,
+            next.templates,
+            bindingsOf(node.config),
+            next.chatbotId,
+          )
+          vars[key] = value
+          applied[key] = value
+        }
+        next = {
+          ...next,
+          vars,
+          stepOutputs: {
+            ...next.stepOutputs,
+            [node.key]: {
+              ...(typeof next.stepOutputs[node.key] === 'object' && next.stepOutputs[node.key]
+                ? (next.stepOutputs[node.key] as Record<string, unknown>)
+                : {}),
+              redirectedTo: skipKey,
+              variableDefaults: applied,
+            },
+          },
+        }
+      }
+    }
     return resolveAfterStep(next, edges, nodes, skipTarget ?? nextNodeId(edges, node.id))
   }
 
@@ -1665,6 +1784,10 @@ export function submitPreviewButton(
   const skipKey = opts?.skipToNodeKey?.trim()
   const skipTarget =
     skipKey && skipKey !== node.key ? nodes.find((n) => n.key === skipKey)?.id ?? null : null
+
+  if (skipTarget) {
+    next = applyBypassedSkipOutputs(next, node.id, skipTarget, nodes, edges)
+  }
 
   return resolveAfterStep(next, edges, nodes, skipTarget ?? nextNodeId(edges, node.id))
 }

@@ -1080,7 +1080,7 @@ export const DOC_SECTIONS: DocSection[] = [
         bullets: [
           'Message — send text to the user. Supports **bold**, *italic*, ~~strike~~, `code`, [links](https://…), {color:name}coloured text{/color}, and {{embed("https://…")}} for YouTube / X / Vimeo / Spotify / TikTok (see Message formatting). Templates and attached media also work.',
           'Button — show action buttons under an optional message. Each button has listeners: pick an event (Click, Hover, Double-click, Focus, Blur) and an action (Continue flow, Emit event, Run function, Skip to step). Run function lists setVar / setCookie / clearCookie plus every expression helper (cookie, toUpper, coalesce, …). Under Settings → Run after, use “When skipped, go to step” to jump ahead when the previous step’s outcome is not selected.',
-          'Skip to step — jump to another step by key (same target as Button → Skip to step). Empty target continues on the next edge.',
+          'Skip to step — jump to another step by key (same target as Button → Skip to step). Empty target continues on the next edge. Steps jumped over are treated as skipped. When later steps reference variables those skipped steps would have set, the inspector lists them so you can assign values for the jump (otherwise they are null).',
           'Question — collect an answer into a variable, with typed validation. Prompt text supports the same formatting and social embeds as Message. Can attach media to the prompt.',
           'HTTP request — call a configured HTTP connection.',
           'Database — run parameterized SQL against a Database connection (PostgreSQL, MySQL, SQL Server, or SQLite). Bind values with :name placeholders; results land in the output variable as { rows, rowCount }.',

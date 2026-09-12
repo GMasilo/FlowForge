@@ -137,7 +137,9 @@ function stepPreview(node: DesignerNode): string {
     }
     case 'skip_to': {
       const target = String(c.targetNodeKey ?? '').trim()
-      return truncate(target ? `→ ${target}` : 'Skip to…')
+      const defaults = Array.isArray(c.variableDefaults) ? c.variableDefaults.length : 0
+      if (!target) return truncate('Skip to…')
+      return truncate(defaults ? `→ ${target} · ${defaults} var${defaults === 1 ? '' : 's'}` : `→ ${target}`)
     }
     case 'condition':
       return truncate(String(c.expression ?? c.left ?? 'If…'))
