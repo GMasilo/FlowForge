@@ -14,6 +14,7 @@ const EXTENDED_CHAT_COPY_KINDS: TemplateKind[] = [
   'pricing',
   'survey',
   'announcement',
+  'whatsapp',
 ]
 
 /** Message-like kinds that can be used as default text for many answer types. */

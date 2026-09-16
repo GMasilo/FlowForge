@@ -5,6 +5,7 @@ import { DocumentDownloadChip } from '@/features/chat/DocumentDownloadChip'
 import { OpeningHoursCard } from '@/features/chat/OpeningHoursCard'
 import { MapViewCard } from '@/features/chat/MapViewCard'
 import { QrCodeCard } from '@/features/chat/QrCodeCard'
+import { WhatsAppCard } from '@/features/chat/WhatsAppCard'
 import { SocialEmbedCard } from '@/features/chat/SocialEmbedCard'
 import { parseChatSegments, type ChatbotMediaFile } from '@/features/designer/model/chatbotMedia'
 import type { ChatTypingStyle } from '@/features/chatbots/chatbotBranding'
@@ -122,6 +123,8 @@ export function ChatMessageBody({
           <MapViewCard key={`m-${i}-${seg.map.title}`} map={seg.map} />
         ) : seg.kind === 'qr' ? (
           <QrCodeCard key={`q-${i}-${seg.qr.payload}`} qr={seg.qr} />
+        ) : seg.kind === 'whatsapp' ? (
+          <WhatsAppCard key={`w-${i}-${seg.whatsapp.phone}`} whatsapp={seg.whatsapp} />
         ) : seg.kind === 'social' ? (
           <SocialEmbedCard key={`s-${i}-${seg.social.provider}-${seg.social.id}`} embed={seg.social} />
         ) : (
