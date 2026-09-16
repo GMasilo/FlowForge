@@ -21,6 +21,7 @@ import {
   type PreviewEngineState,
   type PreviewStepRun,
 } from '@/features/designer/preview/previewRuntime'
+import { clearAllChatCookies } from '@/features/chat/chatCookies'
 import { executeChatbotTransfer } from '@/features/designer/model/chatbotTransfer'
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
 import {
@@ -73,7 +74,7 @@ import {
 import { ChatBubbleMeta, messageCopyText } from '@/features/chat/ChatBubbleMeta'
 import { ChatMediaPlayerProvider } from '@/features/chat/ChatMediaPlayer'
 import { useChatbotMedia } from '@/features/designer/MediaLibraryPanel'
-import { mediaKeyFromFilename, chatTextHasSocialEmbed } from '@/features/designer/model/chatbotMedia'
+import { mediaKeyFromFilename, chatTextHasSocialEmbed, chatTextHasMapEmbed, chatTextHasQrEmbed } from '@/features/designer/model/chatbotMedia'
 import { chatbotTemplatesQueryKey, fetchChatbotTemplates } from '@/features/templates/templateApi'
 import {
   chatbotTestScenariosQueryKey,
@@ -90,12 +91,18 @@ import {
   normalizeMaxFiles,
 } from '@/features/designer/model/conversationFiles'
 import {
+  TYPEWRITER_CPS,
+  chatAppearanceThemeClass,
+  chatMessageEmphasisClass,
+  chatMessageEntranceClass,
   chatRootStyle,
   ensureChatFontFace,
   resolveChatBranding,
+  resolveChatBubblePaint,
 } from '@/features/chatbots/chatbotBranding'
 import { ChatLogoGlyph } from '@/features/chatbots/chatbotLogoIcons'
 import { ChatStoriesRing } from '@/features/chat/ChatStoriesRing'
+import { useChatBubbleEntrance } from '@/features/chat/useChatBubbleEntrance'
 import { fetchUrlPreview, getPaymentStatus, isFlowForgeApiConfigured, startPaymentIntent } from '@/shared/lib/flowforgeApi'
 import { supabase } from '@/shared/lib/supabase'
 import { Button } from '@/shared/ui/button'
@@ -264,6 +271,8 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
   const otpSendBusy = useRef(false)
   const otpSentForWait = useRef<string | null>(null)
   const [otpSending, setOtpSending] = useState(false)
+  const shouldAnimateBubble = useChatBubbleEntrance(state?.messages)
+  const typewriterCps = TYPEWRITER_CPS[branding.typewriterSpeed]
 
   const ready = !!globals.data
   const selectedScenario = scenarios.find((s) => s.id === scenarioId) ?? null
@@ -275,8 +284,9 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     }
   }
 
-  function restart() {
+  function restart(opts?: { clearCookies?: boolean }) {
     if (!globals.data) return
+    if (opts?.clearCookies) clearAllChatCookies(chatbotId)
     setGraphOverride(null)
     setSessionKey((k) => k + 1)
     onScenarioResult?.(null)
@@ -296,6 +306,12 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     otpSentForWait.current = null
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionKey / open / scenario intentionally restarts preview
   }, [ready, open, sessionKey, scenarioId])
+
+  useEffect(() => {
+    if (!open || !state || state.phase.kind !== 'restart') return
+    restart({ clearCookies: state.phase.clearCookies })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to restart phase
+  }, [open, state?.phase])
 
   useEffect(() => {
     if (!open) return
@@ -737,6 +753,8 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           value: effect.value,
           nodeKey: effect.nodeKey,
         })
+      } else if (effect.type === 'restart_chat') {
+        // Phase is already `restart`; the effect below calls restart().
       }
     }
     setState(next)
@@ -849,23 +867,25 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
         <div
           className={cn(
             'pointer-events-auto relative flex h-[min(640px,72vh)] w-[min(100vw-2.5rem,380px)] flex-col overflow-hidden',
-            'rounded-[1.75rem] border border-[var(--color-border)]/70 bg-[var(--color-surface)]/95 shadow-[0_25px_80px_-20px_rgb(15_23_42_/_0.45)] backdrop-blur-2xl',
+            'rounded-[1.75rem] border border-[var(--color-border)]/70 shadow-[0_25px_80px_-20px_rgb(15_23_42_/_0.45)]',
             'animate-[ff-rise_0.4s_var(--ease-spring)]',
+            chatAppearanceThemeClass(branding.appearanceTheme),
           )}
-          style={chatRootStyle(branding)}
+          style={{
+            ...chatRootStyle(branding),
+            background: 'var(--ff-chat-page-gradient)',
+          }}
         >
           <ChatMediaPlayerProvider>
-          <div className="relative overflow-hidden rounded-t-[1.75rem] border-b border-white/40 px-4 py-3.5">
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background:
-                  'linear-gradient(to bottom right, var(--ff-chat-header), var(--ff-chat-header-2))',
-              }}
-            />
+          <div
+            data-ff-chat-header
+            className="relative overflow-hidden rounded-t-[1.75rem] border-b border-white/40 px-4 py-3.5"
+            style={{ background: 'var(--ff-chat-header-gradient)' }}
+          >
             <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/15 blur-2xl" />
             <div className="pointer-events-none absolute -bottom-10 left-10 h-24 w-24 rounded-full bg-white/20 blur-2xl" />
             <div
+              data-ff-chat-header-content
               className="relative flex items-center justify-between gap-3"
               style={{ color: 'var(--ff-chat-header-fg)' }}
             >
@@ -923,7 +943,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 <button
                   type="button"
                   className="rounded-xl p-2 text-white/85 transition hover:bg-white/15 hover:text-white"
-                  onClick={restart}
+                  onClick={() => restart()}
                   aria-label="Restart conversation"
                 >
                   <RotateCcw className="h-4 w-4" />
@@ -951,21 +971,32 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           <div
             ref={scrollerRef}
             className="ff-hide-scrollbar relative flex-1 space-y-3.5 overflow-y-auto px-3.5 py-4"
-            style={{
-              background:
-                'linear-gradient(to bottom, var(--ff-chat-page-bg), color-mix(in srgb, var(--ff-chat-page-bg-2) 40%, white))',
-            }}
           >
             {!state?.messages.length && state?.phase.kind === 'typing' ? (
               <p className="text-center text-xs text-[var(--color-ink-muted)]">Starting conversation…</p>
             ) : null}
 
-            {state?.messages.map((m, msgIndex) => (
+            {state?.messages.map((m, msgIndex) => {
+              const animate = shouldAnimateBubble(m.id)
+              const entranceClass = chatMessageEntranceClass(
+                m.animation?.entrance ?? branding.messageEntrance,
+                animate,
+              )
+              const emphasisClass = chatMessageEmphasisClass(m.animation?.emphasis, animate)
+              const bubblePaint =
+                m.role === 'bot' || m.role === 'agent'
+                  ? resolveChatBubblePaint({
+                      color: m.bubble?.color,
+                      shading: m.bubble?.shading,
+                    })
+                  : null
+              return (
               <div
                 key={m.id}
                 className={cn(
                   'flex flex-col gap-1',
                   m.role === 'user' ? 'items-end' : m.role === 'system' ? 'items-center' : 'items-start',
+                  entranceClass,
                 )}
               >
                 {m.role === 'system' ? (
@@ -976,7 +1007,9 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                   <div
                     className={cn(
                       'px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
-                      m.role !== 'user' && chatTextHasSocialEmbed(m.text)
+                      emphasisClass,
+                      m.role === 'user' ? 'ff-chat-bubble-user' : 'ff-chat-bubble-bot',
+                      m.role !== 'user' && (chatTextHasSocialEmbed(m.text) || chatTextHasMapEmbed(m.text) || chatTextHasQrEmbed(m.text))
                         ? 'w-full max-w-xl sm:max-w-2xl'
                         : 'max-w-[88%]',
                     )}
@@ -990,8 +1023,8 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                             borderBottomRightRadius: '0.35rem',
                           }
                         : {
-                            background: 'var(--ff-chat-bubble-bot)',
-                            color: 'var(--ff-chat-bubble-bot-fg)',
+                            background: bubblePaint?.background ?? 'var(--ff-chat-bubble-bot)',
+                            color: bubblePaint?.color ?? 'var(--ff-chat-bubble-bot-fg)',
                             borderRadius: 'var(--ff-chat-bubble-radius)',
                             borderBottomLeftRadius: '0.35rem',
                             border: '1px solid color-mix(in srgb, var(--ff-chat-bubble-bot-fg) 12%, transparent)',
@@ -1006,6 +1039,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                           text={m.text}
                           attachments={m.media}
                           typingStyle={branding.typingStyle}
+                          typewriterCps={typewriterCps}
                           animateTypewriter={
                             branding.typingStyle === 'typewriter' &&
                             m.role === 'bot' &&
@@ -1048,10 +1082,16 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                   </time>
                 )}
               </div>
-            ))}
+              )
+            })}
 
             {state?.phase.kind === 'typing' ? (
-              <div className="flex flex-col items-start gap-1">
+              <div
+                className={cn(
+                  'flex flex-col items-start gap-1',
+                  chatMessageEntranceClass(branding.messageEntrance, true),
+                )}
+              >
                 <div
                   className="flex items-center gap-1.5 px-3.5 py-3 shadow-sm ring-1 ring-black/5"
                   style={{
@@ -1082,7 +1122,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           </div>
 
           {waiting && waiting.answerType === 'boolean' ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <div className="flex gap-2">
                 <Button className="flex-1 rounded-2xl" onClick={() => setState(submitPreviewAnswer(state!, nodes, edges, 'true'))}>
                   Yes
@@ -1107,7 +1147,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isThumbs ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <ThumbsAnswerField
                 onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
               />
@@ -1123,7 +1163,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isMood ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <MoodAnswerField
                 onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
               />
@@ -1139,7 +1179,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isLikert ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <LikertAnswerField
                 choices={likertChoices}
                 onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
@@ -1156,7 +1196,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isNumberedChoice ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <NumberedChoiceAnswerField
                 choices={numberedChoices}
                 onSelect={(v) => setState(submitPreviewAnswer(state!, nodes, edges, v))}
@@ -1173,7 +1213,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isRating && ratingOptions.length ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <div className="flex flex-wrap gap-2">
                 {ratingOptions.map((n) => (
                   <button
@@ -1198,7 +1238,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isStars ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <StarsAnswerField
                 min={starsMin}
                 max={starsMax}
@@ -1216,7 +1256,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isNps ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <NpsAnswerField
                 min={npsMin}
                 max={npsMax}
@@ -1244,7 +1284,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isFile ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <FileAnswerField
                 accept={normalizeFileAccept(waitingCfg.fileAccept)}
                 maxFiles={normalizeMaxFiles(waitingCfg.maxFiles)}
@@ -1263,7 +1303,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isSignature ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <SignatureAnswerField
                 storeCtx={answerStoreCtx}
                 onSubmit={(value) => setState(submitPreviewAnswer(state!, nodes, edges, value))}
@@ -1280,7 +1320,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isImageChoice ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <ImageChoiceAnswerField
                 className={imageChoiceLayout === 'gallery' ? '-mx-3.5' : undefined}
                 layout={imageChoiceLayout}
@@ -1337,7 +1377,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isSignIn && waitingNode ? (
-            <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
+            <div className="border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3 py-3">
               <SignInAnswerField
                 key={`${waitingNode.id}-${state?.signInAttempts?.attempts ?? 0}-${state?.otpChallenge?.attempts ?? 0}-${waiting.validationError ?? ''}`}
                 mode={signInMode}
@@ -1483,7 +1523,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waiting && isExtended ? (
-            <div className="ff-hide-scrollbar flex min-h-0 max-h-[min(32rem,70%)] flex-col overflow-y-auto border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3.5 py-3">
+            <div className="ff-hide-scrollbar flex min-h-0 max-h-[min(32rem,70%)] flex-col overflow-y-auto border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3.5 py-3">
               <ExtendedAnswerPanel
                 answerType={waiting.answerType}
                 config={waitingCfg}
@@ -1539,7 +1579,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           ) : null}
 
           {waitingSuggestion ? (
-            <div className="rounded-b-[1.75rem] border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-3 py-3">
+            <div className="rounded-b-[1.75rem] border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3 py-3">
               <form onSubmit={onSubmitSuggestion} className="flex items-end gap-2">
                 <input
                   className="h-11 flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:ring-4 focus:ring-[var(--color-accent)]/15"
@@ -1563,7 +1603,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           {waiting &&
           waiting.answerType !== 'boolean' &&
           !usesDedicatedAnswerUi ? (
-            <div className="rounded-b-[1.75rem] border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-3 py-3">
+            <div className="rounded-b-[1.75rem] border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3 py-3">
               <form onSubmit={onSubmit} className="flex items-end gap-2">
                 {isChoiceType ? (
                   <ChoiceAnswerField

@@ -4,6 +4,7 @@
 import {
   buildShopCart,
   cartCatalogFromTemplates,
+  mapEmbedUrlFromContent,
   parseTemplateContent,
   productMaxQty,
   renderReceiptFromCart,
@@ -11,6 +12,9 @@ import {
   starterTemplateContent,
   templateExprValue,
   type CartContent,
+  type DocumentContent,
+  type MapContent,
+  type QrContent,
 } from '@/features/templates/templateModel'
 
 function assert(cond: unknown, msg: string) {
@@ -122,29 +126,49 @@ const parsed = parseTemplateContent('hours', { timezone: 'UTC', days: [{ day: 'M
 assert('days' in parsed && parsed.days[0]?.closed === true, 'hours parse')
 
 {
-  const doc = parseTemplateContent('document', starterTemplateContent('document'))
-  assert('format' in doc && doc.format === 'pdf', 'document starter format')
-  assert('fields' in doc && doc.fields.some((f) => f.as === 'image'), 'document starter signature field')
-  assert('orientation' in doc && doc.orientation === 'portrait', 'document starter orientation')
-  const legacy = parseTemplateContent('document', { format: 'pdf', filename: 'old.pdf', fields: [] })
-  assert('orientation' in legacy && legacy.orientation === 'portrait', 'legacy document defaults portrait')
+  const doc = parseTemplateContent('document', starterTemplateContent('document')) as DocumentContent
+  assert(doc.format === 'pdf', 'document starter format')
+  assert(doc.fields.some((f) => f.as === 'image'), 'document starter signature field')
+  assert(doc.orientation === 'portrait', 'document starter orientation')
+  const legacy = parseTemplateContent('document', { format: 'pdf', filename: 'old.pdf', fields: [] }) as DocumentContent
+  assert(legacy.orientation === 'portrait', 'legacy document defaults portrait')
 }
 
 {
-  const agreement = parseTemplateContent('agreement', starterTemplateContent('agreement'))
-  assert('format' in agreement && agreement.format === 'pdf', 'agreement starter is PDF')
+  const agreement = parseTemplateContent('agreement', starterTemplateContent('agreement')) as DocumentContent
+  assert(agreement.format === 'pdf', 'agreement starter is PDF')
   assert(
-    'fields' in agreement && agreement.fields.some((f) => f.as === 'image' && /signature/i.test(f.label)),
+    agreement.fields.some((f) => f.as === 'image' && /signature/i.test(f.label)),
     'agreement has signature field',
   )
   assert(
-    'fields' in agreement && agreement.fields.some((f) => /date signed/i.test(f.label)),
+    agreement.fields.some((f) => /date signed/i.test(f.label)),
     'agreement has date signed field',
   )
   assert(
-    'inputs' in agreement && agreement.inputs.some((i) => i.key === 'signer_name'),
+    agreement.inputs.some((i) => i.key === 'signer_name'),
     'agreement has signer_name input',
   )
+}
+
+{
+  const base = parseTemplateContent('map', starterTemplateContent('map')) as MapContent
+  const near = mapEmbedUrlFromContent({ ...base, embedUrl: '', zoom: 16, pins: [{ ...base.pins[0]!, lat: '0', lng: '0' }] })
+  const far = mapEmbedUrlFromContent({ ...base, embedUrl: '', zoom: 8, pins: [{ ...base.pins[0]!, lat: '0', lng: '0' }] })
+  const bboxOf = (url: string) => {
+    const m = /bbox=([^&]+)/.exec(url)
+    assert(m, `bbox missing in ${url}`)
+    const [w, , e] = decodeURIComponent(m![1]!).split(',').map(Number)
+    return (e ?? 0) - (w ?? 0)
+  }
+  assert(bboxOf(far) > bboxOf(near) * 4, `zoom 8 should be much wider than zoom 16: ${far} vs ${near}`)
+}
+
+{
+  const qr = parseTemplateContent('qr', starterTemplateContent('qr')) as QrContent
+  assert(qr.payload.includes('inputs.url'), 'qr starter encodes url input')
+  assert(qr.inputs.some((i) => i.key === 'url' && i.required), 'qr declares required url input')
+  assert(qr.size >= 64 && qr.size <= 512, 'qr size in range')
 }
 
 console.log(JSON.stringify({ ok: true, faqChars: faqText.length, cartChars: cartText.length }, null, 2))

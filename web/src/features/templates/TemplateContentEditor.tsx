@@ -5,9 +5,22 @@ import {
   WEEKDAYS,
   emptyDocumentField,
   emptyDocumentTableColumn,
+  emptyAppointmentService,
+  emptyLocationEntry,
+  emptyMapPin,
+  emptyTeamMember,
+  emptyPricingPlan,
+  emptySurveyQuestion,
+  emptyTicketField,
+  emptyWebhookHeader,
   isCopyTemplateKind,
   templateInputsOf,
+  type AnnouncementContent,
+  type AnnouncementSeverity,
+  type AppointmentContent,
+  type AppointmentService,
   type CartContent,
+  type ConsentContent,
   type DocumentContent,
   type DocumentField,
   type DocumentFormat,
@@ -16,12 +29,34 @@ import {
   type FaqContent,
   type HoursContent,
   type LegalContent,
+  type LocationContent,
+  type LocationEntry,
+  type MapContent,
+  type MapPin,
   type MenuContent,
   type MessageContent,
+  type PricingContent,
+  type PricingPlan,
+  type PushContent,
+  type QrContent,
+  type QrErrorCorrection,
   type ReceiptContent,
+  type SmsChannel,
+  type SmsContent,
   type SsoContent,
+  type SurveyContent,
+  type SurveyQuestion,
+  type SurveyQuestionKind,
+  type TeamContent,
+  type TeamMember,
   type TemplateContent,
   type TemplateKind,
+  type TicketContent,
+  type TicketField,
+  type TicketPriority,
+  type WebhookContent,
+  type WebhookHeader,
+  type WebhookMethod,
 } from '@/features/templates/templateModel'
 import { DocumentPageEditor, ensurePageBlocks } from '@/features/templates/DocumentPageEditor'
 import { StoreCatalogEditor } from '@/features/templates/StoreCatalogEditor'
@@ -62,6 +97,45 @@ function asDocument(c: TemplateContent): DocumentContent {
 }
 function asSso(c: TemplateContent): SsoContent {
   return c as SsoContent
+}
+function asAppointment(c: TemplateContent): AppointmentContent {
+  return c as AppointmentContent
+}
+function asLocation(c: TemplateContent): LocationContent {
+  return c as LocationContent
+}
+function asMap(c: TemplateContent): MapContent {
+  return c as MapContent
+}
+function asQr(c: TemplateContent): QrContent {
+  return c as QrContent
+}
+function asTeam(c: TemplateContent): TeamContent {
+  return c as TeamContent
+}
+function asPricing(c: TemplateContent): PricingContent {
+  return c as PricingContent
+}
+function asSurvey(c: TemplateContent): SurveyContent {
+  return c as SurveyContent
+}
+function asAnnouncement(c: TemplateContent): AnnouncementContent {
+  return c as AnnouncementContent
+}
+function asSms(c: TemplateContent): SmsContent {
+  return c as SmsContent
+}
+function asPush(c: TemplateContent): PushContent {
+  return c as PushContent
+}
+function asTicket(c: TemplateContent): TicketContent {
+  return c as TicketContent
+}
+function asConsent(c: TemplateContent): ConsentContent {
+  return c as ConsentContent
+}
+function asWebhook(c: TemplateContent): WebhookContent {
+  return c as WebhookContent
 }
 
 export function TemplateContentEditor({
@@ -969,6 +1043,1328 @@ function TemplateKindFields({
           <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
             Used when simulating IdP success in designer preview. Reference this template from a Sign-in
             step (Source → SSO).
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'appointment') {
+    const c = asAppointment(content)
+    function patchService(index: number, patch: Partial<AppointmentService>) {
+      const services = c.services.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      onChange({ ...c, services })
+    }
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label>Title</Label>
+          <TemplateField
+            disabled={readOnly}
+            value={c.title}
+            suggestions={suggestions}
+            onChange={(title) => onChange({ ...c, title })}
+            placeholder="Book an appointment"
+          />
+        </div>
+        <div>
+          <Label>Intro</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.intro}
+            suggestions={suggestions}
+            onChange={(intro) => onChange({ ...c, intro })}
+          />
+        </div>
+        <div>
+          <Label>Timezone</Label>
+          <Input
+            disabled={readOnly}
+            value={c.timezone}
+            onChange={(e) => onChange({ ...c, timezone: e.target.value })}
+            placeholder="Africa/Johannesburg"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Services</Label>
+          {c.services.map((svc, index) => (
+            <div
+              key={svc.id || index}
+              className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3 sm:grid-cols-[1fr_5rem_1fr_auto]"
+            >
+              <Input
+                disabled={readOnly}
+                value={svc.name}
+                placeholder="Service name"
+                onChange={(e) => patchService(index, { name: e.target.value })}
+              />
+              <Input
+                disabled={readOnly}
+                type="number"
+                value={svc.durationMinutes}
+                min={5}
+                placeholder="30"
+                onChange={(e) => patchService(index, { durationMinutes: Number(e.target.value) || 30 })}
+              />
+              <Input
+                disabled={readOnly}
+                value={svc.description}
+                placeholder="Description"
+                onChange={(e) => patchService(index, { description: e.target.value })}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={readOnly || c.services.length <= 1}
+                onClick={() => onChange({ ...c, services: c.services.filter((_, i) => i !== index) })}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={readOnly}
+            onClick={() => onChange({ ...c, services: [...c.services, emptyAppointmentService()] })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add service
+          </Button>
+        </div>
+        <div>
+          <Label>Note</Label>
+          <TemplateField
+            disabled={readOnly}
+            value={c.note}
+            suggestions={suggestions}
+            onChange={(note) => onChange({ ...c, note })}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'location') {
+    const c = asLocation(content)
+    function patchLocation(index: number, patch: Partial<LocationEntry>) {
+      const locations = c.locations.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      onChange({ ...c, locations })
+    }
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label>Intro</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.intro}
+            suggestions={suggestions}
+            onChange={(intro) => onChange({ ...c, intro })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Locations</Label>
+          {c.locations.map((loc, index) => (
+            <div
+              key={index}
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3"
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium text-[var(--color-ink-muted)]">Location {index + 1}</p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={readOnly || c.locations.length <= 1}
+                  onClick={() => onChange({ ...c, locations: c.locations.filter((_, i) => i !== index) })}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Input
+                  disabled={readOnly}
+                  value={loc.name}
+                  placeholder="Name"
+                  onChange={(e) => patchLocation(index, { name: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={loc.city}
+                  placeholder="City"
+                  onChange={(e) => patchLocation(index, { city: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={loc.address}
+                  placeholder="Address"
+                  className="sm:col-span-2"
+                  onChange={(e) => patchLocation(index, { address: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={loc.phone}
+                  placeholder="Phone"
+                  onChange={(e) => patchLocation(index, { phone: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  type="email"
+                  value={loc.email}
+                  placeholder="Email"
+                  onChange={(e) => patchLocation(index, { email: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={loc.hoursNote}
+                  placeholder="Hours note"
+                  onChange={(e) => patchLocation(index, { hoursNote: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={loc.mapUrl}
+                  placeholder="Map URL"
+                  onChange={(e) => patchLocation(index, { mapUrl: e.target.value })}
+                />
+              </div>
+            </div>
+          ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={readOnly}
+            onClick={() => onChange({ ...c, locations: [...c.locations, emptyLocationEntry()] })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add location
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'map') {
+    const c = asMap(content)
+    function patchPin(index: number, patch: Partial<MapPin>) {
+      const pins = c.pins.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      onChange({ ...c, pins })
+    }
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Title</Label>
+            <TemplateField
+              disabled={readOnly}
+              value={c.title}
+              suggestions={suggestions}
+              onChange={(title) => onChange({ ...c, title })}
+            />
+          </div>
+          <div>
+            <Label>Map style</Label>
+            <Select
+              disabled={readOnly}
+              value={c.style}
+              onChange={(e) =>
+                onChange({ ...c, style: e.target.value === 'satellite' ? 'satellite' : 'roadmap' })
+              }
+            >
+              <option value="roadmap">Roadmap (OpenStreetMap)</option>
+              <option value="satellite">Satellite (use custom embed URL)</option>
+            </Select>
+          </div>
+        </div>
+        <div>
+          <Label>Intro</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.intro}
+            suggestions={suggestions}
+            onChange={(intro) => onChange({ ...c, intro })}
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <Label>Center latitude</Label>
+            <Input
+              disabled={readOnly}
+              value={c.centerLat}
+              placeholder="-26.2041"
+              onChange={(e) => onChange({ ...c, centerLat: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Center longitude</Label>
+            <Input
+              disabled={readOnly}
+              value={c.centerLng}
+              placeholder="28.0473"
+              onChange={(e) => onChange({ ...c, centerLng: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Zoom (1–19)</Label>
+            <Input
+              disabled={readOnly}
+              type="number"
+              min={1}
+              max={19}
+              value={String(c.zoom)}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                onChange({
+                  ...c,
+                  zoom: Number.isFinite(n) ? Math.max(1, Math.min(19, Math.round(n))) : 12,
+                })
+              }}
+            />
+          </div>
+        </div>
+        <div>
+          <Label>Custom embed URL (optional)</Label>
+          <Input
+            disabled={readOnly}
+            value={c.embedUrl}
+            placeholder="https://… iframe src — overrides generated map"
+            onChange={(e) => onChange({ ...c, embedUrl: e.target.value })}
+          />
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Leave empty to generate an OpenStreetMap embed from the center / first pin.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Pins</Label>
+          {c.pins.map((pin, index) => (
+            <div
+              key={index}
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3"
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium text-[var(--color-ink-muted)]">Pin {index + 1}</p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={readOnly || c.pins.length <= 1}
+                  onClick={() => onChange({ ...c, pins: c.pins.filter((_, i) => i !== index) })}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Input
+                  disabled={readOnly}
+                  value={pin.label}
+                  placeholder="Label"
+                  onChange={(e) => patchPin(index, { label: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={pin.link}
+                  placeholder="Link (optional)"
+                  onChange={(e) => patchPin(index, { link: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={pin.lat}
+                  placeholder="Latitude"
+                  onChange={(e) => patchPin(index, { lat: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={pin.lng}
+                  placeholder="Longitude"
+                  onChange={(e) => patchPin(index, { lng: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={pin.description}
+                  placeholder="Description"
+                  className="sm:col-span-2"
+                  onChange={(e) => patchPin(index, { description: e.target.value })}
+                />
+              </div>
+            </div>
+          ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={readOnly}
+            onClick={() => onChange({ ...c, pins: [...c.pins, emptyMapPin()] })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add pin
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'qr') {
+    const c = asQr(content)
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Title</Label>
+            <TemplateField
+              disabled={readOnly}
+              value={c.title}
+              suggestions={suggestions}
+              placeholder="Scan to continue"
+              onChange={(title) => onChange({ ...c, title })}
+            />
+          </div>
+          <div>
+            <Label>Download filename</Label>
+            <TemplateField
+              disabled={readOnly}
+              value={c.filename}
+              suggestions={suggestions}
+              placeholder="qr.png"
+              onChange={(filename) => onChange({ ...c, filename })}
+            />
+          </div>
+        </div>
+        <div>
+          <Label>Caption</Label>
+          <TemplateField
+            disabled={readOnly}
+            value={c.caption}
+            suggestions={suggestions}
+            placeholder="Point your camera at this code"
+            onChange={(caption) => onChange({ ...c, caption })}
+          />
+        </div>
+        <div>
+          <Label>Payload (URL or text)</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.payload}
+            suggestions={suggestions}
+            placeholder="{{inputs.url}}"
+            onChange={(payload) => onChange({ ...c, payload })}
+          />
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Encoded into the QR. Use {'{{inputs.*}}'} or a literal https URL.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <Label>Size (px)</Label>
+            <Input
+              disabled={readOnly}
+              type="number"
+              min={64}
+              max={512}
+              value={String(c.size)}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                onChange({
+                  ...c,
+                  size: Number.isFinite(n) ? Math.max(64, Math.min(512, Math.round(n))) : 180,
+                })
+              }}
+            />
+          </div>
+          <div>
+            <Label>Error correction</Label>
+            <Select
+              disabled={readOnly}
+              value={c.errorCorrection}
+              onChange={(e) => {
+                const v = e.target.value as QrErrorCorrection
+                onChange({
+                  ...c,
+                  errorCorrection: v === 'L' || v === 'Q' || v === 'H' ? v : 'M',
+                })
+              }}
+            >
+              <option value="L">L — low (~7%)</option>
+              <option value="M">M — medium (~15%)</option>
+              <option value="Q">Q — quartile (~25%)</option>
+              <option value="H">H — high (~30%)</option>
+            </Select>
+          </div>
+          <div>
+            <Label>Foreground</Label>
+            <Input
+              disabled={readOnly}
+              type="color"
+              value={/^#[0-9A-Fa-f]{6}$/.test(c.foreground) ? c.foreground : '#0f172a'}
+              onChange={(e) => onChange({ ...c, foreground: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Background</Label>
+            <Input
+              disabled={readOnly}
+              type="color"
+              value={/^#[0-9A-Fa-f]{6}$/.test(c.background) ? c.background : '#ffffff'}
+              onChange={(e) => onChange({ ...c, background: e.target.value })}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'team') {
+    const c = asTeam(content)
+    function patchMember(index: number, patch: Partial<TeamMember>) {
+      const members = c.members.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      onChange({ ...c, members })
+    }
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label>Intro</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.intro}
+            suggestions={suggestions}
+            onChange={(intro) => onChange({ ...c, intro })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Team members</Label>
+          {c.members.map((member, index) => (
+            <div
+              key={index}
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3"
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium text-[var(--color-ink-muted)]">Member {index + 1}</p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={readOnly || c.members.length <= 1}
+                  onClick={() => onChange({ ...c, members: c.members.filter((_, i) => i !== index) })}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Input
+                  disabled={readOnly}
+                  value={member.name}
+                  placeholder="Name"
+                  onChange={(e) => patchMember(index, { name: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={member.role}
+                  placeholder="Role"
+                  onChange={(e) => patchMember(index, { role: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={member.skills}
+                  placeholder="Skills"
+                  onChange={(e) => patchMember(index, { skills: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  type="email"
+                  value={member.email}
+                  placeholder="Email"
+                  onChange={(e) => patchMember(index, { email: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={member.handoffKey}
+                  placeholder="Handoff key"
+                  className="sm:col-span-2"
+                  onChange={(e) => patchMember(index, { handoffKey: e.target.value })}
+                />
+              </div>
+            </div>
+          ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={readOnly}
+            onClick={() => onChange({ ...c, members: [...c.members, emptyTeamMember()] })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add member
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'pricing') {
+    const c = asPricing(content)
+    function patchPlan(index: number, patch: Partial<PricingPlan>) {
+      const plans = c.plans.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      onChange({ ...c, plans })
+    }
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Currency</Label>
+            <Input
+              disabled={readOnly}
+              value={c.currency}
+              onChange={(e) => onChange({ ...c, currency: e.target.value })}
+              placeholder="USD"
+            />
+          </div>
+        </div>
+        <div>
+          <Label>Intro</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.intro}
+            suggestions={suggestions}
+            onChange={(intro) => onChange({ ...c, intro })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Plans</Label>
+          {c.plans.map((plan, index) => (
+            <div
+              key={index}
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3"
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium text-[var(--color-ink-muted)]">Plan {index + 1}</p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={readOnly || c.plans.length <= 1}
+                  onClick={() => onChange({ ...c, plans: c.plans.filter((_, i) => i !== index) })}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <Input
+                  disabled={readOnly}
+                  value={plan.name}
+                  placeholder="Plan name"
+                  onChange={(e) => patchPlan(index, { name: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  type="number"
+                  value={plan.price}
+                  min={0}
+                  placeholder="0"
+                  onChange={(e) => patchPlan(index, { price: Number(e.target.value) || 0 })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={plan.period}
+                  placeholder="month"
+                  onChange={(e) => patchPlan(index, { period: e.target.value })}
+                />
+              </div>
+              <div className="mt-2">
+                <Textarea
+                  disabled={readOnly}
+                  value={plan.features.join('\n')}
+                  placeholder="Features (one per line)"
+                  rows={3}
+                  onChange={(e) => patchPlan(index, { features: e.target.value.split('\n') })}
+                />
+              </div>
+              <label className="mt-2 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  disabled={readOnly}
+                  checked={plan.highlight}
+                  onChange={(e) => patchPlan(index, { highlight: e.target.checked })}
+                />
+                Highlight this plan
+              </label>
+            </div>
+          ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={readOnly}
+            onClick={() => onChange({ ...c, plans: [...c.plans, emptyPricingPlan()] })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add plan
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'survey') {
+    const c = asSurvey(content)
+    function patchQuestion(index: number, patch: Partial<SurveyQuestion>) {
+      const questions = c.questions.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      onChange({ ...c, questions })
+    }
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label>Intro</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.intro}
+            suggestions={suggestions}
+            onChange={(intro) => onChange({ ...c, intro })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Questions</Label>
+          {c.questions.map((q, index) => (
+            <div
+              key={index}
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3"
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium text-[var(--color-ink-muted)]">Question {index + 1}</p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={readOnly || c.questions.length <= 1}
+                  onClick={() => onChange({ ...c, questions: c.questions.filter((_, i) => i !== index) })}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_8rem]">
+                <Input
+                  disabled={readOnly}
+                  value={q.prompt}
+                  placeholder="Question prompt"
+                  onChange={(e) => patchQuestion(index, { prompt: e.target.value })}
+                />
+                <Select
+                  disabled={readOnly}
+                  value={q.kind}
+                  onChange={(e) => patchQuestion(index, { kind: e.target.value as SurveyQuestionKind })}
+                >
+                  <option value="nps">NPS</option>
+                  <option value="likert">Likert</option>
+                  <option value="text">Text</option>
+                  <option value="choice">Choice</option>
+                </Select>
+              </div>
+              {q.kind === 'choice' && (
+                <Textarea
+                  disabled={readOnly}
+                  className="mt-2"
+                  value={q.choices.join('\n')}
+                  placeholder="Choices (one per line)"
+                  rows={3}
+                  onChange={(e) => patchQuestion(index, { choices: e.target.value.split('\n') })}
+                />
+              )}
+            </div>
+          ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={readOnly}
+            onClick={() => onChange({ ...c, questions: [...c.questions, emptySurveyQuestion()] })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add question
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'announcement') {
+    const c = asAnnouncement(content)
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label>Title</Label>
+          <TemplateField
+            disabled={readOnly}
+            value={c.title}
+            suggestions={suggestions}
+            onChange={(title) => onChange({ ...c, title })}
+          />
+        </div>
+        <div>
+          <Label>Body</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.body}
+            suggestions={suggestions}
+            onChange={(body) => onChange({ ...c, body })}
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <Label>Severity</Label>
+            <Select
+              disabled={readOnly}
+              value={c.severity}
+              onChange={(e) => onChange({ ...c, severity: e.target.value as AnnouncementSeverity })}
+            >
+              <option value="info">Info</option>
+              <option value="promo">Promo</option>
+              <option value="warning">Warning</option>
+            </Select>
+          </div>
+          <div>
+            <Label>Starts at</Label>
+            <Input
+              disabled={readOnly}
+              type="datetime-local"
+              value={c.startsAt}
+              onChange={(e) => onChange({ ...c, startsAt: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Ends at</Label>
+            <Input
+              disabled={readOnly}
+              type="datetime-local"
+              value={c.endsAt}
+              onChange={(e) => onChange({ ...c, endsAt: e.target.value })}
+            />
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>CTA label</Label>
+            <Input
+              disabled={readOnly}
+              value={c.ctaLabel}
+              onChange={(e) => onChange({ ...c, ctaLabel: e.target.value })}
+              placeholder="Learn more"
+            />
+          </div>
+          <div>
+            <Label>CTA value</Label>
+            <TemplateField
+              disabled={readOnly}
+              value={c.ctaValue}
+              suggestions={suggestions}
+              onChange={(ctaValue) => onChange({ ...c, ctaValue })}
+              placeholder="https://example.com"
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'sms') {
+    const c = asSms(content)
+    const charCount = c.body.length
+    const maxChars = c.maxChars || (c.channel === 'whatsapp' ? 4096 : 160)
+    const overLimit = charCount > maxChars
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Channel</Label>
+            <Select
+              disabled={readOnly}
+              value={c.channel}
+              onChange={(e) => {
+                const channel = e.target.value as SmsChannel
+                onChange({
+                  ...c,
+                  channel,
+                  maxChars: channel === 'whatsapp' ? 4096 : 160,
+                })
+              }}
+            >
+              <option value="sms">SMS</option>
+              <option value="whatsapp">WhatsApp</option>
+            </Select>
+          </div>
+          <div>
+            <Label>Max characters</Label>
+            <Input
+              disabled={readOnly}
+              type="number"
+              value={c.maxChars}
+              min={1}
+              onChange={(e) => onChange({ ...c, maxChars: Number(e.target.value) || 160 })}
+            />
+          </div>
+        </div>
+        <div>
+          <Label>Body</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.body}
+            suggestions={suggestions}
+            onChange={(body) => onChange({ ...c, body })}
+          />
+          <p className={`mt-1 text-[11px] ${overLimit ? 'text-[var(--color-danger)]' : 'text-[var(--color-ink-muted)]'}`}>
+            {charCount} / {maxChars} characters{overLimit ? ' (over limit)' : ''}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'push') {
+    const c = asPush(content)
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label>Title</Label>
+          <TemplateField
+            disabled={readOnly}
+            value={c.title}
+            suggestions={suggestions}
+            onChange={(title) => onChange({ ...c, title })}
+          />
+        </div>
+        <div>
+          <Label>Body</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.body}
+            suggestions={suggestions}
+            onChange={(body) => onChange({ ...c, body })}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'ticket') {
+    const c = asTicket(content)
+    function patchField(index: number, patch: Partial<TicketField>) {
+      const fields = c.fields.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      onChange({ ...c, fields })
+    }
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Title</Label>
+            <TemplateField
+              disabled={readOnly}
+              value={c.title}
+              suggestions={suggestions}
+              onChange={(title) => onChange({ ...c, title })}
+            />
+          </div>
+          <div>
+            <Label>Priority</Label>
+            <Select
+              disabled={readOnly}
+              value={c.priority}
+              onChange={(e) => onChange({ ...c, priority: e.target.value as TicketPriority })}
+            >
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+            </Select>
+          </div>
+        </div>
+        <div>
+          <Label>Summary</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.summary}
+            suggestions={suggestions}
+            onChange={(summary) => onChange({ ...c, summary })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Fields</Label>
+          {c.fields.map((field, index) => (
+            <div
+              key={index}
+              className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3 sm:grid-cols-[1fr_1fr_auto]"
+            >
+              <Input
+                disabled={readOnly}
+                value={field.label}
+                placeholder="Label"
+                onChange={(e) => patchField(index, { label: e.target.value })}
+              />
+              <TemplateField
+                disabled={readOnly}
+                value={field.value}
+                suggestions={suggestions}
+                onChange={(value) => patchField(index, { value })}
+                placeholder="{{inputs.name}}"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={readOnly || c.fields.length <= 1}
+                onClick={() => onChange({ ...c, fields: c.fields.filter((_, i) => i !== index) })}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={readOnly}
+            onClick={() => onChange({ ...c, fields: [...c.fields, emptyTicketField()] })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add field
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'certificate' || kind === 'checklist') {
+    // Reuse document editor — same as document/agreement
+    const c = asDocument(content)
+    const kindLabel = kind === 'certificate' ? 'Certificate' : 'Checklist'
+    function patchField(index: number, patch: Partial<DocumentField>) {
+      const fields = c.fields.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      onChange({ ...c, fields })
+    }
+    function patchColumn(index: number, patch: Partial<DocumentTableColumn>) {
+      const tableColumns = c.tableColumns.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      onChange({ ...c, tableColumns })
+    }
+    return (
+      <div className="space-y-3">
+        <div className="rounded-xl border border-teal-200/70 bg-teal-50/40 px-3 py-2 text-[11px] text-slate-600">
+          {kindLabel} PDF: fill from answers, then send{' '}
+          <code className="font-mono">{'{{templates.key.file}}'}</code> on a Message or End step.
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>{kindLabel} title</Label>
+            <TemplateField
+              disabled={readOnly}
+              value={c.title}
+              suggestions={suggestions}
+              onChange={(title) => onChange({ ...c, title })}
+            />
+          </div>
+          <div>
+            <Label>Download file name</Label>
+            <TemplateField
+              disabled={readOnly}
+              value={c.filename}
+              suggestions={suggestions}
+              onChange={(filename) => onChange({ ...c, filename, format: 'pdf' })}
+              placeholder={`${kind}-{{inputs.name}}.pdf`}
+            />
+          </div>
+        </div>
+        <div>
+          <Label>Intro</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.intro}
+            suggestions={suggestions}
+            onChange={(intro) => onChange({ ...c, intro })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Fields</Label>
+          {c.fields.map((field, index) => (
+            <div
+              key={index}
+              className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3 sm:grid-cols-[1fr_1fr_7.5rem_auto]"
+            >
+              <Input
+                disabled={readOnly}
+                value={field.label}
+                placeholder="Label"
+                onChange={(e) => patchField(index, { label: e.target.value })}
+              />
+              <TemplateField
+                disabled={readOnly}
+                value={field.value}
+                suggestions={suggestions}
+                onChange={(value) => patchField(index, { value })}
+                placeholder="{{inputs.name}}"
+              />
+              <Select
+                disabled={readOnly}
+                value={field.as}
+                onChange={(e) => patchField(index, { as: e.target.value === 'image' ? 'image' : 'text' })}
+              >
+                <option value="text">Text</option>
+                <option value="image">Image</option>
+              </Select>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={readOnly || c.fields.length <= 1}
+                onClick={() => onChange({ ...c, fields: c.fields.filter((_, i) => i !== index) })}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={readOnly}
+            onClick={() => onChange({ ...c, fields: [...c.fields, emptyDocumentField()] })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add field
+          </Button>
+        </div>
+        {kind === 'checklist' && (
+          <div className="space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
+            <Label>Data table (multiple rows)</Label>
+            <div>
+              <Label>Rows source</Label>
+              <TemplateField
+                disabled={readOnly}
+                value={c.tableRowsSource}
+                suggestions={suggestions}
+                onChange={(tableRowsSource) => onChange({ ...c, tableRowsSource })}
+                placeholder="{{inputs.items}}"
+              />
+            </div>
+            {c.tableColumns.map((col, index) => (
+              <div
+                key={index}
+                className="grid gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-2 sm:grid-cols-[1fr_1fr_auto]"
+              >
+                <Input
+                  disabled={readOnly}
+                  value={col.key}
+                  placeholder="Property key"
+                  onChange={(e) => patchColumn(index, { key: e.target.value })}
+                />
+                <Input
+                  disabled={readOnly}
+                  value={col.label}
+                  placeholder="Header label"
+                  onChange={(e) => patchColumn(index, { label: e.target.value })}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={readOnly}
+                  onClick={() => onChange({ ...c, tableColumns: c.tableColumns.filter((_, i) => i !== index) })}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={readOnly}
+              onClick={() => onChange({ ...c, tableColumns: [...c.tableColumns, emptyDocumentTableColumn()] })}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add column
+            </Button>
+          </div>
+        )}
+        <div>
+          <Label>Body</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.body}
+            suggestions={suggestions}
+            onChange={(body) => onChange({ ...c, body })}
+          />
+        </div>
+        <div>
+          <Label>Footer</Label>
+          <TemplateField
+            disabled={readOnly}
+            value={c.footer}
+            suggestions={suggestions}
+            onChange={(footer) => onChange({ ...c, footer })}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'consent') {
+    const c = asConsent(content)
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Title</Label>
+            <TemplateField
+              disabled={readOnly}
+              value={c.title}
+              suggestions={suggestions}
+              onChange={(title) => onChange({ ...c, title })}
+            />
+          </div>
+          <div>
+            <Label>Version</Label>
+            <Input
+              disabled={readOnly}
+              value={c.version}
+              onChange={(e) => onChange({ ...c, version: e.target.value })}
+              placeholder="1.0"
+            />
+          </div>
+        </div>
+        <div>
+          <Label>Body</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.body}
+            suggestions={suggestions}
+            onChange={(body) => onChange({ ...c, body })}
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Accept label</Label>
+            <Input
+              disabled={readOnly}
+              value={c.acceptLabel}
+              onChange={(e) => onChange({ ...c, acceptLabel: e.target.value })}
+              placeholder="I accept"
+            />
+          </div>
+          <div>
+            <Label>Decline label</Label>
+            <Input
+              disabled={readOnly}
+              value={c.declineLabel}
+              onChange={(e) => onChange({ ...c, declineLabel: e.target.value })}
+              placeholder="I decline"
+            />
+          </div>
+        </div>
+        <div>
+          <Label>Effective at</Label>
+          <Input
+            disabled={readOnly}
+            type="datetime-local"
+            value={c.effectiveAt}
+            onChange={(e) => onChange({ ...c, effectiveAt: e.target.value })}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'webhook') {
+    const c = asWebhook(content)
+    function patchHeader(index: number, patch: Partial<WebhookHeader>) {
+      const headers = c.headers.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      onChange({ ...c, headers })
+    }
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Name</Label>
+            <Input
+              disabled={readOnly}
+              value={c.name}
+              onChange={(e) => onChange({ ...c, name: e.target.value })}
+              placeholder="Webhook name"
+            />
+          </div>
+          <div>
+            <Label>Method</Label>
+            <Select
+              disabled={readOnly}
+              value={c.method}
+              onChange={(e) => onChange({ ...c, method: e.target.value as WebhookMethod })}
+            >
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="PATCH">PATCH</option>
+            </Select>
+          </div>
+        </div>
+        <div>
+          <Label>Description</Label>
+          <Input
+            disabled={readOnly}
+            value={c.description}
+            onChange={(e) => onChange({ ...c, description: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label>Content-Type</Label>
+          <Input
+            disabled={readOnly}
+            value={c.contentType}
+            onChange={(e) => onChange({ ...c, contentType: e.target.value })}
+            placeholder="application/json"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Headers</Label>
+          {c.headers.map((header, index) => (
+            <div
+              key={index}
+              className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3 sm:grid-cols-[1fr_1fr_auto]"
+            >
+              <Input
+                disabled={readOnly}
+                value={header.key}
+                placeholder="Header name"
+                onChange={(e) => patchHeader(index, { key: e.target.value })}
+              />
+              <TemplateField
+                disabled={readOnly}
+                value={header.value}
+                suggestions={suggestions}
+                onChange={(value) => patchHeader(index, { value })}
+                placeholder="{{inputs.token}}"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={readOnly}
+                onClick={() => onChange({ ...c, headers: c.headers.filter((_, i) => i !== index) })}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={readOnly}
+            onClick={() => onChange({ ...c, headers: [...c.headers, emptyWebhookHeader()] })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add header
+          </Button>
+        </div>
+        <div>
+          <Label>JSON body</Label>
+          <Textarea
+            disabled={readOnly}
+            className="min-h-[160px] font-mono text-xs"
+            value={c.bodyJson}
+            onChange={(e) => onChange({ ...c, bodyJson: e.target.value })}
+            placeholder='{"key": "{{inputs.value}}"}'
+            spellCheck={false}
+          />
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+            Use {'{{inputs.key}}'} to insert input values into the JSON body.
           </p>
         </div>
       </div>

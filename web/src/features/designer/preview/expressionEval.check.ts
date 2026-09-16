@@ -9,6 +9,7 @@ import {
   resolveExpressionValue,
   tryEvaluateExpression,
 } from './expressionEval'
+import { decodeMapEmbed, FF_MAP_CLOSE, FF_MAP_OPEN } from '@/features/templates/mapEmbed'
 
 const ctx = {
   vars: {
@@ -117,6 +118,72 @@ assert(step === 7, 'steps path')
   assert(
     interpolateTemplate('{{templates.faq.text}}', copyCtx).startsWith('Hi Ada'),
     'faq .text fills inputs on access',
+  )
+}
+
+{
+  const mapCtx = {
+    vars: { office_lat: '-26.2041', office_lon: '28.0473' },
+    steps: {},
+    embedMedia: true,
+    templateBindings: {
+      office_map: { lat: '{{vars.office_lat}}', lon: '{{vars.office_lon}}' },
+    },
+    templates: {
+      office_map: {
+        id: 't1',
+        key: 'office_map',
+        name: 'Office Map',
+        kind: 'map',
+        title: 'Head Office',
+        intro: '',
+        centerLat: '-26.2041',
+        centerLng: '28.0473',
+        zoom: 12,
+        style: 'roadmap',
+        // Pre-baked like templateExprValue — must be rebuilt after pin fill.
+        embedUrl:
+          'https://www.openstreetmap.org/export/embed.html?bbox=0%2C0%2C1%2C1&layer=mapnik&marker=0%2C0',
+        pins: [
+          {
+            label: 'Head Office',
+            description: '123 Main Street, Johannesburg',
+            lat: '{{inputs.lat}}',
+            lng: '{{inputs.lon}}',
+            link: '',
+          },
+        ],
+        inputs: [
+          { key: 'lat', label: 'Latitude', type: 'text' },
+          { key: 'lon', label: 'Longitude', type: 'text' },
+        ],
+        text: 'static',
+      },
+    },
+  }
+  const viaText = interpolateTemplate('{{templates.office_map.text}}', mapCtx)
+  assert(viaText.startsWith(FF_MAP_OPEN), `map .text embed got ${viaText.slice(0, 40)}`)
+  const textB64 = viaText.slice(FF_MAP_OPEN.length, viaText.endsWith(FF_MAP_CLOSE) ? -FF_MAP_CLOSE.length : undefined)
+  const textPayload = decodeMapEmbed(textB64)
+  assert(textPayload, 'map .text decodes')
+  assert(textPayload!.pins[0]?.lat === '-26.2041', `map .text lat got ${textPayload!.pins[0]?.lat}`)
+  assert(textPayload!.pins[0]?.lng === '28.0473', `map .text lng got ${textPayload!.pins[0]?.lng}`)
+  assert(
+    textPayload!.embedUrl.includes('-26.2041') && textPayload!.embedUrl.includes('28.0473'),
+    `map .text embedUrl should center on filled pins, got ${textPayload!.embedUrl}`,
+  )
+
+  const viaEmbed = interpolateTemplate('{{embed(templates.office_map)}}', mapCtx)
+  assert(viaEmbed.startsWith(FF_MAP_OPEN), `embed(map) got ${viaEmbed.slice(0, 40)}`)
+  const embedB64 = viaEmbed.slice(FF_MAP_OPEN.length, viaEmbed.endsWith(FF_MAP_CLOSE) ? -FF_MAP_CLOSE.length : undefined)
+  const embedPayload = decodeMapEmbed(embedB64)
+  assert(embedPayload, 'embed(map) decodes')
+  assert(embedPayload!.pins[0]?.lat === '-26.2041', `embed(map) lat got ${embedPayload!.pins[0]?.lat}`)
+  assert(embedPayload!.pins[0]?.lng === '28.0473', `embed(map) lng got ${embedPayload!.pins[0]?.lng}`)
+  assert(
+    embedPayload!.embedUrl.includes('marker=-26.2041%2C28.0473') ||
+      embedPayload!.embedUrl.includes('marker=-26.2041,28.0473'),
+    `embed(map) marker should use filled coords, got ${embedPayload!.embedUrl}`,
   )
 }
 

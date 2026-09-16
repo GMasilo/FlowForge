@@ -4,22 +4,27 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { canEdit, instanceFeatureEnabled, type Json, type VariableType } from '@/shared/types/database'
 import { supabase } from '@/shared/lib/supabase'
-import { slugify } from '@/shared/lib/utils'
+import { cn, slugify } from '@/shared/lib/utils'
 import { ChatbotSubNav } from '@/features/chatbots/ChatbotSubNav'
 import { claimChatbotPublicSlug, formatChatbotSlugError } from '@/features/chatbots/claimChatbotPublicSlug'
 import { parseTransferEntrySettings } from '@/features/designer/model/chatbotTransfer'
 import {
   BRANDING_FONT_ACCEPT,
   BRANDING_LOGO_ACCEPT,
+  CHAT_APPEARANCE_THEMES,
   FONT_PRESETS,
   STORY_MAX_COUNT,
   brandingToSettingsPatch,
+  chatAppearanceThemeClass,
+  chatMessageEntranceClass,
   chatRootStyle,
   ensureChatFontFace,
   parseChatbotBranding,
   resolveChatBranding,
   type ChatBubbleRadius,
+  type ChatMessageEntrance,
   type ChatTypingStyle,
+  type ChatTypewriterSpeed,
   type ChatbotBranding,
   type ChatbotStory,
 } from '@/features/chatbots/chatbotBranding'
@@ -697,6 +702,51 @@ export function ChatbotSettingsPage() {
         </p>
         <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
           <div className="space-y-4">
+            <div>
+              <Label>Theme</Label>
+              <p className="mt-0.5 text-xs text-[var(--color-ink-muted)]">
+                Pick a skin for the overall chat chrome. Colour fields below still override theme defaults when set.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {CHAT_APPEARANCE_THEMES.map((theme) => {
+                  const selected = branding.appearanceTheme === theme.id
+                  return (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      disabled={!editable}
+                      onClick={() =>
+                        patchBranding({
+                          appearanceTheme: theme.id,
+                          bubbleRadius: theme.bubbleRadius,
+                        })
+                      }
+                      className={cn(
+                        'rounded-xl border p-3 text-left transition',
+                        selected
+                          ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)]/50 ring-1 ring-[var(--color-accent)]'
+                          : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-accent)]/50',
+                        !editable && 'cursor-default opacity-70',
+                      )}
+                    >
+                      <span
+                        className="mb-2 flex h-10 overflow-hidden rounded-lg ring-1 ring-black/5"
+                        aria-hidden
+                      >
+                        <span className="w-[42%]" style={{ background: theme.swatch[0] }} />
+                        <span className="w-[38%]" style={{ background: theme.swatch[1] }} />
+                        <span className="flex-1" style={{ background: theme.swatch[2] }} />
+                      </span>
+                      <span className="block text-sm font-semibold text-[var(--color-ink)]">{theme.label}</span>
+                      <span className="mt-0.5 block text-[11px] leading-snug text-[var(--color-ink-muted)]">
+                        {theme.description}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <ColorField
                 id="brand-header"
@@ -756,6 +806,36 @@ export function ChatbotSettingsPage() {
                 >
                   <option value="normal">Normal</option>
                   <option value="typewriter">Typewriter</option>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="brand-typewriter-speed">Typewriter speed</Label>
+                <Select
+                  id="brand-typewriter-speed"
+                  value={branding.typewriterSpeed}
+                  disabled={!editable || branding.typingStyle !== 'typewriter'}
+                  onChange={(e) =>
+                    patchBranding({ typewriterSpeed: e.target.value as ChatTypewriterSpeed })
+                  }
+                >
+                  <option value="slow">Slow</option>
+                  <option value="normal">Normal</option>
+                  <option value="fast">Fast</option>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="brand-entrance">Message entrance</Label>
+                <Select
+                  id="brand-entrance"
+                  value={branding.messageEntrance}
+                  disabled={!editable}
+                  onChange={(e) =>
+                    patchBranding({ messageEntrance: e.target.value as ChatMessageEntrance })
+                  }
+                >
+                  <option value="none">None</option>
+                  <option value="fade">Fade</option>
+                  <option value="rise">Rise</option>
                 </Select>
               </div>
               <div>
@@ -1104,16 +1184,21 @@ export function ChatbotSettingsPage() {
           </div>
 
           <div
-            className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-sm"
+            className={cn(
+              'relative overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-sm',
+              chatAppearanceThemeClass(resolvedPreview.appearanceTheme),
+            )}
             style={chatRootStyle(resolvedPreview)}
           >
             <div
+              data-ff-chat-header
               className="relative flex items-center gap-2 px-3 py-2.5"
               style={{
-                background: 'linear-gradient(135deg, var(--ff-chat-header), var(--ff-chat-header-2))',
+                background: 'var(--ff-chat-header-gradient)',
                 color: 'var(--ff-chat-header-fg)',
               }}
             >
+              <div data-ff-chat-header-content className="relative flex min-w-0 flex-1 items-center gap-2">
               <ChatStoriesRing
                 stories={resolvedPreview.resolvedStories}
                 chatbotId={`${chatbotId || 'bot'}:settings-preview`}
@@ -1136,13 +1221,18 @@ export function ChatbotSettingsPage() {
                 ) : null}
                 <p className="truncate text-sm font-semibold">{bot.name}</p>
               </div>
+              </div>
             </div>
             <div
               className="space-y-2 px-3 py-3"
-              style={{ background: 'linear-gradient(to bottom, var(--ff-chat-page-bg), var(--ff-chat-page-bg-2))' }}
+              style={{ background: 'var(--ff-chat-page-gradient)' }}
             >
               <div
-                className="max-w-[90%] px-3 py-2 text-xs shadow-sm"
+                key={`preview-bot-${branding.messageEntrance}-${branding.typingStyle}-${branding.typewriterSpeed}-${branding.appearanceTheme}`}
+                className={cn(
+                  'ff-chat-bubble-bot max-w-[90%] px-3 py-2 text-xs shadow-sm',
+                  chatMessageEntranceClass(branding.messageEntrance, true),
+                )}
                 style={{
                   background: 'var(--ff-chat-bubble-bot)',
                   color: 'var(--ff-chat-bubble-bot-fg)',
@@ -1150,12 +1240,16 @@ export function ChatbotSettingsPage() {
                 }}
               >
                 {branding.typingStyle === 'typewriter'
-                  ? 'Hello… typing character by character.'
+                  ? `Hello… typing ${branding.typewriterSpeed}.`
                   : 'Hello — how can I help?'}
               </div>
               <div className="flex justify-end">
                 <div
-                  className="max-w-[90%] px-3 py-2 text-xs shadow-sm"
+                  key={`preview-user-${branding.messageEntrance}-${branding.appearanceTheme}`}
+                  className={cn(
+                    'ff-chat-bubble-user max-w-[90%] px-3 py-2 text-xs shadow-sm',
+                    chatMessageEntranceClass(branding.messageEntrance, true),
+                  )}
                   style={{
                     background: 'linear-gradient(135deg, var(--ff-chat-bubble-user), var(--ff-chat-bubble-user-2))',
                     color: 'var(--ff-chat-bubble-user-fg)',

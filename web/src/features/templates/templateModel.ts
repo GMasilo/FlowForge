@@ -12,9 +12,48 @@ export const TEMPLATE_KINDS = [
   'document',
   'agreement',
   'sso',
+  'appointment',
+  'location',
+  'map',
+  'qr',
+  'team',
+  'pricing',
+  'survey',
+  'announcement',
+  'sms',
+  'push',
+  'ticket',
+  'certificate',
+  'checklist',
+  'consent',
+  'webhook',
 ] as const
 
 export type TemplateKind = (typeof TEMPLATE_KINDS)[number]
+
+/** High-level buckets for the Templates → Create picker. */
+export const TEMPLATE_KIND_CATEGORIES = [
+  'messaging',
+  'commerce',
+  'content',
+  'documents',
+  'engagement',
+  'integrations',
+] as const
+
+export type TemplateKindCategory = (typeof TEMPLATE_KIND_CATEGORIES)[number]
+
+export const TEMPLATE_KIND_CATEGORY_META: Record<
+  TemplateKindCategory,
+  { label: string; hint: string }
+> = {
+  messaging: { label: 'Messaging', hint: 'Email, chat, SMS, and push' },
+  commerce: { label: 'Commerce', hint: 'Catalogs, menus, pricing, receipts' },
+  content: { label: 'Content', hint: 'FAQ, hours, locations, maps, QR, team, legal' },
+  documents: { label: 'Documents', hint: 'Downloadable PDF / Word / Excel' },
+  engagement: { label: 'Engagement', hint: 'Surveys, tickets, consent, appointments' },
+  integrations: { label: 'Integrations', hint: 'SSO and webhooks' },
+}
 
 export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
 
@@ -54,10 +93,25 @@ export const COPY_TEMPLATE_KINDS = [
   'receipt',
   'document',
   'agreement',
+  'appointment',
+  'location',
+  'map',
+  'qr',
+  'team',
+  'pricing',
+  'survey',
+  'announcement',
+  'sms',
+  'push',
+  'ticket',
+  'certificate',
+  'checklist',
+  'consent',
+  'webhook',
 ] as const satisfies readonly TemplateKind[]
 
 /** Downloadable file templates (PDF/Word/Excel) that use DocumentContent + {{templates.key.file}}. */
-export const FILE_TEMPLATE_KINDS = ['document', 'agreement'] as const satisfies readonly TemplateKind[]
+export const FILE_TEMPLATE_KINDS = ['document', 'agreement', 'certificate', 'checklist'] as const satisfies readonly TemplateKind[]
 
 export function isFileTemplateKind(kind: string): kind is (typeof FILE_TEMPLATE_KINDS)[number] {
   return (FILE_TEMPLATE_KINDS as readonly string[]).includes(kind)
@@ -204,6 +258,196 @@ export type SsoContent = {
   previewEmail: string
 }
 
+// --- New template content types ---
+
+export type AppointmentService = {
+  id: string
+  name: string
+  durationMinutes: number
+  description: string
+}
+
+export type AppointmentContent = {
+  title: string
+  intro: string
+  timezone: string
+  services: AppointmentService[]
+  note: string
+  inputs: TemplateInput[]
+}
+
+export type LocationEntry = {
+  name: string
+  address: string
+  city: string
+  phone: string
+  email: string
+  hoursNote: string
+  mapUrl: string
+}
+
+export type LocationContent = {
+  intro: string
+  locations: LocationEntry[]
+  inputs: TemplateInput[]
+}
+
+export type MapPin = {
+  label: string
+  description: string
+  /** Decimal latitude (or a template expression like {{vars.lat}}). */
+  lat: string
+  /** Decimal longitude (or a template expression). */
+  lng: string
+  link: string
+}
+
+export type MapContent = {
+  title: string
+  intro: string
+  /** Fallback center when no pins resolve to numbers. */
+  centerLat: string
+  centerLng: string
+  zoom: number
+  style: 'roadmap' | 'satellite'
+  /** Optional full iframe/embed URL. When set, overrides the generated OSM embed. */
+  embedUrl: string
+  pins: MapPin[]
+  inputs: TemplateInput[]
+}
+
+export type QrErrorCorrection = 'L' | 'M' | 'Q' | 'H'
+
+export type QrContent = {
+  title: string
+  caption: string
+  /** Text or URL encoded into the QR (supports {{inputs.*}} / expressions). */
+  payload: string
+  /** Pixel width/height of the generated image. */
+  size: number
+  errorCorrection: QrErrorCorrection
+  foreground: string
+  background: string
+  /** Suggested download filename (PNG). */
+  filename: string
+  inputs: TemplateInput[]
+}
+
+export type TeamMember = {
+  name: string
+  role: string
+  skills: string
+  email: string
+  handoffKey: string
+}
+
+export type TeamContent = {
+  intro: string
+  members: TeamMember[]
+  inputs: TemplateInput[]
+}
+
+export type PricingPlan = {
+  name: string
+  price: number
+  period: string
+  features: string[]
+  highlight: boolean
+}
+
+export type PricingContent = {
+  currency: string
+  intro: string
+  plans: PricingPlan[]
+  inputs: TemplateInput[]
+}
+
+export type SurveyQuestionKind = 'nps' | 'likert' | 'text' | 'choice'
+
+export type SurveyQuestion = {
+  prompt: string
+  kind: SurveyQuestionKind
+  choices: string[]
+}
+
+export type SurveyContent = {
+  intro: string
+  questions: SurveyQuestion[]
+  inputs: TemplateInput[]
+}
+
+export type AnnouncementSeverity = 'info' | 'promo' | 'warning'
+
+export type AnnouncementContent = {
+  title: string
+  body: string
+  severity: AnnouncementSeverity
+  startsAt: string
+  endsAt: string
+  ctaLabel: string
+  ctaValue: string
+  inputs: TemplateInput[]
+}
+
+export type SmsChannel = 'sms' | 'whatsapp'
+
+export type SmsContent = {
+  channel: SmsChannel
+  body: string
+  maxChars: number
+  inputs: TemplateInput[]
+}
+
+export type PushContent = {
+  title: string
+  body: string
+  inputs: TemplateInput[]
+}
+
+export type TicketPriority = 'low' | 'normal' | 'high'
+
+export type TicketField = {
+  label: string
+  value: string
+}
+
+export type TicketContent = {
+  title: string
+  priority: TicketPriority
+  summary: string
+  fields: TicketField[]
+  inputs: TemplateInput[]
+}
+
+export type ConsentContent = {
+  title: string
+  version: string
+  body: string
+  acceptLabel: string
+  declineLabel: string
+  effectiveAt: string
+  inputs: TemplateInput[]
+}
+
+export type WebhookMethod = 'POST' | 'PUT' | 'PATCH'
+
+export type WebhookHeader = {
+  key: string
+  value: string
+}
+
+export type WebhookContent = {
+  name: string
+  description: string
+  method: WebhookMethod
+  contentType: string
+  bodyJson: string
+  headers: WebhookHeader[]
+  inputs: TemplateInput[]
+}
+
+// certificate and checklist use DocumentContent
+
 export type TemplateContent =
   | EmailContent
   | FaqContent
@@ -215,66 +459,221 @@ export type TemplateContent =
   | ReceiptContent
   | DocumentContent
   | SsoContent
+  | AppointmentContent
+  | LocationContent
+  | MapContent
+  | QrContent
+  | TeamContent
+  | PricingContent
+  | SurveyContent
+  | AnnouncementContent
+  | SmsContent
+  | PushContent
+  | TicketContent
+  | ConsentContent
+  | WebhookContent
 
 export const TEMPLATE_KIND_META: Record<
   TemplateKind,
-  { label: string; hint: string; insertField: string }
+  {
+    label: string
+    hint: string
+    insertField: string
+    category: TemplateKindCategory
+    tags: readonly string[]
+  }
 > = {
   email: {
     label: 'HTML email',
     hint: 'Subject + HTML body for Email steps and OTP messages',
     insertField: 'html',
+    category: 'messaging',
+    tags: ['email', 'otp', 'html'],
   },
   faq: {
     label: 'Help / FAQ',
     hint: 'Reusable Q&A you can drop into chat steps',
     insertField: 'text',
+    category: 'content',
+    tags: ['chat', 'help', 'faq'],
   },
   cart: {
     label: 'Store catalog',
     hint: 'Categories, products, and checkout fees visitors add to a cart',
     insertField: 'text',
+    category: 'commerce',
+    tags: ['shop', 'products', 'checkout'],
   },
   menu: {
     label: 'Menu',
     hint: 'Quick-reply style options and help menus',
     insertField: 'text',
+    category: 'commerce',
+    tags: ['chat', 'menu', 'options'],
   },
   message: {
     label: 'Chat message',
     hint: 'Welcome, away, or handoff copy',
     insertField: 'text',
+    category: 'messaging',
+    tags: ['chat', 'copy'],
   },
   hours: {
     label: 'Opening hours',
     hint: 'Weekly schedule shown in chat or email',
     insertField: 'text',
+    category: 'content',
+    tags: ['schedule', 'hours'],
   },
   legal: {
     label: 'Legal',
     hint: 'Terms, privacy, or consent copy',
     insertField: 'text',
+    category: 'content',
+    tags: ['legal', 'privacy', 'terms'],
   },
   receipt: {
     label: 'Receipt',
     hint: 'Order confirmation filled from the cart and payment at send time',
     insertField: 'text',
+    category: 'commerce',
+    tags: ['shop', 'payment', 'receipt'],
   },
   document: {
     label: 'Downloadable file',
     hint: 'PDF, Word, or Excel filled from answers — list layout or a visual A4 page (portrait or landscape)',
     insertField: 'file',
+    category: 'documents',
+    tags: ['pdf', 'word', 'excel', 'download'],
   },
   agreement: {
     label: 'Agreement',
     hint: 'Adobe Sign–style PDF: parties, terms, signature, and date signed — download after the visitor signs',
     insertField: 'file',
+    category: 'documents',
+    tags: ['pdf', 'signature', 'legal'],
   },
   sso: {
     label: 'SSO / IdP',
     hint: 'OIDC or SAML identity provider for Sign-in steps — configure here, then select on the step',
     insertField: 'providerName',
+    category: 'integrations',
+    tags: ['auth', 'oidc', 'saml'],
   },
+  appointment: {
+    label: 'Appointment',
+    hint: 'Bookable services with duration, timezone, and notes',
+    insertField: 'text',
+    category: 'engagement',
+    tags: ['booking', 'calendar'],
+  },
+  location: {
+    label: 'Locations',
+    hint: 'Store or office addresses, phone, email, and hours',
+    insertField: 'text',
+    category: 'content',
+    tags: ['address', 'map', 'contact'],
+  },
+  map: {
+    label: 'Map view',
+    hint: 'Interactive map with pins — show stores, meetups, or delivery zones in chat',
+    insertField: 'text',
+    category: 'content',
+    tags: ['map', 'pins', 'geo', 'embed'],
+  },
+  qr: {
+    label: 'QR code',
+    hint: 'Generate a scannable QR from a URL or text — show and download in chat',
+    insertField: 'text',
+    category: 'content',
+    tags: ['qr', 'barcode', 'link', 'embed'],
+  },
+  team: {
+    label: 'Team',
+    hint: 'Team members with roles, skills, and handoff keys',
+    insertField: 'text',
+    category: 'content',
+    tags: ['people', 'handoff'],
+  },
+  pricing: {
+    label: 'Pricing',
+    hint: 'Pricing plans with features and highlight option',
+    insertField: 'text',
+    category: 'commerce',
+    tags: ['plans', 'pricing'],
+  },
+  survey: {
+    label: 'Survey',
+    hint: 'NPS, Likert, text, or choice questions',
+    insertField: 'text',
+    category: 'engagement',
+    tags: ['nps', 'feedback', 'form'],
+  },
+  announcement: {
+    label: 'Announcement',
+    hint: 'Banners and promos with severity, dates, and CTA',
+    insertField: 'text',
+    category: 'messaging',
+    tags: ['banner', 'promo'],
+  },
+  sms: {
+    label: 'SMS / WhatsApp',
+    hint: 'Short messages with character limits for SMS or WhatsApp',
+    insertField: 'text',
+    category: 'messaging',
+    tags: ['sms', 'whatsapp'],
+  },
+  push: {
+    label: 'Push notification',
+    hint: 'Title and body for mobile push messages',
+    insertField: 'text',
+    category: 'messaging',
+    tags: ['push', 'mobile'],
+  },
+  ticket: {
+    label: 'Ticket',
+    hint: 'Support ticket with priority, summary, and fields',
+    insertField: 'text',
+    category: 'engagement',
+    tags: ['support', 'ticket'],
+  },
+  certificate: {
+    label: 'Certificate',
+    hint: 'PDF certificate filled from answers — download after completion',
+    insertField: 'file',
+    category: 'documents',
+    tags: ['pdf', 'certificate'],
+  },
+  checklist: {
+    label: 'Checklist',
+    hint: 'PDF checklist document — download after completion',
+    insertField: 'file',
+    category: 'documents',
+    tags: ['pdf', 'checklist'],
+  },
+  consent: {
+    label: 'Consent',
+    hint: 'Versioned consent form with accept/decline labels',
+    insertField: 'text',
+    category: 'engagement',
+    tags: ['consent', 'gdpr', 'form'],
+  },
+  webhook: {
+    label: 'Webhook',
+    hint: 'HTTP request config — method, headers, and JSON body',
+    insertField: 'text',
+    category: 'integrations',
+    tags: ['http', 'api', 'webhook'],
+  },
+}
+
+/** Unique tags across all template kinds (sorted). */
+export function allTemplateKindTags(): string[] {
+  const tags = new Set<string>()
+  for (const kind of TEMPLATE_KINDS) {
+    for (const tag of TEMPLATE_KIND_META[kind].tags) tags.add(tag)
+  }
+  return [...tags].sort((a, b) => a.localeCompare(b))
 }
 
 function asRecord(raw: unknown): Record<string, unknown> {
@@ -567,6 +966,36 @@ export function emptyTemplateContent(kind: TemplateKind): TemplateContent {
       return emptyAgreementContent()
     case 'sso':
       return emptySsoContent()
+    case 'appointment':
+      return emptyAppointmentContent()
+    case 'location':
+      return emptyLocationContent()
+    case 'map':
+      return emptyMapContent()
+    case 'qr':
+      return emptyQrContent()
+    case 'team':
+      return emptyTeamContent()
+    case 'pricing':
+      return emptyPricingContent()
+    case 'survey':
+      return emptySurveyContent()
+    case 'announcement':
+      return emptyAnnouncementContent()
+    case 'sms':
+      return emptySmsContent()
+    case 'push':
+      return emptyPushContent()
+    case 'ticket':
+      return emptyTicketContent()
+    case 'certificate':
+      return emptyCertificateContent()
+    case 'checklist':
+      return emptyChecklistContent()
+    case 'consent':
+      return emptyConsentContent()
+    case 'webhook':
+      return emptyWebhookContent()
   }
 }
 
@@ -618,6 +1047,180 @@ export function emptySsoContent(): SsoContent {
     emailClaim: 'email',
     userIdClaim: 'sub',
     previewEmail: 'sso.user@example.com',
+  }
+}
+
+export function emptyAppointmentService(): AppointmentService {
+  return { id: newStoreId('svc'), name: '', durationMinutes: 30, description: '' }
+}
+
+export function emptyAppointmentContent(): AppointmentContent {
+  return {
+    title: '',
+    intro: '',
+    timezone: '',
+    services: [emptyAppointmentService()],
+    note: '',
+    inputs: [],
+  }
+}
+
+export function emptyLocationEntry(): LocationEntry {
+  return { name: '', address: '', city: '', phone: '', email: '', hoursNote: '', mapUrl: '' }
+}
+
+export function emptyLocationContent(): LocationContent {
+  return { intro: '', locations: [emptyLocationEntry()], inputs: [] }
+}
+
+export function emptyMapPin(): MapPin {
+  return { label: '', description: '', lat: '', lng: '', link: '' }
+}
+
+export function emptyMapContent(): MapContent {
+  return {
+    title: '',
+    intro: '',
+    centerLat: '-26.2041',
+    centerLng: '28.0473',
+    zoom: 12,
+    style: 'roadmap',
+    embedUrl: '',
+    pins: [emptyMapPin()],
+    inputs: [],
+  }
+}
+
+export function emptyQrContent(): QrContent {
+  return {
+    title: '',
+    caption: '',
+    payload: '',
+    size: 180,
+    errorCorrection: 'M',
+    foreground: '#0f172a',
+    background: '#ffffff',
+    filename: 'qr.png',
+    inputs: [],
+  }
+}
+
+export function emptyTeamMember(): TeamMember {
+  return { name: '', role: '', skills: '', email: '', handoffKey: '' }
+}
+
+export function emptyTeamContent(): TeamContent {
+  return { intro: '', members: [emptyTeamMember()], inputs: [] }
+}
+
+export function emptyPricingPlan(): PricingPlan {
+  return { name: '', price: 0, period: 'month', features: [], highlight: false }
+}
+
+export function emptyPricingContent(): PricingContent {
+  return { currency: 'USD', intro: '', plans: [emptyPricingPlan()], inputs: [] }
+}
+
+export function emptySurveyQuestion(): SurveyQuestion {
+  return { prompt: '', kind: 'text', choices: [] }
+}
+
+export function emptySurveyContent(): SurveyContent {
+  return { intro: '', questions: [emptySurveyQuestion()], inputs: [] }
+}
+
+export function emptyAnnouncementContent(): AnnouncementContent {
+  return {
+    title: '',
+    body: '',
+    severity: 'info',
+    startsAt: '',
+    endsAt: '',
+    ctaLabel: '',
+    ctaValue: '',
+    inputs: [],
+  }
+}
+
+export function emptySmsContent(): SmsContent {
+  return { channel: 'sms', body: '', maxChars: 160, inputs: [] }
+}
+
+export function emptyPushContent(): PushContent {
+  return { title: '', body: '', inputs: [] }
+}
+
+export function emptyTicketField(): TicketField {
+  return { label: '', value: '' }
+}
+
+export function emptyTicketContent(): TicketContent {
+  return { title: '', priority: 'normal', summary: '', fields: [emptyTicketField()], inputs: [] }
+}
+
+export function emptyCertificateContent(): DocumentContent {
+  return {
+    format: 'pdf',
+    filename: 'certificate.pdf',
+    title: '',
+    intro: '',
+    body: '',
+    footer: '',
+    fields: [emptyDocumentField()],
+    tableRowsSource: '',
+    tableColumns: [],
+    includeCart: false,
+    layout: 'flow',
+    orientation: 'portrait',
+    blocks: [],
+    inputs: [],
+  }
+}
+
+export function emptyChecklistContent(): DocumentContent {
+  return {
+    format: 'pdf',
+    filename: 'checklist.pdf',
+    title: '',
+    intro: '',
+    body: '',
+    footer: '',
+    fields: [emptyDocumentField()],
+    tableRowsSource: '',
+    tableColumns: [],
+    includeCart: false,
+    layout: 'flow',
+    orientation: 'portrait',
+    blocks: [],
+    inputs: [],
+  }
+}
+
+export function emptyConsentContent(): ConsentContent {
+  return {
+    title: '',
+    version: '1.0',
+    body: '',
+    acceptLabel: 'I accept',
+    declineLabel: 'I decline',
+    effectiveAt: '',
+    inputs: [],
+  }
+}
+
+export function emptyWebhookHeader(): WebhookHeader {
+  return { key: '', value: '' }
+}
+
+export function emptyWebhookContent(): WebhookContent {
+  return {
+    name: '',
+    description: '',
+    method: 'POST',
+    contentType: 'application/json',
+    bodyJson: '{}',
+    headers: [],
+    inputs: [],
   }
 }
 
@@ -848,6 +1451,223 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
         userIdClaim: 'sub',
         previewEmail: 'sso.user@example.com',
       }
+    case 'appointment':
+      return {
+        title: 'Book an appointment',
+        intro: "Select a service and we'll find an available slot for you.",
+        timezone: 'Africa/Johannesburg',
+        services: [
+          { id: 'svc_consult', name: 'Consultation', durationMinutes: 30, description: 'Initial consultation' },
+          { id: 'svc_followup', name: 'Follow-up', durationMinutes: 15, description: 'Quick follow-up call' },
+        ],
+        note: 'Appointments are confirmed via email.',
+        inputs: [
+          { key: 'date', label: 'Date', type: 'date', required: true },
+          { key: 'service', label: 'Service', type: 'string', required: true },
+        ],
+      }
+    case 'location':
+      return {
+        intro: 'Visit us at one of our locations:',
+        locations: [
+          {
+            name: 'Head Office',
+            address: '123 Main Street',
+            city: 'Johannesburg',
+            phone: '+27 11 123 4567',
+            email: 'info@example.com',
+            hoursNote: 'Mon–Fri 8am–5pm',
+            mapUrl: 'https://maps.google.com/?q=-26.2041,28.0473',
+          },
+        ],
+        inputs: [],
+      }
+    case 'map':
+      return {
+        title: 'Find us',
+        intro: 'Our offices and partner locations:',
+        centerLat: '-26.2041',
+        centerLng: '28.0473',
+        zoom: 12,
+        style: 'roadmap',
+        embedUrl: '',
+        pins: [
+          {
+            label: 'Head Office',
+            description: '123 Main Street, Johannesburg',
+            lat: '-26.2041',
+            lng: '28.0473',
+            link: 'https://maps.google.com/?q=-26.2041,28.0473',
+          },
+          {
+            label: 'Sandton Hub',
+            description: '5th Street, Sandton',
+            lat: '-26.1076',
+            lng: '28.0567',
+            link: '',
+          },
+        ],
+        inputs: [],
+      }
+    case 'qr':
+      return {
+        title: 'Scan to open',
+        caption: 'Point your camera at this code',
+        payload: '{{inputs.url}}',
+        size: 200,
+        errorCorrection: 'M',
+        foreground: '#0f172a',
+        background: '#ffffff',
+        filename: 'link-{{inputs.label}}.png',
+        inputs: [
+          { key: 'url', label: 'URL or text', type: 'string', required: true },
+          { key: 'label', label: 'Short label', type: 'string', required: false },
+        ],
+      }
+    case 'team':
+      return {
+        intro: 'Meet our team:',
+        members: [
+          { name: 'Alex Smith', role: 'Support Lead', skills: 'Billing, Technical', email: 'alex@example.com', handoffKey: 'alex' },
+          { name: 'Jordan Lee', role: 'Account Manager', skills: 'Sales, Onboarding', email: 'jordan@example.com', handoffKey: 'jordan' },
+        ],
+        inputs: [],
+      }
+    case 'pricing':
+      return {
+        currency: 'USD',
+        intro: 'Choose a plan that works for you:',
+        plans: [
+          { name: 'Starter', price: 0, period: 'month', features: ['5 chatbots', 'Community support'], highlight: false },
+          { name: 'Pro', price: 49, period: 'month', features: ['Unlimited chatbots', 'Priority support', 'Analytics'], highlight: true },
+          { name: 'Enterprise', price: 199, period: 'month', features: ['Everything in Pro', 'SSO', 'SLA'], highlight: false },
+        ],
+        inputs: [],
+      }
+    case 'survey':
+      return {
+        intro: "We'd love your feedback:",
+        questions: [
+          { prompt: 'How likely are you to recommend us?', kind: 'nps', choices: [] },
+          { prompt: 'How satisfied are you with our service?', kind: 'likert', choices: [] },
+          { prompt: 'Any additional comments?', kind: 'text', choices: [] },
+        ],
+        inputs: [],
+      }
+    case 'announcement':
+      return {
+        title: 'Scheduled maintenance',
+        body: "We'll be performing maintenance on Saturday from 2am–4am UTC. Service may be briefly unavailable.",
+        severity: 'warning',
+        startsAt: '',
+        endsAt: '',
+        ctaLabel: 'Learn more',
+        ctaValue: 'https://status.example.com',
+        inputs: [],
+      }
+    case 'sms':
+      return {
+        channel: 'sms',
+        body: 'Hi {{inputs.name}}, your appointment is confirmed for {{inputs.date}}. Reply HELP for support.',
+        maxChars: 160,
+        inputs: [
+          { key: 'name', label: 'Name', type: 'string', required: true },
+          { key: 'date', label: 'Date', type: 'date', required: true },
+        ],
+      }
+    case 'push':
+      return {
+        title: 'New message',
+        body: 'You have a new message from {{inputs.sender}}. Tap to view.',
+        inputs: [{ key: 'sender', label: 'Sender', type: 'string', required: true }],
+      }
+    case 'ticket':
+      return {
+        title: 'Support ticket',
+        priority: 'normal',
+        summary: '{{inputs.issue}}',
+        fields: [
+          { label: 'Customer', value: '{{inputs.name}}' },
+          { label: 'Email', value: '{{inputs.email}}' },
+        ],
+        inputs: [
+          { key: 'name', label: 'Name', type: 'string', required: true },
+          { key: 'email', label: 'Email', type: 'string', required: true },
+          { key: 'issue', label: 'Issue', type: 'string', required: true },
+        ],
+      }
+    case 'certificate':
+      return {
+        format: 'pdf',
+        filename: 'certificate-{{inputs.recipient}}.pdf',
+        title: 'Certificate of Completion',
+        intro: 'This certifies that',
+        body: '{{inputs.recipient}}\n\nhas successfully completed {{inputs.course}} on {{inputs.date}}.',
+        footer: 'FlowForge Certification',
+        fields: [
+          { label: 'Recipient', value: '{{inputs.recipient}}', as: 'text' },
+          { label: 'Course', value: '{{inputs.course}}', as: 'text' },
+          { label: 'Date', value: '{{inputs.date}}', as: 'text' },
+        ],
+        tableRowsSource: '',
+        tableColumns: [],
+        includeCart: false,
+        layout: 'flow',
+        orientation: 'landscape',
+        blocks: [],
+        inputs: [
+          { key: 'recipient', label: 'Recipient name', type: 'string', required: true },
+          { key: 'course', label: 'Course name', type: 'string', required: true },
+          { key: 'date', label: 'Completion date', type: 'date', required: true },
+        ],
+      }
+    case 'checklist':
+      return {
+        format: 'pdf',
+        filename: 'checklist-{{inputs.title}}.pdf',
+        title: '{{inputs.title}}',
+        intro: 'Complete the following items:',
+        body: '{{inputs.items}}',
+        footer: 'Generated by FlowForge',
+        fields: [{ label: 'Title', value: '{{inputs.title}}', as: 'text' }],
+        tableRowsSource: '{{inputs.items}}',
+        tableColumns: [
+          { key: 'item', label: 'Item' },
+          { key: 'status', label: 'Status' },
+        ],
+        includeCart: false,
+        layout: 'flow',
+        orientation: 'portrait',
+        blocks: [],
+        inputs: [
+          { key: 'title', label: 'Checklist title', type: 'string', required: true },
+          { key: 'items', label: 'Items (JSON array)', type: 'string', required: true },
+        ],
+      }
+    case 'consent':
+      return {
+        title: 'Data processing consent',
+        version: '1.0',
+        body: 'By accepting, you agree that we may collect and process your personal data as described in our privacy policy.',
+        acceptLabel: 'I accept',
+        declineLabel: 'I decline',
+        effectiveAt: '',
+        inputs: [],
+      }
+    case 'webhook':
+      return {
+        name: 'Notify CRM',
+        description: 'Posts lead data to the CRM system',
+        method: 'POST',
+        contentType: 'application/json',
+        bodyJson: JSON.stringify({ name: '{{inputs.name}}', email: '{{inputs.email}}' }, null, 2),
+        headers: [{ key: 'Authorization', value: 'Bearer {{inputs.token}}' }],
+        inputs: [
+          { key: 'name', label: 'Name', type: 'string', required: true },
+          { key: 'email', label: 'Email', type: 'string', required: true },
+          { key: 'token', label: 'API token', type: 'string', required: false },
+        ],
+      }
   }
 }
 
@@ -966,9 +1786,37 @@ export function parseTemplateContent(kind: TemplateKind, raw: unknown): Template
       }
     case 'document':
     case 'agreement':
+    case 'certificate':
+    case 'checklist':
       return parseDocumentContent(c)
     case 'sso':
       return parseSsoContent(c)
+    case 'appointment':
+      return parseAppointmentContent(c)
+    case 'location':
+      return parseLocationContent(c)
+    case 'map':
+      return parseMapContent(c)
+    case 'qr':
+      return parseQrContent(c)
+    case 'team':
+      return parseTeamContent(c)
+    case 'pricing':
+      return parsePricingContent(c)
+    case 'survey':
+      return parseSurveyContent(c)
+    case 'announcement':
+      return parseAnnouncementContent(c)
+    case 'sms':
+      return parseSmsContent(c)
+    case 'push':
+      return parsePushContent(c)
+    case 'ticket':
+      return parseTicketContent(c)
+    case 'consent':
+      return parseConsentContent(c)
+    case 'webhook':
+      return parseWebhookContent(c)
   }
 }
 
@@ -995,6 +1843,302 @@ export function parseSsoContent(raw: unknown): SsoContent {
     emailClaim: str(c.emailClaim, 'email') || 'email',
     userIdClaim: str(c.userIdClaim, 'sub') || 'sub',
     previewEmail: str(c.previewEmail, empty.previewEmail) || empty.previewEmail,
+  }
+}
+
+export function parseAppointmentContent(raw: unknown): AppointmentContent {
+  const c = asRecord(raw)
+  const services: AppointmentService[] = Array.isArray(c.services)
+    ? c.services.map((item) => {
+        const row = asRecord(item)
+        return {
+          id: str(row.id) || newStoreId('svc'),
+          name: str(row.name),
+          durationMinutes: num(row.durationMinutes, 30),
+          description: str(row.description),
+        }
+      })
+    : [emptyAppointmentService()]
+  return {
+    title: str(c.title),
+    intro: str(c.intro),
+    timezone: str(c.timezone),
+    services: services.length ? services : [emptyAppointmentService()],
+    note: str(c.note),
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+export function parseLocationContent(raw: unknown): LocationContent {
+  const c = asRecord(raw)
+  const locations: LocationEntry[] = Array.isArray(c.locations)
+    ? c.locations.map((item) => {
+        const row = asRecord(item)
+        return {
+          name: str(row.name),
+          address: str(row.address),
+          city: str(row.city),
+          phone: str(row.phone),
+          email: str(row.email),
+          hoursNote: str(row.hoursNote),
+          mapUrl: str(row.mapUrl),
+        }
+      })
+    : [emptyLocationEntry()]
+  return {
+    intro: str(c.intro),
+    locations: locations.length ? locations : [emptyLocationEntry()],
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+export function parseMapContent(raw: unknown): MapContent {
+  const c = asRecord(raw)
+  const zoomRaw = Number(c.zoom)
+  const styleRaw = str(c.style)
+  const pins: MapPin[] = Array.isArray(c.pins)
+    ? c.pins.map((item) => {
+        const row = asRecord(item)
+        return {
+          label: str(row.label),
+          description: str(row.description),
+          lat: str(row.lat),
+          lng: str(row.lng),
+          link: str(row.link),
+        }
+      })
+    : [emptyMapPin()]
+  return {
+    title: str(c.title),
+    intro: str(c.intro),
+    centerLat: str(c.centerLat) || '-26.2041',
+    centerLng: str(c.centerLng) || '28.0473',
+    zoom: Number.isFinite(zoomRaw) ? Math.max(1, Math.min(19, Math.round(zoomRaw))) : 12,
+    style: styleRaw === 'satellite' ? 'satellite' : 'roadmap',
+    embedUrl: str(c.embedUrl),
+    pins: pins.length ? pins : [emptyMapPin()],
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+export function parseQrContent(raw: unknown): QrContent {
+  const c = asRecord(raw)
+  const sizeRaw = Number(c.size)
+  const ecRaw = str(c.errorCorrection).toUpperCase()
+  const errorCorrection: QrErrorCorrection =
+    ecRaw === 'L' || ecRaw === 'Q' || ecRaw === 'H' ? ecRaw : 'M'
+  return {
+    title: str(c.title),
+    caption: str(c.caption),
+    payload: str(c.payload),
+    size: Number.isFinite(sizeRaw) ? Math.max(64, Math.min(512, Math.round(sizeRaw))) : 180,
+    errorCorrection,
+    foreground: str(c.foreground) || '#0f172a',
+    background: str(c.background) || '#ffffff',
+    filename: str(c.filename) || 'qr.png',
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+/** Build an OpenStreetMap embed URL from map center / first numeric pin. */
+export function mapEmbedUrlFromContent(content: MapContent): string {
+  const custom = content.embedUrl.trim()
+  if (custom) return custom
+
+  const numericPins = content.pins
+    .map((p) => ({
+      lat: Number(p.lat),
+      lng: Number(p.lng),
+      label: p.label.trim(),
+    }))
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+
+  const centerLat = Number(content.centerLat)
+  const centerLng = Number(content.centerLng)
+  const lat = numericPins[0]?.lat ?? (Number.isFinite(centerLat) ? centerLat : -26.2041)
+  const lng = numericPins[0]?.lng ?? (Number.isFinite(centerLng) ? centerLng : 28.0473)
+  const zoom = Math.max(1, Math.min(19, Math.round(Number(content.zoom)) || 12))
+  // Web Mercator: one tile ≈ 360/2^z degrees wide. Halve for a comfortable iframe frame.
+  const lngSpan = 360 / 2 ** zoom
+  const latRad = (lat * Math.PI) / 180
+  const latSpan = lngSpan * Math.max(0.2, Math.cos(latRad))
+  const west = lng - lngSpan / 2
+  const east = lng + lngSpan / 2
+  const south = lat - latSpan / 2
+  const north = lat + latSpan / 2
+  const bbox = `${west}%2C${south}%2C${east}%2C${north}`
+  const marker = `${lat}%2C${lng}`
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${marker}`
+}
+
+export function parseTeamContent(raw: unknown): TeamContent {
+  const c = asRecord(raw)
+  const members: TeamMember[] = Array.isArray(c.members)
+    ? c.members.map((item) => {
+        const row = asRecord(item)
+        return {
+          name: str(row.name),
+          role: str(row.role),
+          skills: str(row.skills),
+          email: str(row.email),
+          handoffKey: str(row.handoffKey),
+        }
+      })
+    : [emptyTeamMember()]
+  return {
+    intro: str(c.intro),
+    members: members.length ? members : [emptyTeamMember()],
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+export function parsePricingContent(raw: unknown): PricingContent {
+  const c = asRecord(raw)
+  const plans: PricingPlan[] = Array.isArray(c.plans)
+    ? c.plans.map((item) => {
+        const row = asRecord(item)
+        return {
+          name: str(row.name),
+          price: num(row.price),
+          period: str(row.period, 'month'),
+          features: Array.isArray(row.features) ? row.features.map((f) => String(f)) : [],
+          highlight: row.highlight === true,
+        }
+      })
+    : [emptyPricingPlan()]
+  return {
+    currency: str(c.currency, 'USD'),
+    intro: str(c.intro),
+    plans: plans.length ? plans : [emptyPricingPlan()],
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+function isSurveyQuestionKind(v: string): v is SurveyQuestionKind {
+  return v === 'nps' || v === 'likert' || v === 'text' || v === 'choice'
+}
+
+export function parseSurveyContent(raw: unknown): SurveyContent {
+  const c = asRecord(raw)
+  const questions: SurveyQuestion[] = Array.isArray(c.questions)
+    ? c.questions.map((item) => {
+        const row = asRecord(item)
+        const kindRaw = str(row.kind, 'text')
+        return {
+          prompt: str(row.prompt),
+          kind: isSurveyQuestionKind(kindRaw) ? kindRaw : 'text',
+          choices: Array.isArray(row.choices) ? row.choices.map((ch) => String(ch)) : [],
+        }
+      })
+    : [emptySurveyQuestion()]
+  return {
+    intro: str(c.intro),
+    questions: questions.length ? questions : [emptySurveyQuestion()],
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+function isAnnouncementSeverity(v: string): v is AnnouncementSeverity {
+  return v === 'info' || v === 'promo' || v === 'warning'
+}
+
+export function parseAnnouncementContent(raw: unknown): AnnouncementContent {
+  const c = asRecord(raw)
+  const severityRaw = str(c.severity, 'info')
+  return {
+    title: str(c.title),
+    body: str(c.body),
+    severity: isAnnouncementSeverity(severityRaw) ? severityRaw : 'info',
+    startsAt: str(c.startsAt),
+    endsAt: str(c.endsAt),
+    ctaLabel: str(c.ctaLabel),
+    ctaValue: str(c.ctaValue),
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+function isSmsChannel(v: string): v is SmsChannel {
+  return v === 'sms' || v === 'whatsapp'
+}
+
+export function parseSmsContent(raw: unknown): SmsContent {
+  const c = asRecord(raw)
+  const channelRaw = str(c.channel, 'sms')
+  const channel = isSmsChannel(channelRaw) ? channelRaw : 'sms'
+  return {
+    channel,
+    body: str(c.body),
+    maxChars: num(c.maxChars, channel === 'whatsapp' ? 4096 : 160),
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+export function parsePushContent(raw: unknown): PushContent {
+  const c = asRecord(raw)
+  return {
+    title: str(c.title),
+    body: str(c.body),
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+function isTicketPriority(v: string): v is TicketPriority {
+  return v === 'low' || v === 'normal' || v === 'high'
+}
+
+export function parseTicketContent(raw: unknown): TicketContent {
+  const c = asRecord(raw)
+  const priorityRaw = str(c.priority, 'normal')
+  const fields: TicketField[] = Array.isArray(c.fields)
+    ? c.fields.map((item) => {
+        const row = asRecord(item)
+        return { label: str(row.label), value: str(row.value) }
+      })
+    : [emptyTicketField()]
+  return {
+    title: str(c.title),
+    priority: isTicketPriority(priorityRaw) ? priorityRaw : 'normal',
+    summary: str(c.summary),
+    fields: fields.length ? fields : [emptyTicketField()],
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+export function parseConsentContent(raw: unknown): ConsentContent {
+  const c = asRecord(raw)
+  const empty = emptyConsentContent()
+  return {
+    title: str(c.title),
+    version: str(c.version, '1.0'),
+    body: str(c.body),
+    acceptLabel: str(c.acceptLabel, empty.acceptLabel) || empty.acceptLabel,
+    declineLabel: str(c.declineLabel, empty.declineLabel) || empty.declineLabel,
+    effectiveAt: str(c.effectiveAt),
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+function isWebhookMethod(v: string): v is WebhookMethod {
+  return v === 'POST' || v === 'PUT' || v === 'PATCH'
+}
+
+export function parseWebhookContent(raw: unknown): WebhookContent {
+  const c = asRecord(raw)
+  const methodRaw = str(c.method, 'POST').toUpperCase()
+  const headers: WebhookHeader[] = Array.isArray(c.headers)
+    ? c.headers.map((item) => {
+        const row = asRecord(item)
+        return { key: str(row.key), value: str(row.value) }
+      })
+    : []
+  return {
+    name: str(c.name),
+    description: str(c.description),
+    method: isWebhookMethod(methodRaw) ? methodRaw : 'POST',
+    contentType: str(c.contentType, 'application/json'),
+    bodyJson: str(c.bodyJson, '{}'),
+    headers,
+    inputs: parseTemplateInputs(c.inputs),
   }
 }
 
@@ -1100,6 +2244,117 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       }
       return `${name} · OIDC · ${c.oidcIssuer.trim() || c.oidcAuthorizationUrl.trim() || 'no issuer'}`
     }
+    case 'appointment': {
+      const c = content as AppointmentContent
+      const services = c.services
+        .filter((s) => s.name.trim())
+        .map((s) => `• ${s.name.trim()} (${s.durationMinutes}min)${s.description.trim() ? ` — ${s.description.trim()}` : ''}`)
+      return [c.title.trim(), c.intro.trim(), ...services, c.note.trim()].filter(Boolean).join('\n')
+    }
+    case 'location': {
+      const c = content as LocationContent
+      const locs = c.locations
+        .filter((l) => l.name.trim() || l.address.trim())
+        .map((l) => {
+          const parts = [l.name.trim(), l.address.trim(), l.city.trim(), l.phone.trim(), l.email.trim(), l.hoursNote.trim()].filter(Boolean)
+          return `• ${parts.join(' · ')}`
+        })
+      return [c.intro.trim(), ...locs].filter(Boolean).join('\n')
+    }
+    case 'map': {
+      const c = content as MapContent
+      const pins = c.pins
+        .filter((p) => p.label.trim() || (p.lat.trim() && p.lng.trim()))
+        .map((p) => {
+          const coord =
+            p.lat.trim() && p.lng.trim() ? `${p.lat.trim()}, ${p.lng.trim()}` : ''
+          const parts = [p.label.trim(), p.description.trim(), coord].filter(Boolean)
+          return `• ${parts.join(' · ')}`
+        })
+      return [c.title.trim(), c.intro.trim(), ...pins].filter(Boolean).join('\n')
+    }
+    case 'qr': {
+      const c = content as QrContent
+      return [c.title.trim(), c.caption.trim(), c.payload.trim()].filter(Boolean).join('\n')
+    }
+    case 'team': {
+      const c = content as TeamContent
+      const members = c.members
+        .filter((m) => m.name.trim())
+        .map((m) => `• ${m.name.trim()} (${m.role.trim()})${m.skills.trim() ? ` — ${m.skills.trim()}` : ''}`)
+      return [c.intro.trim(), ...members].filter(Boolean).join('\n')
+    }
+    case 'pricing': {
+      const c = content as PricingContent
+      const plans = c.plans
+        .filter((p) => p.name.trim())
+        .map((p) => {
+          const price = formatTemplateMoney(p.price, c.currency)
+          const features = p.features.filter(Boolean).join(', ')
+          return `• ${p.name.trim()}: ${price}/${p.period}${features ? ` — ${features}` : ''}`
+        })
+      return [c.intro.trim(), ...plans].filter(Boolean).join('\n')
+    }
+    case 'survey': {
+      const c = content as SurveyContent
+      const questions = c.questions
+        .filter((q) => q.prompt.trim())
+        .map((q) => `• [${q.kind}] ${q.prompt.trim()}`)
+      return [c.intro.trim(), ...questions].filter(Boolean).join('\n')
+    }
+    case 'announcement': {
+      const c = content as AnnouncementContent
+      const badge = c.severity === 'warning' ? '⚠️' : c.severity === 'promo' ? '🎉' : 'ℹ️'
+      const cta = c.ctaLabel.trim() ? `[${c.ctaLabel.trim()}](${c.ctaValue.trim()})` : ''
+      return [badge + ' ' + c.title.trim(), c.body.trim(), cta].filter(Boolean).join('\n')
+    }
+    case 'sms': {
+      const c = content as SmsContent
+      return `[${c.channel.toUpperCase()}] ${c.body.trim()}`
+    }
+    case 'push': {
+      const c = content as PushContent
+      return [c.title.trim(), c.body.trim()].filter(Boolean).join('\n')
+    }
+    case 'ticket': {
+      const c = content as TicketContent
+      const fields = c.fields
+        .filter((f) => f.label.trim() || f.value.trim())
+        .map((f) => `${f.label.trim()}: ${f.value.trim()}`)
+      return [`[${c.priority.toUpperCase()}] ${c.title.trim()}`, c.summary.trim(), ...fields].filter(Boolean).join('\n')
+    }
+    case 'certificate':
+    case 'checklist': {
+      const c = content as DocumentContent
+      const fields = c.fields
+        .filter((f) => f.label.trim() || f.value.trim())
+        .map((f) => `${f.label.trim() || 'Field'}: ${f.value.trim()}`)
+      return [c.title.trim(), c.intro.trim(), ...fields, c.body.trim(), c.footer.trim()]
+        .filter(Boolean)
+        .join('\n')
+    }
+    case 'consent': {
+      const c = content as ConsentContent
+      return [
+        `${c.title.trim()} (v${c.version.trim()})`,
+        c.body.trim(),
+        `[${c.acceptLabel.trim()}] / [${c.declineLabel.trim()}]`,
+      ]
+        .filter(Boolean)
+        .join('\n')
+    }
+    case 'webhook': {
+      const c = content as WebhookContent
+      const headers = c.headers.filter((h) => h.key.trim()).map((h) => `${h.key}: ${h.value}`).join(', ')
+      return [
+        `${c.name.trim()} · ${c.method} ${c.contentType}`,
+        c.description.trim(),
+        headers ? `Headers: ${headers}` : '',
+        c.bodyJson.trim(),
+      ]
+        .filter(Boolean)
+        .join('\n')
+    }
   }
 }
 
@@ -1132,6 +2387,18 @@ export function templateExprValue(args: {
   if (args.kind === 'menu') {
     base.labels = (content as MenuContent).items.map((i) => i.label).filter(Boolean)
   }
+  if (args.kind === 'map') {
+    const c = content as MapContent
+    base.labels = c.pins.map((p) => p.label).filter(Boolean)
+    base.embedUrl = mapEmbedUrlFromContent(c)
+    base.pinCount = c.pins.filter((p) => p.label.trim() || (p.lat.trim() && p.lng.trim())).length
+  }
+  if (args.kind === 'qr') {
+    const c = content as QrContent
+    base.payload = c.payload
+    base.filename = c.filename
+    base.size = c.size
+  }
   if (args.kind === 'cart') {
     const c = content as CartContent
     base.labels = c.products.map((p) => p.name).filter(Boolean)
@@ -1141,7 +2408,7 @@ export function templateExprValue(args: {
   if (args.kind === 'receipt') {
     base.html = renderReceiptHtml(text)
   }
-  if (args.kind === 'document' || args.kind === 'agreement') {
+  if (args.kind === 'document' || args.kind === 'agreement' || args.kind === 'certificate' || args.kind === 'checklist') {
     const c = content as DocumentContent
     base.format = c.format
     base.filename = c.filename

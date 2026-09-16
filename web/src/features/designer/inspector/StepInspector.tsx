@@ -53,12 +53,19 @@ import {
   entityFiltersSchema,
   endConfigSchema,
   readDelaySeconds,
+  readEnterAnimation,
+  readEmphasis,
+  readBubbleColor,
+  readBubbleShading,
   readTimeoutSeconds,
   readRunAfter,
   isAnswerRequired,
   RUN_AFTER_OPTIONS,
   type RunAfterConfig,
   type RunAfterKey,
+  type StepEnterAnimation,
+  type StepEmphasis,
+  type StepBubbleShading,
 } from '@/features/designer/model/flowSchema'
 import {
   parseTransferConfig,
@@ -86,6 +93,7 @@ import {
   listSkipMissingVariables,
   readSkipToTargetKey,
   readSkipVariableDefaults,
+  syncSkipVariableDefaults,
   upsertSkipVariableDefault,
 } from '@/features/designer/model/skipToStep'
 import { TemplateField, type TemplateSuggestion } from '@/features/designer/inspector/TemplateField'
@@ -789,6 +797,11 @@ function StepRunSettings({
   const runAfter = readRunAfter(config)
   const delaySeconds = readDelaySeconds(config)
   const timeoutSeconds = readTimeoutSeconds(config)
+  const enterAnimation = readEnterAnimation(config)
+  const emphasis = readEmphasis(config)
+  const bubbleColor = String(config.bubbleColor ?? '')
+  const bubbleColorNormalized = readBubbleColor(config)
+  const bubbleShading = readBubbleShading(config)
   const runAfterSkipTo = String(config.runAfterSkipTo ?? '').trim()
   const onRun = String(config.onRun ?? '')
   const answerRequired = isAnswerRequired(config)
@@ -802,6 +815,10 @@ function StepRunSettings({
   const nonDefault =
     delaySeconds > 0 ||
     timeoutSeconds > 0 ||
+    enterAnimation !== 'default' ||
+    emphasis !== 'none' ||
+    !!bubbleColorNormalized ||
+    bubbleShading !== 'none' ||
     !!runAfterSkipTo ||
     !!onRun.trim() ||
     (!isFlowStart &&
@@ -821,7 +838,8 @@ function StepRunSettings({
       <div>
         <h3 className="text-sm font-semibold text-slate-800">Settings</h3>
         <p className="text-[11px] text-[var(--color-ink-muted)]">
-          Delay{isFlowStart ? '' : ', run after,'}, silent on-run expressions, and timeout for this step.
+          Delay{isFlowStart ? '' : ', run after,'}, animation, bubble colour, silent on-run expressions,
+          and timeout for this step.
           {nonDefault ? (
             <span className="ml-1 font-medium text-teal-800">Customized</span>
           ) : null}
@@ -846,6 +864,91 @@ function StepRunSettings({
           Wait this long before the step executes. Default is 0.
         </p>
       </div>
+
+      <div className="grid items-end gap-3 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="step-enter-animation">Message entrance</Label>
+          <Select
+            id="step-enter-animation"
+            disabled={readOnly}
+            value={enterAnimation}
+            onChange={(e) =>
+              patchConfig({ enterAnimation: e.target.value as StepEnterAnimation })
+            }
+          >
+            <option value="default">Chatbot default</option>
+            <option value="none">None</option>
+            <option value="fade">Fade</option>
+            <option value="rise">Rise</option>
+            <option value="slide">Slide</option>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="step-emphasis">Emphasis</Label>
+          <Select
+            id="step-emphasis"
+            disabled={readOnly}
+            value={emphasis}
+            onChange={(e) => patchConfig({ emphasis: e.target.value as StepEmphasis })}
+          >
+            <option value="none">None</option>
+            <option value="pulse">Pulse</option>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <div className="grid items-end gap-3 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="step-bubble-color">Bubble colour</Label>
+            <div className="flex h-10 items-center gap-2">
+              <input
+                type="color"
+                aria-label="Bubble colour"
+                className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-[var(--color-border)] bg-transparent p-1"
+                value={bubbleColorNormalized ?? '#ffffff'}
+                disabled={readOnly}
+                onChange={(e) => patchConfig({ bubbleColor: e.target.value })}
+              />
+              <Input
+                id="step-bubble-color"
+                value={bubbleColor}
+                disabled={readOnly}
+                onChange={(e) => patchConfig({ bubbleColor: e.target.value })}
+                placeholder="Default"
+                className="h-10 font-mono"
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="step-bubble-shading">Bubble shading</Label>
+            <Select
+              id="step-bubble-shading"
+              disabled={readOnly}
+              value={bubbleShading}
+              className="h-10"
+              onChange={(e) => patchConfig({ bubbleShading: e.target.value as StepBubbleShading })}
+            >
+              <option value="none">Flat</option>
+              <option value="soft">Soft gradient</option>
+              <option value="strong">Strong gradient</option>
+            </Select>
+          </div>
+        </div>
+        {!readOnly && (bubbleColor.trim() || bubbleColorNormalized) ? (
+          <button
+            type="button"
+            className="text-[11px] font-medium text-teal-800 underline-offset-2 hover:underline"
+            onClick={() => patchConfig({ bubbleColor: '' })}
+          >
+            Clear to chatbot default
+          </button>
+        ) : null}
+      </div>
+      <p className="-mt-1 text-[11px] text-[var(--color-ink-muted)]">
+        Applies when this step shows a message in chat. Colour and entrance override chatbot branding
+        for this step only. Shading can tint the default bubble without a custom colour.
+      </p>
 
       <div>
         <Label>On run (expressions)</Label>
@@ -2878,6 +2981,19 @@ function SkipToStepFields({
     [defaults],
   )
 
+  // Persist rows for referenced missing vars (empty = null) so validation matches runtime.
+  useEffect(() => {
+    if (readOnly || !target) return
+    const keys = referencedMissing.map((m) => m.variableKey)
+    const next = syncSkipVariableDefaults(node.config, keys)
+    const prev = readSkipVariableDefaults(node.config)
+    const same =
+      prev.length === next.length &&
+      prev.every((row, i) => row.variableKey === next[i]?.variableKey && row.value === next[i]?.value)
+    if (same) return
+    patchConfig({ variableDefaults: next })
+  }, [readOnly, target, referencedMissing, node.config, patchConfig])
+
   return (
     <div className="space-y-4">
       <div>
@@ -3702,7 +3818,28 @@ export function StepInspector({
           </p>
           <InsertTemplateControl
             chatbotId={chatbotId}
-            kinds={['message', 'faq', 'menu', 'hours', 'legal', 'receipt', 'document', 'agreement']}
+            kinds={[
+              'message',
+              'faq',
+              'menu',
+              'hours',
+              'legal',
+              'receipt',
+              'appointment',
+              'location',
+              'team',
+              'pricing',
+              'survey',
+              'announcement',
+              'sms',
+              'push',
+              'ticket',
+              'consent',
+              'document',
+              'agreement',
+              'certificate',
+              'checklist',
+            ]}
             readOnly={readOnly}
             onInsert={(snippet, key) => {
               const current = String(node.config.text ?? '')
@@ -3756,6 +3893,31 @@ export function StepInspector({
           nodes={nodes}
           edges={edges}
         />
+      ) : null}
+
+      {node.type === 'restart' ? (
+        <div className="space-y-3">
+          <p className="text-[11px] text-[var(--color-ink-muted)]">
+            Clears the conversation and starts again from the first step. Answers and step outputs
+            are reset; globals go back to their defaults. Cookies for this chatbot are kept unless
+            you clear them below.
+          </p>
+          <label className="flex items-start gap-2 rounded-lg px-1.5 py-1">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-teal-700 focus:ring-teal-500/30"
+              disabled={readOnly}
+              checked={node.config.clearCookies === true}
+              onChange={(e) => patchConfig({ clearCookies: e.target.checked })}
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-medium text-slate-800">Clear chat cookies</span>
+              <span className="block text-[10px] text-slate-500">
+                Also remove cookies saved with setCookie for this chatbot.
+              </span>
+            </span>
+          </label>
+        </div>
       ) : null}
 
       {node.type === 'question' ? (
@@ -5342,7 +5504,28 @@ export function StepInspector({
           />
           <InsertTemplateControl
             chatbotId={chatbotId}
-            kinds={['message', 'faq', 'menu', 'hours', 'legal', 'receipt', 'document', 'agreement']}
+            kinds={[
+              'message',
+              'faq',
+              'menu',
+              'hours',
+              'legal',
+              'receipt',
+              'appointment',
+              'location',
+              'team',
+              'pricing',
+              'survey',
+              'announcement',
+              'sms',
+              'push',
+              'ticket',
+              'consent',
+              'document',
+              'agreement',
+              'certificate',
+              'checklist',
+            ]}
             readOnly={readOnly}
             onInsert={(snippet, key) => {
               const current = String(node.config.message ?? '')

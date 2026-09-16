@@ -40,6 +40,7 @@ import {
   Lock,
   MousePointerClick,
   CornerDownRight,
+  RotateCcw,
   Server,
 } from 'lucide-react'
 import type { FlowNodeType } from '@/shared/types/database'
@@ -71,6 +72,7 @@ const icons: Record<FlowNodeType, typeof MessageSquare> = {
   sign_in: Lock,
   button: MousePointerClick,
   skip_to: CornerDownRight,
+  restart: RotateCcw,
   condition: GitBranch,
   switch: Split,
   loop: Repeat,
@@ -92,6 +94,7 @@ const typeColor: Record<FlowNodeType, string> = {
   sign_in: 'var(--color-node-question)',
   button: 'var(--color-node-question)',
   skip_to: 'var(--color-node-condition)',
+  restart: 'var(--color-node-end)',
   condition: 'var(--color-node-condition)',
   switch: 'var(--color-node-switch)',
   loop: 'var(--color-node-loop)',
@@ -141,6 +144,8 @@ function stepPreview(node: DesignerNode): string {
       if (!target) return truncate('Skip to…')
       return truncate(defaults ? `→ ${target} · ${defaults} var${defaults === 1 ? '' : 's'}` : `→ ${target}`)
     }
+    case 'restart':
+      return c.clearCookies ? 'Restart · clear cookies' : 'Restart conversation'
     case 'condition':
       return truncate(String(c.expression ?? c.left ?? 'If…'))
     case 'switch':

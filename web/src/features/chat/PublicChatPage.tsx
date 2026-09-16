@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns'
+import { clearAllChatCookies } from '@/features/chat/chatCookies'
 import { Send } from 'lucide-react'
 import {
   createInitialPreviewState,
@@ -96,18 +97,26 @@ import { getPaymentStatus, instanceFileUrl, isFlowForgeApiConfigured, startPayme
 import {
   catalogFromFilenames,
   chatTextHasSocialEmbed,
+  chatTextHasMapEmbed,
+  chatTextHasQrEmbed,
   collectMediaFilenamesFromNodes,
 } from '@/features/designer/model/chatbotMedia'
 import {
+  TYPEWRITER_CPS,
+  chatAppearanceThemeClass,
+  chatMessageEmphasisClass,
+  chatMessageEntranceClass,
   chatRootStyle,
   embedBrandingMessagePayload,
   ensureChatFontFace,
   resolveChatBranding,
+  resolveChatBubblePaint,
   type OrgChatBranding,
   type ResolvedChatBranding,
 } from '@/features/chatbots/chatbotBranding'
 import { ChatLogoGlyph } from '@/features/chatbots/chatbotLogoIcons'
 import { ChatStoriesRing } from '@/features/chat/ChatStoriesRing'
+import { useChatBubbleEntrance } from '@/features/chat/useChatBubbleEntrance'
 import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/lib/utils'
 import { parseChatEnvironment } from '@/shared/types/database'
@@ -277,6 +286,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
   const [draft, setDraft] = useState('')
   const [selectedChoices, setSelectedChoices] = useState<string[]>([])
   const [otpSending, setOtpSending] = useState(false)
+  const [restartNonce, setRestartNonce] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
   const [storiesPortalEl, setStoriesPortalEl] = useState<HTMLElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -294,6 +304,8 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
   const sessionIdRef = useRef<string | null>(null)
   const stateRef = useRef<PreviewEngineState | null>(null)
   const embedRef = useRef(embed)
+  const shouldAnimateBubble = useChatBubbleEntrance(state?.messages)
+  const typewriterCps = TYPEWRITER_CPS[branding.typewriterSpeed]
 
   sessionIdRef.current = sessionId
   stateRef.current = state
@@ -367,7 +379,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
     const pending = readPendingSsoLaunch()
     const storedResult = readSsoCallbackResult()
     const params = new URLSearchParams(window.location.search)
-    const isSsoReturn = params.get('ff_sso') === '1' || !!storedResult
+    const isSsoReturn = restartNonce === 0 && (params.get('ff_sso') === '1' || !!storedResult)
     if (pending?.snapshot && isSsoReturn) {
       const snap = pending.snapshot
       if (cancelled || seq !== bootSeqRef.current) return
@@ -485,7 +497,51 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
     return () => {
       cancelled = true
     }
-  }, [orgSlug, publicSlug, testToken, stagingTest, embed, chatEnvironment, embedKey])
+  }, [orgSlug, publicSlug, testToken, stagingTest, embed, chatEnvironment, embedKey, restartNonce])
+
+  async function restartPublicChat(opts?: { clearCookies?: boolean }) {
+    const prevSessionId = sessionId
+    const prevVars = state?.vars
+    const clearCookies = opts?.clearCookies === true
+    if (clearCookies) clearAllChatCookies(chatbotId)
+
+    if (prevSessionId && !completedRef.current) {
+      completedRef.current = true
+      try {
+        await completeSession(prevSessionId, 'abandoned', 'restarted', prevVars)
+      } catch {
+        // Best-effort — still start a fresh session
+      }
+      if (embed) {
+        postToEmbedParent({
+          source: FLOWFORGE_EMBED_SOURCE,
+          type: 'complete',
+          status: 'abandoned',
+          sessionId: prevSessionId,
+        })
+      }
+    }
+
+    completedRef.current = false
+    lastLoggedRunCount.current = 0
+    lastLoggedMsgCount.current = 0
+    escalatedForSession.current = null
+    handoffEventSeq.current = 0
+    seenAgentEventIds.current = new Set()
+    otpSentForWait.current = null
+    connectionBusy.current = false
+    setDraft('')
+    setSelectedChoices([])
+    setBootError(null)
+    setState(null)
+    setRestartNonce((n) => n + 1)
+  }
+
+  useEffect(() => {
+    if (!state || state.phase.kind !== 'restart') return
+    void restartPublicChat({ clearCookies: state.phase.clearCookies })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to restart phase
+  }, [state?.phase])
 
   // After SSO return (popup postMessage handled in SignInAnswerField; full-page uses stored result).
   const ssoReturnHandled = useRef(false)
@@ -995,6 +1051,8 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
           sessionId,
           nodeKey: effect.nodeKey,
         })
+      } else if (effect.type === 'restart_chat') {
+        // Phase is already `restart`; the effect below starts a fresh session.
       }
     }
     setState(next)
@@ -1147,29 +1205,27 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       }}
       className={cn(
         'relative flex flex-col',
+        chatAppearanceThemeClass(branding.appearanceTheme),
         embed ? 'h-full min-h-[320px] overflow-hidden' : 'h-full min-h-full overflow-hidden',
       )}
       style={{
         ...chatRootStyle(branding),
-        background: embed
-          ? 'var(--ff-chat-page-bg)'
-          : 'linear-gradient(to bottom right, var(--ff-chat-page-bg), var(--ff-chat-page-bg-2))',
+        background: 'var(--ff-chat-page-gradient)',
       }}
     >
       <ChatMediaPlayerProvider>
       <header
+        data-ff-chat-header
         className={cn(
           'shadow-sm',
           embed ? 'border-b border-black/10 px-3 py-2.5' : 'border-b border-white/60 px-4 py-4',
         )}
         style={{
-          background: embed
-            ? 'var(--ff-chat-header)'
-            : 'linear-gradient(to bottom right, var(--ff-chat-header), var(--ff-chat-header-2))',
+          background: 'var(--ff-chat-header-gradient)',
           color: 'var(--ff-chat-header-fg)',
         }}
       >
-        <div className={cn('flex items-center gap-3', embed ? '' : 'mx-auto max-w-2xl')}>
+        <div className={cn('flex items-center gap-3', embed ? '' : 'mx-auto max-w-2xl')} data-ff-chat-header-content>
           <ChatStoriesRing
             stories={branding.resolvedStories}
             chatbotId={chatbotId || 'public'}
@@ -1239,11 +1295,27 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
           embed ? 'w-full' : 'mx-auto w-full max-w-2xl',
         )}
       >
-        {state.messages.map((m, msgIndex) =>
-          m.role === 'system' && isPublicTechSystemMessage(m.text) ? null : m.role === 'user' ? (
-            <div key={m.id} className="flex flex-col items-end gap-1">
+        {state.messages.map((m, msgIndex) => {
+          const animate = shouldAnimateBubble(m.id)
+          const entranceClass = chatMessageEntranceClass(
+            m.animation?.entrance ?? branding.messageEntrance,
+            animate,
+          )
+          const emphasisClass = chatMessageEmphasisClass(m.animation?.emphasis, animate)
+          const bubblePaint =
+            m.role === 'bot' || m.role === 'agent'
+              ? resolveChatBubblePaint({
+                  color: m.bubble?.color,
+                  shading: m.bubble?.shading,
+                })
+              : null
+          return m.role === 'system' && isPublicTechSystemMessage(m.text) ? null : m.role === 'user' ? (
+            <div key={m.id} className={cn('flex flex-col items-end gap-1', entranceClass)}>
               <div
-                className="max-w-[88%] px-3.5 py-2.5 text-sm leading-relaxed shadow-sm"
+                className={cn(
+                  'ff-chat-bubble-user max-w-[88%] px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
+                  emphasisClass,
+                )}
                 style={{
                   background:
                     'linear-gradient(to bottom right, var(--ff-chat-bubble-user), var(--ff-chat-bubble-user-2))',
@@ -1262,29 +1334,30 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
               />
             </div>
           ) : m.role === 'system' ? (
-            <p key={m.id} className="text-center text-xs text-slate-400">
+            <p key={m.id} className={cn('text-center text-xs text-slate-400', entranceClass)}>
               {m.text}
             </p>
           ) : (
-            <div key={m.id} className="flex flex-col items-start gap-1">
+            <div key={m.id} className={cn('flex flex-col items-start gap-1', entranceClass)}>
               <div
                 className={cn(
-                  'px-3.5 py-2.5 text-sm shadow-sm',
-                  chatTextHasSocialEmbed(m.text)
+                  'ff-chat-bubble-bot px-3.5 py-2.5 text-sm shadow-sm',
+                  emphasisClass,
+                  chatTextHasSocialEmbed(m.text) || chatTextHasMapEmbed(m.text) || chatTextHasQrEmbed(m.text)
                     ? 'w-full max-w-xl sm:max-w-2xl'
                     : 'max-w-[85%]',
-                  m.role === 'agent' ? 'ring-1 ring-violet-200/80' : 'ring-1 ring-black/5',
+                  m.role === 'agent' && !bubblePaint ? 'ring-1 ring-violet-200/80' : 'ring-1 ring-black/5',
                 )}
                 style={
-                  m.role === 'agent'
+                  m.role === 'agent' && !bubblePaint
                     ? {
                         background: '#f5f3ff',
                         color: '#2e1065',
                         borderRadius: 'var(--ff-chat-bubble-radius)',
                       }
                     : {
-                        background: 'var(--ff-chat-bubble-bot)',
-                        color: 'var(--ff-chat-bubble-bot-fg)',
+                        background: bubblePaint?.background ?? 'var(--ff-chat-bubble-bot)',
+                        color: bubblePaint?.color ?? 'var(--ff-chat-bubble-bot-fg)',
                         borderRadius: 'var(--ff-chat-bubble-radius)',
                       }
                 }
@@ -1298,6 +1371,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
                   text={m.text}
                   attachments={m.media}
                   typingStyle={branding.typingStyle}
+                  typewriterCps={typewriterCps}
                   animateTypewriter={
                     branding.typingStyle === 'typewriter' &&
                     m.role === 'bot' &&
@@ -1328,11 +1402,14 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
                 formatTime={prettyTimestamp}
               />
             </div>
-          ),
-        )}
+          )
+        })}
         {state.phase.kind === 'typing' ? (
           <div
-            className="inline-flex items-center gap-2 px-3 py-2 ring-1 ring-black/5"
+            className={cn(
+              'ff-chat-bubble-bot inline-flex items-center gap-2 px-3 py-2 ring-1 ring-black/5',
+              chatMessageEntranceClass(branding.messageEntrance, true),
+            )}
             style={{
               background: 'var(--ff-chat-bubble-bot)',
               color: 'var(--ff-chat-bubble-bot-fg)',
@@ -1356,7 +1433,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
               />
             </span>
             {typingBusy ? (
-              <span className="text-xs text-slate-500">Please wait…</span>
+              <span className="text-xs text-[var(--color-ink-muted)]">Please wait…</span>
             ) : null}
           </div>
         ) : null}
@@ -1373,7 +1450,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waiting && isThumbs ? (
         <div
           className={cn(
-            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <ThumbsAnswerField
@@ -1384,7 +1461,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waiting && isMood ? (
         <div
           className={cn(
-            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <MoodAnswerField
@@ -1395,7 +1472,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waiting && isLikert ? (
         <div
           className={cn(
-            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <LikertAnswerField
@@ -1407,7 +1484,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waiting && isNumberedChoice ? (
         <div
           className={cn(
-            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -1418,7 +1495,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
         </div>
       ) : null}
       {waiting && isRating && ratingOptions.length ? (
-        <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3">
           {ratingOptions.map((n) => (
             <button
               key={n}
@@ -1434,7 +1511,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waiting && isStars ? (
         <div
           className={cn(
-            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <StarsAnswerField
@@ -1447,7 +1524,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waiting && isNps ? (
         <div
           className={cn(
-            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -1464,7 +1541,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waiting && isFile ? (
         <div
           className={cn(
-            'flex w-full flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
+            'flex w-full flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -1485,7 +1562,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waiting && isSignature ? (
         <div
           className={cn(
-            'flex w-full flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
+            'flex w-full flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -1504,7 +1581,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waiting && isImageChoice ? (
         <div
           className={cn(
-            'flex w-full flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
+            'flex w-full flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -1561,7 +1638,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       ) : null}
 
       {waiting && isSignIn && waitingNode ? (
-        <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
+        <div className="border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-3 py-3">
           <SignInAnswerField
             key={`${waitingNode.id}-${state.signInAttempts?.attempts ?? 0}-${state.otpChallenge?.attempts ?? 0}-${waiting.validationError ?? ''}`}
             mode={signInMode}
@@ -1693,7 +1770,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waiting && isExtended ? (
         <div
           className={cn(
-            'ff-hide-scrollbar flex w-full min-h-0 max-h-[min(36rem,70vh)] flex-col gap-2 overflow-y-auto border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3',
+            'ff-hide-scrollbar flex w-full min-h-0 max-h-[min(36rem,70vh)] flex-col gap-2 overflow-y-auto border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -1761,7 +1838,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       !usesDedicatedAnswerUi ? (
         <div
           className={cn(
-            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <form onSubmit={onSubmit} className="flex items-end gap-2">
@@ -1936,7 +2013,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waitingSuggestion ? (
         <div
           className={cn(
-            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >
@@ -1955,7 +2032,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       ) : null}
 
       {waiting?.answerType === 'boolean' ? (
-        <div className="mx-auto flex w-full max-w-2xl gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/90 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-2xl gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3">
           <Button onClick={() => setState(submitPreviewAnswer(state, nodes, edges, 'true'))}>
             Yes
           </Button>
@@ -1971,7 +2048,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       {waitingHandoff ? (
         <div
           className={cn(
-            'w-full border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-4 py-3',
+            'w-full border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3',
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >

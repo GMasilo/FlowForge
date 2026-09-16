@@ -137,39 +137,47 @@ function measureTextWidth(el: HTMLElement, text: string): number {
 
 function fitTextControl(
   el: HTMLInputElement | HTMLTextAreaElement,
-  opts: { text: string; grow: boolean; caretSlot: boolean; maxWidth?: number; wrap?: boolean },
+  opts: { text: string; caretSlot: boolean; maxWidth?: number },
 ) {
   if (opts.caretSlot) {
     el.style.width = '0px'
     el.style.minWidth = '0px'
     el.style.maxWidth = '0px'
-    el.style.flexGrow = '0'
-    el.style.height = ''
+    el.style.height = '20px'
     return
   }
-  el.style.flexGrow = '0'
   const empty = opts.text.length === 0
   el.style.minWidth = empty ? '8px' : '0px'
   const measured = Math.max(empty ? 8 : 1, measureTextWidth(el, opts.text))
-  const capped =
-    opts.maxWidth != null && opts.maxWidth > 0 ? Math.min(measured, Math.floor(opts.maxWidth)) : measured
-  el.style.width = `${capped}px`
-  el.style.maxWidth = opts.maxWidth != null && opts.maxWidth > 0 ? `${Math.floor(opts.maxWidth)}px` : ''
-  if (opts.grow) el.style.flexGrow = '1'
+  const hardCap =
+    opts.maxWidth != null && opts.maxWidth > 0 ? Math.floor(opts.maxWidth) : undefined
+  const width = hardCap != null ? Math.min(measured, hardCap) : measured
+  el.style.width = `${width}px`
+  el.style.maxWidth = hardCap != null ? `${hardCap}px` : ''
+  el.style.whiteSpace = 'pre'
+  el.style.height = '20px'
+}
 
-  if (opts.wrap && el instanceof HTMLTextAreaElement) {
-    el.style.whiteSpace = 'pre-wrap'
-    el.style.overflowWrap = 'anywhere'
-    el.style.wordBreak = 'break-word'
-    el.style.height = 'auto'
-    // Force layout with the capped width before reading scrollHeight.
-    el.style.height = `${Math.max(20, el.scrollHeight)}px`
-  } else {
-    el.style.whiteSpace = ''
-    el.style.overflowWrap = ''
-    el.style.wordBreak = ''
-    if (el instanceof HTMLTextAreaElement) el.style.height = ''
+function lineRefKey(segId: string, lineIdx: number) {
+  return `${segId}#${lineIdx}`
+}
+
+function segCaretFromLine(lines: string[], lineIdx: number, lineCaret: number): number {
+  let offset = 0
+  for (let i = 0; i < lineIdx; i++) offset += (lines[i]?.length ?? 0) + 1
+  return offset + lineCaret
+}
+
+function lineFromSegCaret(lines: string[], caret: number): { lineIdx: number; lineCaret: number } {
+  let remaining = Math.max(0, caret)
+  for (let i = 0; i < lines.length; i++) {
+    const len = lines[i]!.length
+    if (remaining <= len || i === lines.length - 1) {
+      return { lineIdx: i, lineCaret: Math.min(remaining, len) }
+    }
+    remaining -= len + 1
   }
+  return { lineIdx: 0, lineCaret: 0 }
 }
 
 export function TemplateField({
@@ -192,7 +200,7 @@ export function TemplateField({
   const [tokenStart, setTokenStart] = useState<number | null>(null)
   const [editingChipId, setEditingChipId] = useState<string | null>(null)
   const [editingChipDraft, setEditingChipDraft] = useState('')
-  const inputRefs = useRef<Map<string, HTMLInputElement | HTMLTextAreaElement>>(new Map())
+  const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
   const chipEditRef = useRef<HTMLInputElement | null>(null)
   const editingChipDraftRef = useRef('')
   const editingChipIdRef = useRef<string | null>(null)
@@ -214,22 +222,20 @@ export function TemplateField({
     const maxWidth = contentMaxWidth()
     for (const seg of segments) {
       if (seg.kind !== 'text') continue
-      const el = inputRefs.current.get(seg.id)
-      if (!el) continue
-      const empty = seg.text.length === 0
-      const grow = seg.id === lastTextId
-      fitTextControl(el, {
-        text: seg.text,
-        grow,
-        caretSlot: empty && !grow,
-        maxWidth: multiline ? maxWidth : undefined,
-        wrap: !!multiline,
+      const lines = seg.text.split('\n')
+      const isLastText = seg.id === lastTextId
+      lines.forEach((line, lineIdx) => {
+        const el = inputRefs.current.get(lineRefKey(seg.id, lineIdx))
+        if (!el) return
+        const empty = line.length === 0
+        // Only the final empty caret slot between chips collapses; blank lines stay clickable.
+        const caretSlot = empty && !isLastText && lines.length === 1
+        fitTextControl(el, { text: line, caretSlot, maxWidth })
       })
     }
     if (editingChipId && chipEditRef.current) {
       fitTextControl(chipEditRef.current, {
         text: editingChipDraft,
-        grow: false,
         caretSlot: false,
         maxWidth,
       })
@@ -262,16 +268,19 @@ export function TemplateField({
     onChange(serializeSegments(cleaned))
     if (!focus) return
     requestAnimationFrame(() => {
-      const el = inputRefs.current.get(focus.segId)
-      if (!el) {
-        const first = cleaned.find((s) => s.kind === 'text')
-        if (!first) return
-        const fallback = inputRefs.current.get(first.id)
-        fallback?.focus()
-        return
-      }
+      const target = cleaned.find((s) => s.id === focus.segId && s.kind === 'text')
+      const textSeg =
+        target?.kind === 'text'
+          ? target
+          : cleaned.find((s) => s.kind === 'text')
+      if (!textSeg || textSeg.kind !== 'text') return
+      const lines = textSeg.text.split('\n')
+      const caret = textSeg.id === focus.segId ? focus.caret : textSeg.text.length
+      const { lineIdx, lineCaret } = lineFromSegCaret(lines, caret)
+      const el = inputRefs.current.get(lineRefKey(textSeg.id, lineIdx))
+      if (!el) return
       el.focus()
-      const pos = Math.min(focus.caret, el.value.length)
+      const pos = Math.min(lineCaret, el.value.length)
       el.setSelectionRange(pos, pos)
     })
   }
@@ -326,7 +335,14 @@ export function TemplateField({
       return
     }
 
+    const prev = segments.find((s) => s.id === segId)
+    const lineCountChanged =
+      prev?.kind === 'text' && prev.text.split('\n').length !== text.split('\n').length
     const next = segments.map((s) => (s.id === segId && s.kind === 'text' ? { ...s, text } : s))
+    if (lineCountChanged) {
+      commit(next, { segId, caret })
+      return
+    }
     skipSync.current = true
     setSegments(next)
     onChange(serializeSegments(next))
@@ -378,7 +394,7 @@ export function TemplateField({
       } else {
         el.select()
       }
-      fitTextControl(el, { text: raw, grow: false, caretSlot: false, maxWidth: contentMaxWidth() })
+      fitTextControl(el, { text: raw, caretSlot: false, maxWidth: contentMaxWidth() })
     })
   }
 
@@ -445,6 +461,19 @@ export function TemplateField({
     commit(next, { segId: afterSeg.id, caret: 0 })
   }
 
+  function currentSegCaret(segId: string): number | null {
+    const seg = segments.find((s) => s.id === segId)
+    if (!seg || seg.kind !== 'text') return null
+    const lines = seg.text.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const el = inputRefs.current.get(lineRefKey(segId, i))
+      if (el && document.activeElement === el) {
+        return segCaretFromLine(lines, i, el.selectionStart ?? 0)
+      }
+    }
+    return null
+  }
+
   function insertSuggestion(s: TemplateSuggestion) {
     if (editingChipId) {
       chipEditPending.current = true
@@ -456,14 +485,14 @@ export function TemplateField({
       return
     }
     if (editSegId && tokenStart != null) {
-      const el = inputRefs.current.get(editSegId)
-      const caret = el?.selectionStart ?? tokenStart
-      insertChipAt(editSegId, tokenStart, caret, s.insert)
+      const caret = currentSegCaret(editSegId) ?? tokenStart
+      insertChipAt(editSegId, tokenStart, Math.max(caret, tokenStart), s.insert)
     } else {
-      const textSeg = segments.find((x) => x.kind === 'text')
+      const textSeg =
+        [...segments].reverse().find((x) => x.kind === 'text') ??
+        segments.find((x) => x.kind === 'text')
       if (textSeg && textSeg.kind === 'text') {
-        const el = inputRefs.current.get(textSeg.id)
-        const caret = el?.selectionStart ?? textSeg.text.length
+        const caret = currentSegCaret(textSeg.id) ?? textSeg.text.length
         insertChipAt(textSeg.id, caret, caret, s.insert)
       } else {
         const afterId = nextId('t')
@@ -482,19 +511,80 @@ export function TemplateField({
     setEditSegId(null)
   }
 
-  function onKeyDown(e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
-    if (!open || !filtered.length) return
-    if (e.key === 'ArrowDown') {
+  function onKeyDown(
+    e: KeyboardEvent<HTMLInputElement>,
+    segId: string,
+    lineIdx: number,
+    lines: string[],
+  ) {
+    if (open && filtered.length) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setActive((i) => (i + 1) % filtered.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setActive((i) => (i - 1 + filtered.length) % filtered.length)
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        insertSuggestion(filtered[active]!)
+        return
+      }
+      if (e.key === 'Escape') {
+        setOpen(false)
+        return
+      }
+    }
+
+    const el = e.currentTarget
+    const lineCaret = el.selectionStart ?? 0
+    const lineEnd = el.selectionEnd ?? lineCaret
+
+            if (multiline && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      setActive((i) => (i + 1) % filtered.length)
-    } else if (e.key === 'ArrowUp') {
+      const left = lines[lineIdx]!.slice(0, lineCaret)
+      const right = lines[lineIdx]!.slice(lineEnd)
+      const nextLines = [...lines.slice(0, lineIdx), left, right, ...lines.slice(lineIdx + 1)]
+      updateText(segId, nextLines.join('\n'), segCaretFromLine(nextLines, lineIdx + 1, 0))
+      return
+    }
+
+    if (e.key === 'Backspace' && lineCaret === 0 && lineEnd === 0 && lineIdx > 0) {
       e.preventDefault()
-      setActive((i) => (i - 1 + filtered.length) % filtered.length)
-    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      const prevLen = lines[lineIdx - 1]!.length
+      const merged = `${lines[lineIdx - 1]}${lines[lineIdx]}`
+      const nextLines = [...lines.slice(0, lineIdx - 1), merged, ...lines.slice(lineIdx + 1)]
+      updateText(segId, nextLines.join('\n'), segCaretFromLine(nextLines, lineIdx - 1, prevLen))
+      return
+    }
+
+    if (e.key === 'Delete' && lineCaret === el.value.length && lineEnd === el.value.length && lineIdx < lines.length - 1) {
       e.preventDefault()
-      insertSuggestion(filtered[active]!)
-    } else if (e.key === 'Escape') {
-      setOpen(false)
+      const merged = `${lines[lineIdx]}${lines[lineIdx + 1]}`
+      const nextLines = [...lines.slice(0, lineIdx), merged, ...lines.slice(lineIdx + 2)]
+      updateText(segId, nextLines.join('\n'), segCaretFromLine(nextLines, lineIdx, lineCaret))
+      return
+    }
+
+    if (e.key === 'ArrowLeft' && lineCaret === 0 && lineEnd === 0 && lineIdx > 0) {
+      e.preventDefault()
+      const prev = inputRefs.current.get(lineRefKey(segId, lineIdx - 1))
+      if (!prev) return
+      prev.focus()
+      const pos = prev.value.length
+      prev.setSelectionRange(pos, pos)
+      return
+    }
+
+    if (e.key === 'ArrowRight' && lineCaret === el.value.length && lineEnd === el.value.length && lineIdx < lines.length - 1) {
+      e.preventDefault()
+      const next = inputRefs.current.get(lineRefKey(segId, lineIdx + 1))
+      if (!next) return
+      next.focus()
+      next.setSelectionRange(0, 0)
     }
   }
 
@@ -542,7 +632,10 @@ export function TemplateField({
         onClick={() => {
           if (editingChipId) return
           const lastText = [...segments].reverse().find((s) => s.kind === 'text')
-          if (lastText) inputRefs.current.get(lastText.id)?.focus()
+          if (!lastText || lastText.kind !== 'text') return
+          const lines = lastText.text.split('\n')
+          const el = inputRefs.current.get(lineRefKey(lastText.id, lines.length - 1))
+          el?.focus()
         }}
       >
         {showPlaceholder ? (
@@ -554,10 +647,9 @@ export function TemplateField({
         <div
           ref={rowRef}
           className={cn(
-            'relative z-[1] flex min-w-0 w-full gap-0',
-            multiline
-              ? 'flex-wrap items-start content-start'
-              : 'flex-nowrap items-center overflow-x-auto',
+            // Flex + fixed line height keeps chips and text on one baseline.
+            'relative z-[1] flex min-w-0 w-full flex-wrap items-center gap-y-0.5',
+            !multiline && 'flex-nowrap overflow-x-auto',
           )}
         >
           {segments.map((seg, segIndex) => {
@@ -571,7 +663,6 @@ export function TemplateField({
                       if (el) {
                         fitTextControl(el, {
                           text: editingChipDraft,
-                          grow: false,
                           caretSlot: false,
                           maxWidth: contentMaxWidth(),
                         })
@@ -582,8 +673,8 @@ export function TemplateField({
                     aria-autocomplete="list"
                     aria-controls={listId}
                     aria-label="Edit reference"
-                    className="h-5 min-w-0 max-w-full shrink rounded-md border-0 bg-teal-500/15 px-1.5 font-mono text-xs font-semibold leading-5 text-teal-900 caret-teal-950 ring-1 ring-teal-600/40 focus-visible:outline-none"
-                    style={{ width: 0, minWidth: 48, flexGrow: 0, flexShrink: 1 }}
+                    className="box-border h-5 max-w-full shrink-0 rounded-md border-0 bg-teal-500/15 px-1.5 font-mono text-xs font-semibold leading-5 text-teal-900 caret-teal-950 ring-1 ring-teal-600/40 focus-visible:outline-none"
+                    style={{ width: 48, minWidth: 48 }}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => {
                       const el = e.currentTarget
@@ -592,7 +683,6 @@ export function TemplateField({
                       setEditingChipDraft(next)
                       fitTextControl(el, {
                         text: next,
-                        grow: false,
                         caretSlot: false,
                         maxWidth: contentMaxWidth(),
                       })
@@ -618,12 +708,12 @@ export function TemplateField({
                 <span
                   key={seg.id}
                   contentEditable={false}
-                  className="inline-flex max-w-full min-w-0 shrink items-center gap-0 rounded-md bg-teal-500/15 py-0 pl-1.5 pr-0 text-xs font-semibold leading-5 text-teal-900 ring-1 ring-teal-500/25"
+                  className="inline-flex h-5 max-w-full min-w-0 shrink-0 items-center gap-0 rounded-md bg-teal-500/15 py-0 pl-1.5 pr-0 text-xs font-semibold leading-5 text-teal-900 ring-1 ring-teal-500/25"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
                     type="button"
-                    className="min-w-0 truncate font-mono hover:underline"
+                    className="min-w-0 truncate font-mono leading-5 hover:underline"
                     title={`${seg.raw} — click to edit`}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={(e) => {
@@ -649,136 +739,109 @@ export function TemplateField({
               )
             }
 
-            const isEmpty = seg.text.length === 0
             const isLastText = segments.findLastIndex((s) => s.kind === 'text') === segIndex
-            const isCaretSlot = isEmpty && !isLastText
-            const maxWidth = multiline ? contentMaxWidth() : undefined
-            const textStyle: CSSProperties = isCaretSlot
-              ? {
-                  width: 0,
-                  maxWidth: 0,
-                  minWidth: 0,
-                  flexGrow: 0,
-                  flexShrink: 0,
-                  padding: 0,
-                  margin: 0,
-                  border: 0,
-                  overflow: 'hidden',
-                  opacity: 0,
-                }
-              : {
-                  width: 0,
-                  flexGrow: isLastText ? 1 : 0,
-                  flexShrink: multiline ? 1 : 0,
-                  minWidth: isEmpty ? 8 : 0,
-                  maxWidth: multiline ? '100%' : undefined,
-                  ...(multiline
-                    ? {
-                        whiteSpace: 'pre-wrap' as const,
-                        overflowWrap: 'anywhere' as const,
-                        wordBreak: 'break-word' as const,
-                      }
-                    : null),
-                }
+            const lines = seg.text.split('\n')
+            const maxWidth = contentMaxWidth()
 
-            const bindRef = (el: HTMLInputElement | HTMLTextAreaElement | null) => {
-              if (el) {
-                inputRefs.current.set(seg.id, el)
-                fitTextControl(el, {
-                  text: seg.text,
-                  grow: isLastText,
-                  caretSlot: isCaretSlot,
-                  maxWidth,
-                  wrap: !!multiline,
-                })
-              } else {
-                inputRefs.current.delete(seg.id)
-              }
-            }
-
-            if (multiline) {
-              return (
-                <textarea
-                  key={seg.id}
-                  ref={bindRef}
-                  disabled={disabled}
-                  value={seg.text}
-                  rows={1}
-                  spellCheck={false}
-                  tabIndex={isCaretSlot ? -1 : undefined}
-                  aria-autocomplete="list"
-                  aria-controls={listId}
-                  className={cn(
-                    'resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-5 text-[var(--color-ink)] caret-[var(--color-ink)] focus-visible:outline-none',
-                    isCaretSlot ? 'm-0 h-0 min-h-0' : 'min-h-[1.25rem]',
-                  )}
-                  style={textStyle}
-                  onChange={(e) => {
-                    const el = e.currentTarget
-                    fitTextControl(el, {
-                      text: el.value,
-                      grow: isLastText,
-                      caretSlot: false,
-                      maxWidth: contentMaxWidth(),
-                      wrap: true,
-                    })
-                    updateText(seg.id, el.value, el.selectionStart ?? el.value.length)
-                  }}
-                  onKeyUp={(e) =>
-                    analyzeCaret(seg.id, e.currentTarget.value, e.currentTarget.selectionStart ?? 0)
+            return lines.map((line, lineIdx) => {
+              const isOnlyLine = lines.length === 1
+              const isCaretSlot = isOnlyLine && line.length === 0 && !isLastText
+              const refKey = lineRefKey(seg.id, lineIdx)
+              const textStyle: CSSProperties = isCaretSlot
+                ? {
+                    width: 0,
+                    maxWidth: 0,
+                    minWidth: 0,
+                    padding: 0,
+                    margin: 0,
+                    border: 0,
+                    overflow: 'hidden',
+                    opacity: 0,
+                    height: 20,
                   }
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    analyzeCaret(seg.id, e.currentTarget.value, e.currentTarget.selectionStart ?? 0)
-                  }}
-                  onKeyDown={onKeyDown}
-                  onFocus={() => {
-                    if (editingChipId) commitChipEdit()
-                  }}
-                  onBlur={() => setTimeout(() => setOpen(false), 150)}
-                />
-              )
-            }
+                : {
+                    width: 0,
+                    minWidth: line.length === 0 ? 8 : 0,
+                    maxWidth: maxWidth != null && maxWidth > 0 ? `${Math.floor(maxWidth)}px` : undefined,
+                    height: 20,
+                    whiteSpace: 'pre',
+                  }
 
-            return (
-              <input
-                key={seg.id}
-                ref={bindRef}
-                disabled={disabled}
-                value={seg.text}
-                spellCheck={false}
-                tabIndex={isCaretSlot ? -1 : undefined}
-                aria-autocomplete="list"
-                aria-controls={listId}
-                className={cn(
-                  'border-0 bg-transparent p-0 text-sm leading-5 text-[var(--color-ink)] caret-[var(--color-ink)] focus-visible:outline-none',
-                  isCaretSlot ? 'm-0 h-0' : 'h-5',
-                )}
-                style={textStyle}
-                onChange={(e) => {
-                  const el = e.currentTarget
-                  fitTextControl(el, {
-                    text: el.value,
-                    grow: isLastText,
-                    caretSlot: false,
-                  })
-                  updateText(seg.id, el.value, el.selectionStart ?? el.value.length)
-                }}
-                onKeyUp={(e) =>
-                  analyzeCaret(seg.id, e.currentTarget.value, e.currentTarget.selectionStart ?? 0)
-                }
-                onClick={(e) => {
-                  e.stopPropagation()
-                  analyzeCaret(seg.id, e.currentTarget.value, e.currentTarget.selectionStart ?? 0)
-                }}
-                onKeyDown={onKeyDown}
-                onFocus={() => {
-                  if (editingChipId) commitChipEdit()
-                }}
-                onBlur={() => setTimeout(() => setOpen(false), 150)}
-              />
-            )
+              return (
+                <span key={refKey} className="contents">
+                  {lineIdx > 0 ? <span className="h-0 w-full basis-full" aria-hidden /> : null}
+                  <input
+                    ref={(el) => {
+                      if (el) {
+                        inputRefs.current.set(refKey, el)
+                        fitTextControl(el, {
+                          text: line,
+                          caretSlot: isCaretSlot,
+                          maxWidth,
+                        })
+                      } else {
+                        inputRefs.current.delete(refKey)
+                      }
+                    }}
+                    disabled={disabled}
+                    value={line}
+                    spellCheck={false}
+                    tabIndex={isCaretSlot ? -1 : undefined}
+                    aria-autocomplete="list"
+                    aria-controls={listId}
+                    className={cn(
+                      'box-border h-5 shrink-0 border-0 bg-transparent p-0 text-sm leading-5 text-[var(--color-ink)] caret-[var(--color-ink)] focus-visible:outline-none',
+                      isCaretSlot && 'm-0',
+                    )}
+                    style={textStyle}
+                    onChange={(e) => {
+                      const el = e.currentTarget
+                      const nextLines = [...lines]
+                      nextLines[lineIdx] = el.value
+                      fitTextControl(el, {
+                        text: el.value,
+                        caretSlot: false,
+                        maxWidth: contentMaxWidth(),
+                      })
+                      updateText(
+                        seg.id,
+                        nextLines.join('\n'),
+                        segCaretFromLine(nextLines, lineIdx, el.selectionStart ?? el.value.length),
+                      )
+                    }}
+                    onKeyUp={(e) => {
+                      const nextLines = [...lines]
+                      nextLines[lineIdx] = e.currentTarget.value
+                      const caret = segCaretFromLine(
+                        nextLines,
+                        lineIdx,
+                        e.currentTarget.selectionStart ?? 0,
+                      )
+                      analyzeCaret(seg.id, nextLines.join('\n'), caret)
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const nextLines = [...lines]
+                      nextLines[lineIdx] = e.currentTarget.value
+                      const caret = segCaretFromLine(
+                        nextLines,
+                        lineIdx,
+                        e.currentTarget.selectionStart ?? 0,
+                      )
+                      analyzeCaret(seg.id, nextLines.join('\n'), caret)
+                    }}
+                    onKeyDown={(e) => onKeyDown(e, seg.id, lineIdx, lines)}
+                    onFocus={() => {
+                      if (editingChipId) commitChipEdit()
+                    }}
+                    onBlur={() => setTimeout(() => setOpen(false), 150)}
+                  />
+                </span>
+              )
+            })
           })}
+          {/* Click target for the trailing empty area without stretching the last text segment. */}
+          <span className="min-h-5 min-w-[2rem] flex-1 basis-8" aria-hidden />
         </div>
       </div>
 

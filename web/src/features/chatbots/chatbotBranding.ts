@@ -3,10 +3,100 @@ import { normalizeBrandAccent } from '@/shared/lib/instanceBranding'
 import { instanceFileUrl, isFlowForgeApiConfigured } from '@/shared/lib/flowforgeApi'
 import type { Json } from '@/shared/types/database'
 import { parseChatLogoIconId, type ChatLogoIconId } from '@/features/chatbots/chatbotLogoIcons'
+import {
+  chatAppearanceThemeMeta,
+  parseChatAppearanceTheme,
+  type ChatAppearanceTheme,
+} from '@/features/chatbots/chatAppearanceThemes'
+
+export type { ChatAppearanceTheme }
+export {
+  CHAT_APPEARANCE_THEMES,
+  chatAppearanceThemeClass,
+  chatAppearanceThemeMeta,
+  parseChatAppearanceTheme,
+} from '@/features/chatbots/chatAppearanceThemes'
 
 export type ChatTypingStyle = 'normal' | 'typewriter'
 export type ChatBubbleRadius = 'default' | 'pill' | 'square'
+/** How new chat bubbles enter the transcript. */
+export type ChatMessageEntrance = 'none' | 'fade' | 'rise' | 'slide'
+/** Characters-per-second presets for typewriter typing style. */
+export type ChatTypewriterSpeed = 'slow' | 'normal' | 'fast'
+export type ChatMessageEmphasis = 'none' | 'pulse'
+/** Soft gradient intensity over a bubble background colour. */
+export type ChatBubbleShading = 'none' | 'soft' | 'strong'
 export type { ChatLogoIconId }
+
+export const TYPEWRITER_CPS: Record<ChatTypewriterSpeed, number> = {
+  slow: 28,
+  normal: 42,
+  fast: 72,
+}
+
+export function chatMessageEntranceClass(
+  entrance: ChatMessageEntrance,
+  animate: boolean,
+): string | undefined {
+  if (!animate || entrance === 'none') return undefined
+  if (entrance === 'fade') return 'ff-chat-enter-fade'
+  if (entrance === 'slide') return 'ff-chat-enter-slide'
+  return 'ff-chat-enter-rise'
+}
+
+export function chatMessageEmphasisClass(
+  emphasis: ChatMessageEmphasis | undefined,
+  animate: boolean,
+): string | undefined {
+  if (!animate || !emphasis || emphasis === 'none') return undefined
+  if (emphasis === 'pulse') return 'ff-chat-emphasis-pulse'
+  return undefined
+}
+
+/** Combine branding + optional step overrides into motion class names. */
+export function chatBubbleMotionClass(opts: {
+  animate: boolean
+  brandingEntrance: ChatMessageEntrance
+  stepEntrance?: ChatMessageEntrance | null
+  stepEmphasis?: ChatMessageEmphasis | null
+}): string | undefined {
+  const entrance = opts.stepEntrance ?? opts.brandingEntrance
+  const parts = [
+    chatMessageEntranceClass(entrance, opts.animate),
+    chatMessageEmphasisClass(opts.stepEmphasis ?? 'none', opts.animate),
+  ].filter(Boolean)
+  return parts.length ? parts.join(' ') : undefined
+}
+
+/**
+ * Resolve step bubble colour / shading into inline styles.
+ * Empty colour + no shading → null (use chatbot branding defaults).
+ */
+export function resolveChatBubblePaint(opts: {
+  color?: string | null
+  shading?: ChatBubbleShading | null
+}): { background: string; color: string } | null {
+  const base = asColor(opts.color)
+  const shading: ChatBubbleShading =
+    opts.shading === 'soft' || opts.shading === 'strong' ? opts.shading : 'none'
+  if (!base && shading === 'none') return null
+
+  if (base) {
+    const fg = contrastFg(base)
+    if (shading === 'none') return { background: base, color: fg }
+    const amount = shading === 'soft' ? 0.18 : 0.32
+    return {
+      background: `linear-gradient(to bottom right, ${base}, ${mix(base, 'white', amount)})`,
+      color: fg,
+    }
+  }
+
+  const whitePct = shading === 'soft' ? 18 : 32
+  return {
+    background: `linear-gradient(to bottom right, var(--ff-chat-bubble-bot), color-mix(in srgb, var(--ff-chat-bubble-bot) ${100 - whitePct}%, white))`,
+    color: 'var(--ff-chat-bubble-bot-fg)',
+  }
+}
 
 export type ChatbotStory = {
   id: string
@@ -23,6 +113,8 @@ export type ResolvedChatStory = ChatbotStory & {
 }
 
 export type ChatbotBranding = {
+  /** Overall chat skin. Colour fields still override theme defaults when set. */
+  appearanceTheme: ChatAppearanceTheme
   headerColor: string | null
   headerTextColor: string | null
   bubbleUserColor: string | null
@@ -38,6 +130,8 @@ export type ChatbotBranding = {
   fontUrl: string | null
   fontFilename: string | null
   typingStyle: ChatTypingStyle
+  typewriterSpeed: ChatTypewriterSpeed
+  messageEntrance: ChatMessageEntrance
   showEyebrow: boolean
   bubbleRadius: ChatBubbleRadius
   /** Ephemeral header stories (24h). Max 10; filtered on resolve. */
@@ -74,6 +168,7 @@ export const STORY_TTL_MS = 24 * 60 * 60 * 1000
 export const STORY_MAX_COUNT = 10
 
 const DEFAULTS: ChatbotBranding = {
+  appearanceTheme: 'default',
   headerColor: null,
   headerTextColor: null,
   bubbleUserColor: null,
@@ -88,6 +183,8 @@ const DEFAULTS: ChatbotBranding = {
   fontUrl: null,
   fontFilename: null,
   typingStyle: 'normal',
+  typewriterSpeed: 'normal',
+  messageEntrance: 'rise',
   showEyebrow: true,
   bubbleRadius: 'default',
   stories: [],
@@ -228,9 +325,16 @@ export function parseChatbotBranding(settings: unknown): ChatbotBranding {
   }
   const b = raw as Record<string, unknown>
   const typing = b.typingStyle === 'typewriter' ? 'typewriter' : 'normal'
+  const typewriterSpeed: ChatTypewriterSpeed =
+    b.typewriterSpeed === 'slow' || b.typewriterSpeed === 'fast' ? b.typewriterSpeed : 'normal'
+  const messageEntrance: ChatMessageEntrance =
+    b.messageEntrance === 'none' || b.messageEntrance === 'fade' || b.messageEntrance === 'rise'
+      ? b.messageEntrance
+      : 'rise'
   const radius =
     b.bubbleRadius === 'pill' || b.bubbleRadius === 'square' ? b.bubbleRadius : 'default'
   return {
+    appearanceTheme: parseChatAppearanceTheme(b.appearanceTheme),
     headerColor: asColor(b.headerColor),
     headerTextColor: asColor(b.headerTextColor),
     bubbleUserColor: asColor(b.bubbleUserColor),
@@ -245,6 +349,8 @@ export function parseChatbotBranding(settings: unknown): ChatbotBranding {
     fontUrl: asTrimmed(b.fontUrl),
     fontFilename: asTrimmed(b.fontFilename),
     typingStyle: typing,
+    typewriterSpeed,
+    messageEntrance,
     showEyebrow: asBool(b.showEyebrow, true),
     bubbleRadius: radius,
     stories: parseStories(b.stories),
@@ -268,7 +374,10 @@ export function brandingToSettingsPatch(branding: ChatbotBranding): { [key: stri
     }))
 
   const out: { [key: string]: Json | undefined } = {
+    appearanceTheme: branding.appearanceTheme,
     typingStyle: branding.typingStyle,
+    typewriterSpeed: branding.typewriterSpeed,
+    messageEntrance: branding.messageEntrance,
     showEyebrow: branding.showEyebrow,
     bubbleRadius: branding.bubbleRadius,
     stories: stories as unknown as Json,
@@ -310,9 +419,10 @@ export function resolveChatBranding(opts: {
   const orgLogo = asTrimmed(opts.org?.logo_url)
   const orgName = asTrimmed(opts.org?.display_name)
 
-  const headerColor = fromSettings.headerColor ?? orgAccent
-  const bubbleUserColor = fromSettings.bubbleUserColor ?? orgAccent
-  const accentColor = fromSettings.accentColor ?? orgAccent
+  const themed = fromSettings.appearanceTheme !== 'default'
+  const headerColor = fromSettings.headerColor ?? (themed ? null : orgAccent)
+  const bubbleUserColor = fromSettings.bubbleUserColor ?? (themed ? null : orgAccent)
+  const accentColor = fromSettings.accentColor ?? (themed ? null : orgAccent)
 
   let resolvedLogoUrl = fromSettings.logoUrl
   if (
@@ -374,18 +484,28 @@ export function resolveChatBranding(opts: {
 
 export type ChatBrandingCssVars = Record<string, string>
 
-/** Default teal/cyan palette matching the current chat UI. */
+/** Resolve CSS vars from branding colours + appearance theme fallbacks. */
 export function chatBrandingCssVars(branding: ResolvedChatBranding): ChatBrandingCssVars {
-  const header = branding.headerColor ?? '#0d9488'
-  const header2 = mix(header, 'white', 0.22)
-  const headerFg = branding.headerTextColor ?? contrastFg(header)
-  const user = branding.bubbleUserColor ?? '#0d9488'
-  const user2 = mix(user, 'white', 0.18)
+  const theme = chatAppearanceThemeMeta(branding.appearanceTheme)
+  const header = branding.headerColor ?? theme.colors.headerColor
+  const header2 = mix(header, 'white', branding.appearanceTheme === 'midnight' ? 0.08 : 0.22)
+  const headerFg = branding.headerTextColor ?? theme.colors.headerTextColor
+  const user = branding.bubbleUserColor ?? theme.colors.bubbleUserColor
+  const user2 = mix(user, 'white', branding.appearanceTheme === 'midnight' ? 0.12 : 0.18)
   const userFg = contrastFg(user)
-  const bot = branding.bubbleBotColor ?? '#ffffff'
-  const botFg = branding.bubbleBotTextColor ?? (bot === '#ffffff' ? '#1e293b' : contrastFg(bot))
-  const page = branding.pageBackground ?? '#f8fafc'
-  const accent = branding.accentColor ?? header
+  const bot = branding.bubbleBotColor ?? theme.colors.bubbleBotColor
+  const botFg =
+    branding.bubbleBotTextColor ??
+    (branding.bubbleBotColor
+      ? bot === '#ffffff'
+        ? '#1e293b'
+        : contrastFg(bot)
+      : theme.colors.bubbleBotTextColor)
+  const page = branding.pageBackground ?? theme.colors.pageBackground
+  const page2 = branding.pageBackground
+    ? mix(page, branding.appearanceTheme === 'midnight' ? 'black' : 'white', 0.35)
+    : theme.colors.pageBackground2
+  const accent = branding.accentColor ?? theme.colors.accentColor
   const radius =
     branding.bubbleRadius === 'pill' ? '1.5rem' : branding.bubbleRadius === 'square' ? '0.5rem' : '1.25rem'
 
@@ -399,10 +519,12 @@ export function chatBrandingCssVars(branding: ResolvedChatBranding): ChatBrandin
     '--ff-chat-bubble-bot': bot,
     '--ff-chat-bubble-bot-fg': botFg,
     '--ff-chat-page-bg': page,
-    '--ff-chat-page-bg-2': mix(page === '#f8fafc' ? '#ccfbf1' : page, 'white', 0.35),
+    '--ff-chat-page-bg-2': page2,
     '--ff-chat-accent': accent,
-    '--ff-chat-accent-soft': mix(accent, 'white', 0.85),
+    '--ff-chat-accent-soft':
+      branding.appearanceTheme === 'midnight' ? mix(accent, 'black', 0.72) : mix(accent, 'white', 0.85),
     '--ff-chat-bubble-radius': radius,
+    ...theme.cssVars,
   }
   if (branding.resolvedFontFamily) {
     vars['--ff-chat-font'] = branding.resolvedFontFamily
@@ -418,6 +540,25 @@ export function chatRootStyle(branding: ResolvedChatBranding): CSSProperties {
   style['--color-accent-2' as keyof CSSProperties] = vars['--ff-chat-header-2'] as never
   style['--color-accent-soft' as keyof CSSProperties] = vars['--ff-chat-accent-soft'] as never
   style['--color-accent-fg' as keyof CSSProperties] = vars['--ff-chat-header-fg'] as never
+  if (branding.appearanceTheme === 'midnight') {
+    style['--color-surface' as keyof CSSProperties] = '#0f172a' as never
+    style['--color-surface-2' as keyof CSSProperties] = '#1e293b' as never
+    style['--color-border' as keyof CSSProperties] = 'rgb(148 163 184 / 0.22)' as never
+    style['--color-ink' as keyof CSSProperties] = '#e2e8f0' as never
+    style['--color-ink-muted' as keyof CSSProperties] = '#94a3b8' as never
+  } else if (branding.appearanceTheme === 'aurora') {
+    style['--color-surface' as keyof CSSProperties] = 'rgb(255 255 255 / 0.78)' as never
+    style['--color-surface-2' as keyof CSSProperties] = '#e0f2fe' as never
+    style['--color-border' as keyof CSSProperties] = 'rgb(14 165 233 / 0.22)' as never
+    style['--color-ink' as keyof CSSProperties] = '#0c4a6e' as never
+    style['--color-ink-muted' as keyof CSSProperties] = '#0369a1' as never
+  } else if (branding.appearanceTheme === 'sunset') {
+    style['--color-surface' as keyof CSSProperties] = 'rgb(255 247 237 / 0.92)' as never
+    style['--color-surface-2' as keyof CSSProperties] = '#ffe4e6' as never
+    style['--color-border' as keyof CSSProperties] = 'rgb(244 63 94 / 0.22)' as never
+    style['--color-ink' as keyof CSSProperties] = '#881337' as never
+    style['--color-ink-muted' as keyof CSSProperties] = '#9f1239' as never
+  }
   if (branding.resolvedFontFamily) {
     style.fontFamily = `var(--ff-chat-font), var(--font-sans), system-ui, sans-serif`
   }

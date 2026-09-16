@@ -915,7 +915,7 @@ export function DesignerPage() {
           </div>
         ) : null}
         <div className="flex flex-wrap gap-1.5">
-          {(['message', 'question', 'button', 'http', 'database', 'email', 'integration', 'handoff', 'transfer', 'sign_in', 'condition', 'switch', 'skip_to', 'loop', 'set_variable', 'operation', 'entity'] as FlowNodeType[]).map(
+          {(['message', 'question', 'button', 'http', 'database', 'email', 'integration', 'handoff', 'transfer', 'sign_in', 'condition', 'switch', 'skip_to', 'restart', 'loop', 'set_variable', 'operation', 'entity'] as FlowNodeType[]).map(
             (t) => (
               <Button key={t} size="sm" variant="secondary" onClick={() => addNode(t, selectedNodeId)}>
                 + {nodeTypeLabel(t)}

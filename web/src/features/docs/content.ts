@@ -1079,8 +1079,9 @@ export const DOC_SECTIONS: DocSection[] = [
         heading: 'Step types',
         bullets: [
           'Message — send text to the user. Supports **bold**, *italic*, ~~strike~~, `code`, [links](https://…), {color:name}coloured text{/color}, and {{embed("https://…")}} for YouTube / X / Vimeo / Spotify / TikTok (see Message formatting). Templates and attached media also work.',
-          'Button — show action buttons under an optional message. Each button has listeners: pick an event (Click, Hover, Double-click, Focus, Blur) and an action (Continue flow, Emit event, Run function, Skip to step). Run function lists setVar / setCookie / clearCookie plus every expression helper (cookie, toUpper, coalesce, …). Under Settings → Run after, use “When skipped, go to step” to jump ahead when the previous step’s outcome is not selected.',
+          'Button — show action buttons under an optional message. Each button has listeners: pick an event (Click, Hover, Double-click, Focus, Blur) and an action (Continue flow, Emit event, Run function, Skip to step, Restart chat). Run function lists setVar / setCookie / clearCookie plus every expression helper (cookie, toUpper, coalesce, …). Under Settings → Run after, use “When skipped, go to step” to jump ahead when the previous step’s outcome is not selected.',
           'Skip to step — jump to another step by key (same target as Button → Skip to step). Empty target continues on the next edge. Steps jumped over are treated as skipped. When later steps reference variables those skipped steps would have set, the inspector lists them so you can assign values for the jump (otherwise they are null).',
+          'Restart chat — clear the conversation and start again from the first step (globals reset to defaults; optional clear of chat cookies). Also available as a Button listener action.',
           'Question — collect an answer into a variable, with typed validation. Prompt text supports the same formatting and social embeds as Message. Can attach media to the prompt.',
           'HTTP request — call a configured HTTP connection.',
           'Database — run parameterized SQL against a Database connection (PostgreSQL, MySQL, SQL Server, or SQLite). Bind values with :name placeholders; results land in the output variable as { rows, rowCount }.',
@@ -1526,6 +1527,9 @@ export const DOC_SECTIONS: DocSection[] = [
           'Downloadable file — PDF, Word, or Excel filled from template inputs (and leftover {{vars.*}}). List layout stacks fields; Page layout is an A4 canvas (portrait or landscape). Insert {{templates.key.file}} on a Message or End step; visitors download the built file.',
           'Agreement — Adobe Sign–style PDF: agreement name, message, terms, parties, signature image, and date signed. Insert {{templates.agreement.file}} after a Signature question.',
           'Menu, chat message, opening hours (schedule card in chat; plain text elsewhere), legal copy, and receipts.',
+          'Locations — address lists with optional map links.',
+          'Map view — interactive OpenStreetMap embed with labeled pins (stores, meetups, delivery zones).',
+          'QR code — generate a scannable QR from a URL or text; shown inline in chat with PNG download.',
         ],
       },
       {

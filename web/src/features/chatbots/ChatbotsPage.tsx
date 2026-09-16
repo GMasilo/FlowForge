@@ -45,13 +45,14 @@ import { Badge } from '@/shared/ui/badge'
 import { InitialsAvatar } from '@/shared/ui/initials-avatar'
 import {
   BulkActionBar,
-  LazyLoadBar,
-  LazyLoadSentinel,
+  PaginationBar,
+  clampPage,
   matchesQuery,
+  pageCountFor,
   RowCheckbox,
   SearchField,
+  slicePage,
   toggleId,
-  useLazyReveal,
 } from '@/shared/ui/list-controls'
 import { Select } from '@/shared/ui/select'
 import { getPublishStatus } from '@/features/designer/utils/flowPublish'
@@ -304,7 +305,8 @@ export function ChatbotsPage() {
   const [displayMode, setDisplayMode] = useState<ChatbotsDisplayMode>(() => readChatbotsDisplayMode())
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'draft' | 'never'>('all')
-  const [batchSize, setBatchSize] = useState(12)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(12)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const importBusyRef = useRef(false)
   const editable = canEdit(role)
@@ -390,14 +392,19 @@ export function ChatbotsPage() {
   }, [chatbots.data, search, statusFilter, profiles])
 
   const filterResetKey = `${search}\0${statusFilter}`
-  const { visibleCount, hasMore, loadMore } = useLazyReveal(
-    filteredBots.length,
-    batchSize,
-    filterResetKey,
-  )
+  useEffect(() => {
+    setPage(1)
+  }, [filterResetKey])
+
+  const pageCount = pageCountFor(filteredBots.length, pageSize)
+  const safePage = clampPage(page, pageCount)
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage)
+  }, [page, safePage])
+
   const visibleBots = useMemo(
-    () => filteredBots.slice(0, visibleCount),
-    [filteredBots, visibleCount],
+    () => slicePage(filteredBots, safePage, pageSize),
+    [filteredBots, safePage, pageSize],
   )
   const visibleIds = useMemo(() => visibleBots.map((b) => b.id), [visibleBots])
   const allVisibleSelected =
@@ -1039,10 +1046,10 @@ export function ChatbotsPage() {
                         return next
                       })
                     }
-                    label="Select all loaded chatbots"
+                    label="Select all chatbots on this page"
                     className="mt-0"
                   />
-                  Select loaded
+                  Select page
                 </label>
               ) : null}
             </div>
@@ -1340,22 +1347,17 @@ export function ChatbotsPage() {
           ) : null}
 
           {filteredBots.length ? (
-            <>
-              <LazyLoadSentinel
-                enabled={hasMore}
-                onVisible={loadMore}
-                observeKey={visibleCount}
-              />
-              <LazyLoadBar
-                shown={visibleCount}
-                total={filteredBots.length}
-                batchSize={batchSize}
-                hasMore={hasMore}
-                onLoadMore={loadMore}
-                onBatchSizeChange={setBatchSize}
-                label="chatbots"
-              />
-            </>
+            <PaginationBar
+              page={safePage}
+              pageSize={pageSize}
+              total={filteredBots.length}
+              label="chatbots"
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n)
+                setPage(1)
+              }}
+            />
           ) : null}
         </div>
       ) : (

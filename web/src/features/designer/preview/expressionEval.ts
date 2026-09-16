@@ -48,6 +48,20 @@ import {
   type HoursEmbedPayload,
 } from '@/features/templates/hoursEmbed'
 import {
+  encodeMapEmbed,
+  fillMapTemplateForEmbed,
+  mapEmbedFromTemplate,
+  mapEmbedPlainSummary,
+  type MapEmbedPayload,
+} from '@/features/templates/mapEmbed'
+import {
+  encodeQrEmbed,
+  fillQrTemplateForEmbed,
+  qrEmbedFromTemplate,
+  qrEmbedPlainSummary,
+  type QrEmbedPayload,
+} from '@/features/templates/qrEmbed'
+import {
   encodeSocialEmbed,
   isSocialEmbedExprValue,
   parseSocialEmbedUrl,
@@ -554,14 +568,40 @@ function isHoursTemplateValue(value: unknown): value is Record<string, unknown> 
   return !!value && typeof value === 'object' && !Array.isArray(value) && (value as { kind?: unknown }).kind === 'hours'
 }
 
+function isMapTemplateValue(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && (value as { kind?: unknown }).kind === 'map'
+}
+
+function isQrTemplateValue(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && (value as { kind?: unknown }).kind === 'qr'
+}
+
 const FF_HOURS_EMBED_MARK = '__ffHoursEmbed'
+const FF_MAP_EMBED_MARK = '__ffMapEmbed'
+const FF_QR_EMBED_MARK = '__ffQrEmbed'
 
 function isHoursEmbedExprValue(value: unknown): value is HoursEmbedPayload & { [FF_HOURS_EMBED_MARK]?: true } {
   return !!value && typeof value === 'object' && !Array.isArray(value) && (value as Record<string, unknown>)[FF_HOURS_EMBED_MARK] === true
 }
 
+function isMapEmbedExprValue(value: unknown): value is MapEmbedPayload & { [FF_MAP_EMBED_MARK]?: true } {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && (value as Record<string, unknown>)[FF_MAP_EMBED_MARK] === true
+}
+
+function isQrEmbedExprValue(value: unknown): value is QrEmbedPayload & { [FF_QR_EMBED_MARK]?: true } {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && (value as Record<string, unknown>)[FF_QR_EMBED_MARK] === true
+}
+
 function hoursEmbedExprValue(payload: HoursEmbedPayload): Record<string, unknown> {
   return { [FF_HOURS_EMBED_MARK]: true, ...payload }
+}
+
+function mapEmbedExprValue(payload: MapEmbedPayload): Record<string, unknown> {
+  return { [FF_MAP_EMBED_MARK]: true, ...payload }
+}
+
+function qrEmbedExprValue(payload: QrEmbedPayload): Record<string, unknown> {
+  return { [FF_QR_EMBED_MARK]: true, ...payload }
 }
 
 /**
@@ -569,7 +609,7 @@ function hoursEmbedExprValue(payload: HoursEmbedPayload): Record<string, unknown
  * - YouTube / X / Vimeo / Spotify / TikTok URLs → player / post iframe
  * - media files, opening-hours templates, downloadable files (fallback)
  */
-function embedValue(value: unknown): unknown {
+function embedValue(value: unknown, ctx?: ExprContext): unknown {
   if (value == null) return null
   if (typeof value === 'string') {
     const trimmed = value.trim()
@@ -578,7 +618,9 @@ function embedValue(value: unknown): unknown {
       trimmed.includes('<<ff:embed:') ||
       trimmed.includes('<<ff:file:') ||
       trimmed.includes('<<ff:doc:') ||
-      trimmed.includes('<<ff:hours:')
+      trimmed.includes('<<ff:hours:') ||
+      trimmed.includes('<<ff:map:') ||
+      trimmed.includes('<<ff:qr:')
     ) {
       return trimmed
     }
@@ -592,13 +634,31 @@ function embedValue(value: unknown): unknown {
   }
   if (isSocialEmbedExprValue(value)) return value
   if (isHoursEmbedExprValue(value)) return value
+  if (isMapEmbedExprValue(value)) return value
+  if (isQrEmbedExprValue(value)) return value
   if (isHoursTemplateValue(value)) {
     return hoursEmbedExprValue(hoursEmbedFromTemplate(value))
+  }
+  if (isMapTemplateValue(value)) {
+    const key = typeof value.key === 'string' ? value.key : ''
+    const fillCtx = ctx ? (key ? ctxForTemplate(ctx, key) : ctx) : undefined
+    const filledTpl = fillMapTemplateForEmbed(value, (raw) =>
+      fillCtx ? interpolateTemplate(raw, fillCtx) : raw,
+    )
+    return mapEmbedExprValue(mapEmbedFromTemplate(filledTpl))
+  }
+  if (isQrTemplateValue(value)) {
+    const key = typeof value.key === 'string' ? value.key : ''
+    const fillCtx = ctx ? (key ? ctxForTemplate(ctx, key) : ctx) : undefined
+    const filledTpl = fillQrTemplateForEmbed(value, (raw) =>
+      fillCtx ? interpolateTemplate(raw, fillCtx) : raw,
+    )
+    return qrEmbedExprValue(qrEmbedFromTemplate(filledTpl))
   }
   if (isDocumentExprValue(value)) return value
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const rec = value as Record<string, unknown>
-    if ((rec.kind === 'document' || rec.kind === 'agreement') && rec.file != null && isDocumentExprValue(rec.file)) {
+    if ((rec.kind === 'document' || rec.kind === 'agreement' || rec.kind === 'certificate' || rec.kind === 'checklist') && rec.file != null && isDocumentExprValue(rec.file)) {
       return rec.file
     }
     if (typeof rec.url === 'string') {
@@ -863,7 +923,7 @@ function callFunction(name: string, args: unknown[], ctx?: ExprContext): unknown
     case 'embed':
     case 'embedmedia':
     case 'embed_media':
-      return embedValue(args[0])
+      return embedValue(args[0], ctx)
     case 'cookie':
     case 'getcookie': {
       const key = asString(args[0]).trim()
@@ -1134,6 +1194,24 @@ function resolvePath(parts: string[], ctx: ExprContext): unknown {
       }
       // Fall through to plain filled string below.
     }
+    if (tpl.kind === 'map' && field === 'text') {
+      const filledTpl = fillMapTemplateForEmbed(tpl, (raw) =>
+        filledCopyString(raw, fillCtx, `${name}.map:${raw.slice(0, 48)}`),
+      )
+      if (ctx.embedMedia) {
+        return encodeMapEmbed(mapEmbedFromTemplate(filledTpl))
+      }
+      return mapEmbedPlainSummary(mapEmbedFromTemplate(filledTpl))
+    }
+    if (tpl.kind === 'qr' && field === 'text') {
+      const filledTpl = fillQrTemplateForEmbed(tpl, (raw) =>
+        filledCopyString(raw, fillCtx, `${name}.qr:${raw.slice(0, 48)}`),
+      )
+      if (ctx.embedMedia) {
+        return encodeQrEmbed(qrEmbedFromTemplate(filledTpl))
+      }
+      return qrEmbedPlainSummary(qrEmbedFromTemplate(filledTpl))
+    }
     if (tpl.kind !== 'cart' && field && COPY_STRING_FIELDS.has(field) && typeof tpl[field] === 'string') {
       const filled = filledCopyString(String(tpl[field]), fillCtx, `${name}.${field}`)
       return rest.length > 1 ? getByPath(filled, rest.slice(1)) : filled
@@ -1274,6 +1352,31 @@ function formatForText(value: unknown, ctx: ExprContext): string {
     }
     if (ctx.embedMedia) return encodeHoursEmbed(payload)
     return hoursEmbedPlainSummary(payload)
+  }
+  if (isMapEmbedExprValue(value)) {
+    const payload: MapEmbedPayload = {
+      title: value.title,
+      intro: value.intro,
+      embedUrl: value.embedUrl,
+      style: value.style,
+      pins: value.pins,
+    }
+    if (ctx.embedMedia) return encodeMapEmbed(payload)
+    return mapEmbedPlainSummary(payload)
+  }
+  if (isQrEmbedExprValue(value)) {
+    const payload: QrEmbedPayload = {
+      title: value.title,
+      caption: value.caption,
+      payload: value.payload,
+      size: value.size,
+      errorCorrection: value.errorCorrection,
+      foreground: value.foreground,
+      background: value.background,
+      filename: value.filename,
+    }
+    if (ctx.embedMedia) return encodeQrEmbed(payload)
+    return qrEmbedPlainSummary(payload)
   }
   const document = formatDocumentForText(value, ctx)
   if (document !== null) return document

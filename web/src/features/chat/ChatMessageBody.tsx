@@ -3,6 +3,8 @@ import { ChatMediaAttachments } from '@/features/chat/ChatMediaAttachments'
 import { ChatFormattedText } from '@/features/chat/ChatFormattedText'
 import { DocumentDownloadChip } from '@/features/chat/DocumentDownloadChip'
 import { OpeningHoursCard } from '@/features/chat/OpeningHoursCard'
+import { MapViewCard } from '@/features/chat/MapViewCard'
+import { QrCodeCard } from '@/features/chat/QrCodeCard'
 import { SocialEmbedCard } from '@/features/chat/SocialEmbedCard'
 import { parseChatSegments, type ChatbotMediaFile } from '@/features/designer/model/chatbotMedia'
 import type { ChatTypingStyle } from '@/features/chatbots/chatbotBranding'
@@ -76,6 +78,7 @@ export function ChatMessageBody({
   attachments,
   className,
   typingStyle = 'normal',
+  typewriterCps,
   animateTypewriter = false,
   onTypewriterProgress,
   onTypewriterComplete,
@@ -84,6 +87,8 @@ export function ChatMessageBody({
   attachments?: ChatbotMediaFile[] | null
   className?: string
   typingStyle?: ChatTypingStyle
+  /** Characters per second when typewriter is active (defaults to 42). */
+  typewriterCps?: number
   /** When true and typingStyle is typewriter, reveal text character-by-character. */
   animateTypewriter?: boolean
   onTypewriterProgress?: () => void
@@ -102,6 +107,7 @@ export function ChatMessageBody({
             <TypewriterText
               key={`t-${i}`}
               text={seg.text}
+              cps={typewriterCps}
               onProgress={onTypewriterProgress}
               onComplete={onTypewriterComplete}
             />
@@ -112,6 +118,10 @@ export function ChatMessageBody({
           <DocumentDownloadChip key={`d-${i}-${seg.document.filename}`} document={seg.document} />
         ) : seg.kind === 'hours' ? (
           <OpeningHoursCard key={`h-${i}-${seg.hours.title}`} hours={seg.hours} />
+        ) : seg.kind === 'map' ? (
+          <MapViewCard key={`m-${i}-${seg.map.title}`} map={seg.map} />
+        ) : seg.kind === 'qr' ? (
+          <QrCodeCard key={`q-${i}-${seg.qr.payload}`} qr={seg.qr} />
         ) : seg.kind === 'social' ? (
           <SocialEmbedCard key={`s-${i}-${seg.social.provider}-${seg.social.id}`} embed={seg.social} />
         ) : (

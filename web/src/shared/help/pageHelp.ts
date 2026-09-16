@@ -112,5 +112,5 @@ export const SECTION_HELP = {
   publicChat:
     'Enable a shareable production URL (/o/{org}/c/{slug}) and embed. Slugs are unique per organisation. Staging tests use the unique link on the Test tab — not this page.',
   chatAppearance:
-    'Header, bubbles, logo or icon, font, typing style, and 24-hour Stories for public chat, embed, and designer preview. Organisation branding fills in any blanks.',
+    'Choose a chat theme (Default, Aurora, Sunset, Midnight), then tune colours, logo, font, typing, and 24-hour Stories. Empty colour fields use the theme (or organisation branding on Default).',
 } as const

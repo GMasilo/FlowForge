@@ -15,7 +15,7 @@ import {
   outgoingMap,
   reachableIds,
 } from '@/features/designer/utils/conditionGraph'
-import { collectSkipTargetKeys } from '@/features/designer/model/skipToStep'
+import { collectSkipTargetKeys, canReachNode, stepsSkippedByJump, variablesProvidedBySkipJump } from '@/features/designer/model/skipToStep'
 
 /** Item/index vars from Every For each whose Each-item body contains this node. */
 function availableLoopLocals(
@@ -73,13 +73,15 @@ function buildAdjacency(nodes: DesignerNode[], edges: DesignerEdge[]) {
     incoming.get(edge.target)?.push(edge.source)
   }
   // Treat skip jumps as alternate edges so variables on bypassed paths are not
-  // considered guaranteed at the skip target.
+  // considered guaranteed at the skip target. Only model jumps that follow an
+  // existing edge path (same reachability as runtime bypass accounting).
   const byKey = new Map(nodes.map((n) => [n.key, n]))
   for (const node of nodes) {
     for (const targetKey of collectSkipTargetKeys(node)) {
       if (!targetKey || targetKey === node.key) continue
       const target = byKey.get(targetKey)
       if (!target) continue
+      if (!canReachNode(node.id, target.id, nodes, edges)) continue
       const already = (outgoing.get(node.id) ?? []).some((o) => o.target === target.id)
       if (already) continue
       outgoing.get(node.id)?.push({ target: target.id, handle: null })
@@ -424,6 +426,13 @@ export function validateFlow(
       for (const out of getStepOutputVariables(pred)) {
         availableStepOutputs.add(out)
       }
+      // Skip jumps null bypassed outputs at runtime — treat them as available here too.
+      for (const out of variablesProvidedBySkipJump(pred, nodes, edges)) {
+        availableStepOutputs.add(out)
+      }
+      for (const skippedKey of stepsSkippedByJump(pred, nodes, edges)) {
+        availableStepKeys.add(skippedKey)
+      }
     }
 
     // Overwrite is allowed: assigning a key that already exists is intentional.
@@ -437,7 +446,10 @@ export function validateFlow(
       if (node.type === 'sign_in' && priorWriters.length && priorWriters.every((w) => w.type === 'sign_in')) {
         continue
       }
-      if (globalSet.has(writtenHere) || priorWriters.length) {
+      // Skip-to defaults / virtual nulls are fallbacks for when this step is bypassed —
+      // not a real prior write that this step "overwrites".
+      const realPriors = priorWriters.filter((w) => w.type !== 'skip_to')
+      if (globalSet.has(writtenHere) || realPriors.length) {
         issues.push({
           severity: 'warning',
           nodeId: node.id,
@@ -445,7 +457,7 @@ export function validateFlow(
           code: 'variable_overwrite',
           message: globalSet.has(writtenHere)
             ? `Reassigns global variable "{{vars.${writtenHere}}}"`
-            : `Overwrites "{{vars.${writtenHere}}}" previously set by ${priorWriters.map((w) => w.key).join(', ')}`,
+            : `Overwrites "{{vars.${writtenHere}}}" previously set by ${realPriors.map((w) => w.key).join(', ')}`,
         })
       }
     }

@@ -23,8 +23,8 @@ export function SuggestionResponseChips({
           disabled={disabled}
           onClick={() => onSelect(label)}
           className={cn(
-            'rounded-full border border-teal-200/90 bg-teal-50/90 px-3 py-1.5 text-left text-xs font-medium text-teal-900 transition',
-            'hover:border-teal-400 hover:bg-teal-100 disabled:cursor-default disabled:opacity-50',
+            'rounded-full border border-[color-mix(in_srgb,var(--color-accent)_35%,var(--color-border))] bg-[var(--color-accent-soft)] px-3 py-1.5 text-left text-xs font-medium text-[var(--color-accent)] transition',
+            'hover:border-[var(--color-accent)] hover:opacity-90 disabled:cursor-default disabled:opacity-50',
           )}
         >
           {label}

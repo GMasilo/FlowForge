@@ -1,0 +1,14 @@
+-- Extend template_kind enum with new chatbot template kinds
+alter type public.template_kind add value if not exists 'appointment';
+alter type public.template_kind add value if not exists 'location';
+alter type public.template_kind add value if not exists 'team';
+alter type public.template_kind add value if not exists 'pricing';
+alter type public.template_kind add value if not exists 'survey';
+alter type public.template_kind add value if not exists 'announcement';
+alter type public.template_kind add value if not exists 'sms';
+alter type public.template_kind add value if not exists 'push';
+alter type public.template_kind add value if not exists 'ticket';
+alter type public.template_kind add value if not exists 'certificate';
+alter type public.template_kind add value if not exists 'checklist';
+alter type public.template_kind add value if not exists 'consent';
+alter type public.template_kind add value if not exists 'webhook';

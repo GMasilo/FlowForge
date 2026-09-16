@@ -14,6 +14,20 @@ const TEMPLATE_KIND_SET = new Set<string>([
   'receipt',
   'document',
   'agreement',
+  'sso',
+  'appointment',
+  'location',
+  'team',
+  'pricing',
+  'survey',
+  'announcement',
+  'sms',
+  'push',
+  'ticket',
+  'certificate',
+  'checklist',
+  'consent',
+  'webhook',
 ])
 const VARIABLE_TYPE_SET = new Set<string>(variableTypes)
 const ENTITY_KIND_SET = new Set<string>(['static', 'dynamic'])

@@ -3009,6 +3009,28 @@ export type Database = {
           },
         ]
       }
+      cron_runs_latest: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          error: string | null
+          id: string | null
+          instance_id: string | null
+          job_name: string | null
+          started_at: string | null
+          status: string | null
+          summary: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cron_runs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_conversation_note: {
@@ -4432,6 +4454,7 @@ export type Database = {
         | "database"
         | "button"
         | "skip_to"
+        | "restart"
       instance_role: "owner" | "admin" | "editor" | "viewer" | "agent"
       organisation_plan: "starter" | "pro" | "business" | "enterprise"
       integration_provider:
@@ -4459,6 +4482,21 @@ export type Database = {
         | "document"
         | "agreement"
         | "sso"
+        | "appointment"
+        | "location"
+        | "map"
+        | "qr"
+        | "team"
+        | "pricing"
+        | "survey"
+        | "announcement"
+        | "sms"
+        | "push"
+        | "ticket"
+        | "certificate"
+        | "checklist"
+        | "consent"
+        | "webhook"
       variable_scope: "global" | "step"
       variable_type:
         | "string"

@@ -5,7 +5,7 @@ import { parseFunctionParams } from '@/features/designer/model/flowFunctions'
 export const BUTTON_LISTENER_EVENTS = ['click', 'hover', 'dblclick', 'focus', 'blur'] as const
 export type ButtonListenerEvent = (typeof BUTTON_LISTENER_EVENTS)[number]
 
-export const BUTTON_LISTENER_ACTIONS = ['continue', 'emit_event', 'run_function', 'skip_to'] as const
+export const BUTTON_LISTENER_ACTIONS = ['continue', 'emit_event', 'run_function', 'skip_to', 'restart'] as const
 export type ButtonListenerAction = (typeof BUTTON_LISTENER_ACTIONS)[number]
 
 export const BUTTON_LISTENER_EVENT_OPTIONS: Array<{ value: ButtonListenerEvent; label: string }> = [
@@ -25,6 +25,7 @@ export const BUTTON_LISTENER_ACTION_OPTIONS: Array<{
   { value: 'emit_event', label: 'Emit event', hint: 'postMessage flow_event to the embed host' },
   { value: 'run_function', label: 'Run function', hint: 'Call a built-in like setVar(varName, varValue), or a host function' },
   { value: 'skip_to', label: 'Skip to step', hint: 'Jump to a chosen step instead of the next edge' },
+  { value: 'restart', label: 'Restart chat', hint: 'Clear the conversation and start again from the first step' },
 ]
 
 export type ButtonListener = {

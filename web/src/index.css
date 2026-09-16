@@ -385,6 +385,132 @@ html.ff-embed {
   }
 }
 
+/* Chat transcript bubble entrance (branding.messageEntrance / step.enterAnimation) */
+.ff-chat-enter-rise {
+  animation: ff-rise 0.38s var(--ease-spring) both;
+}
+
+.ff-chat-enter-fade {
+  animation: ff-fade-in 0.28s ease-out both;
+}
+
+.ff-chat-enter-slide {
+  animation: ff-chat-slide-up 0.32s var(--ease-spring) both;
+}
+
+@keyframes ff-chat-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ff-chat-emphasis-pulse {
+  animation: ff-chat-emphasis-pulse 0.9s ease-in-out 2;
+}
+
+@keyframes ff-chat-emphasis-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+/* —— Chat appearance themes —— */
+.ff-chat-theme-aurora [data-ff-chat-header],
+.ff-chat-theme-sunset [data-ff-chat-header],
+.ff-chat-theme-midnight [data-ff-chat-header] {
+  position: relative;
+  isolation: isolate;
+}
+
+.ff-chat-theme-aurora [data-ff-chat-header]::before,
+.ff-chat-theme-sunset [data-ff-chat-header]::before,
+.ff-chat-theme-midnight [data-ff-chat-header]::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--ff-chat-header-sheen);
+  opacity: 0.9;
+}
+
+/* Keep real header content above sheen — never force layout on decorative absolutes. */
+.ff-chat-theme-aurora [data-ff-chat-header] > [data-ff-chat-header-content],
+.ff-chat-theme-sunset [data-ff-chat-header] > [data-ff-chat-header-content],
+.ff-chat-theme-midnight [data-ff-chat-header] > [data-ff-chat-header-content] {
+  position: relative;
+  z-index: 1;
+}
+
+.ff-chat-theme-aurora [data-ff-chat-header] {
+  border-bottom-color: rgb(255 255 255 / 0.35) !important;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 40px -24px rgb(14 165 233 / 0.55);
+}
+
+.ff-chat-theme-aurora .ff-chat-bubble-bot {
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--ff-chat-bot-border);
+  box-shadow: var(--ff-chat-bubble-shadow);
+}
+
+.ff-chat-theme-aurora .ff-chat-bubble-user {
+  box-shadow: var(--ff-chat-bubble-shadow);
+  border-bottom-right-radius: 1.15rem !important;
+}
+
+.ff-chat-theme-sunset [data-ff-chat-header] {
+  border-bottom: none !important;
+}
+
+.ff-chat-theme-sunset .ff-chat-bubble-bot {
+  border: 1px solid var(--ff-chat-bot-border);
+  box-shadow: var(--ff-chat-bubble-shadow);
+  border-radius: 0.75rem 1.35rem 1.35rem 0.35rem !important;
+}
+
+.ff-chat-theme-sunset .ff-chat-bubble-user {
+  box-shadow: var(--ff-chat-bubble-shadow);
+  border-radius: 1.35rem 0.75rem 0.35rem 1.35rem !important;
+}
+
+.ff-chat-theme-midnight [data-ff-chat-header] {
+  border-bottom: 1px solid rgb(45 212 191 / 0.35) !important;
+  box-shadow: inset 0 -1px 0 rgb(45 212 191 / 0.25);
+}
+
+.ff-chat-theme-midnight [data-ff-chat-header]::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 0;
+  height: 2px;
+  background: var(--ff-chat-header-sheen);
+  z-index: 2;
+}
+
+.ff-chat-theme-midnight .ff-chat-bubble-bot,
+.ff-chat-theme-midnight .ff-chat-bubble-user {
+  border: 1px solid var(--ff-chat-bot-border);
+  box-shadow: var(--ff-chat-bubble-shadow);
+  border-radius: 0.65rem !important;
+}
+
+.ff-chat-theme-midnight .ff-chat-bubble-user {
+  border-color: rgb(45 212 191 / 0.35);
+}
+
 @keyframes ff-shimmer {
   0% {
     background-position: 200% 0;
@@ -441,7 +567,11 @@ html.ff-embed {
   [class*='ff-pulse-soft'],
   [class*='ff-slide-in'],
   [class*='ff-fade-in'],
-  [class*='ff-rise'] {
+  [class*='ff-rise'],
+  .ff-chat-enter-rise,
+  .ff-chat-enter-fade,
+  .ff-chat-enter-slide,
+  .ff-chat-emphasis-pulse {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;

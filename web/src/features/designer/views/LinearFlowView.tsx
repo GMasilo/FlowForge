@@ -30,6 +30,7 @@ import {
   Sparkles,
   MousePointerClick,
   CornerDownRight,
+  RotateCcw,
 } from 'lucide-react'
 import type { FlowNodeType } from '@/shared/types/database'
 import { hasCustomStepSettingsForNode, nodeTypeLabel, stepSettingsSummary } from '@/features/designer/model/flowSchema'
@@ -64,6 +65,7 @@ const icons: Record<FlowNodeType, typeof MessageSquare> = {
   sign_in: Lock,
   button: MousePointerClick,
   skip_to: CornerDownRight,
+  restart: RotateCcw,
   condition: GitBranch,
   switch: Split,
   loop: Repeat,
@@ -85,6 +87,7 @@ const typeColor: Record<FlowNodeType, string> = {
   sign_in: 'var(--color-node-question)',
   button: 'var(--color-node-question)',
   skip_to: 'var(--color-node-condition)',
+  restart: 'var(--color-node-end)',
   condition: 'var(--color-node-condition)',
   switch: 'var(--color-node-switch)',
   loop: 'var(--color-node-loop)',
@@ -108,6 +111,7 @@ const STEP_TYPES: FlowNodeType[] = [
   'condition',
   'switch',
   'skip_to',
+  'restart',
   'loop',
   'set_variable',
   'operation',

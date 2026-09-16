@@ -8,6 +8,16 @@ import {
   type HoursEmbedPayload,
 } from '@/features/templates/hoursEmbed'
 import {
+  decodeMapEmbed,
+  mapEmbedPlainSummary,
+  type MapEmbedPayload,
+} from '@/features/templates/mapEmbed'
+import {
+  decodeQrEmbed,
+  qrEmbedPlainSummary,
+  type QrEmbedPayload,
+} from '@/features/templates/qrEmbed'
+import {
   decodeSocialEmbed,
   socialEmbedPlainSummary,
   type SocialEmbedPayload,
@@ -204,10 +214,12 @@ export type ChatContentSegment =
   | { kind: 'file'; file: ChatbotMediaFile }
   | { kind: 'document'; document: FilledDocument }
   | { kind: 'hours'; hours: HoursEmbedPayload }
+  | { kind: 'map'; map: MapEmbedPayload }
+  | { kind: 'qr'; qr: QrEmbedPayload }
   | { kind: 'social'; social: SocialEmbedPayload }
 
 const CHAT_EMBED_RE =
-  /<<ff:embed:([A-Za-z0-9+/=]+)>>|<<ff:hours:([A-Za-z0-9+/=]+)>>|<<ff:doc:([A-Za-z0-9+/=]+)>>|<<ff:file:([A-Za-z0-9+/=]+)>>|(https?:\/\/[^\s<>"]+\/file\/get\?[^\s<>"]+)|(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)(?:\?[^\s<>"]*)?)/gi
+  /<<ff:embed:([A-Za-z0-9+/=]+)>>|<<ff:hours:([A-Za-z0-9+/=]+)>>|<<ff:map:([A-Za-z0-9+/=]+)>>|<<ff:qr:([A-Za-z0-9+/=]+)>>|<<ff:doc:([A-Za-z0-9+/=]+)>>|<<ff:file:([A-Za-z0-9+/=]+)>>|(https?:\/\/[^\s<>"]+\/file\/get\?[^\s<>"]+)|(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)(?:\?[^\s<>"]*)?)/gi
 
 export function parseChatSegments(text: string): ChatContentSegment[] {
   if (!text) return []
@@ -221,10 +233,12 @@ export function parseChatSegments(text: string): ChatContentSegment[] {
     }
     const socialB64 = match[1]
     const hoursB64 = match[2]
-    const docB64 = match[3]
-    const fileB64 = match[4]
-    const fileGetUrl = match[5]
-    const mediaUrl = match[6]
+    const mapB64 = match[3]
+    const qrB64 = match[4]
+    const docB64 = match[5]
+    const fileB64 = match[6]
+    const fileGetUrl = match[7]
+    const mediaUrl = match[8]
     if (socialB64) {
       const social = decodeSocialEmbed(socialB64)
       if (social) segments.push({ kind: 'social', social })
@@ -232,6 +246,14 @@ export function parseChatSegments(text: string): ChatContentSegment[] {
     } else if (hoursB64) {
       const hours = decodeHoursEmbed(hoursB64)
       if (hours) segments.push({ kind: 'hours', hours })
+      else segments.push({ kind: 'text', text: match[0] })
+    } else if (mapB64) {
+      const map = decodeMapEmbed(mapB64)
+      if (map) segments.push({ kind: 'map', map })
+      else segments.push({ kind: 'text', text: match[0] })
+    } else if (qrB64) {
+      const qr = decodeQrEmbed(qrB64)
+      if (qr) segments.push({ kind: 'qr', qr })
       else segments.push({ kind: 'text', text: match[0] })
     } else if (docB64) {
       const document = decodeDocumentEmbed(docB64)
@@ -262,6 +284,8 @@ export function stripFileEmbeds(text: string): string {
       if (seg.kind === 'text') return seg.text
       if (seg.kind === 'document') return seg.document.filename
       if (seg.kind === 'hours') return hoursEmbedPlainSummary(seg.hours)
+      if (seg.kind === 'map') return mapEmbedPlainSummary(seg.map)
+      if (seg.kind === 'qr') return qrEmbedPlainSummary(seg.qr)
       if (seg.kind === 'social') return socialEmbedPlainSummary(seg.social)
       return seg.file.url
     })
@@ -272,6 +296,17 @@ export function stripFileEmbeds(text: string): string {
 export function chatTextHasSocialEmbed(text: string | null | undefined): boolean {
   if (!text) return false
   return parseChatSegments(text).some((seg) => seg.kind === 'social')
+}
+
+/** Bot bubbles with map embeds should use nearly the full chat column width. */
+export function chatTextHasMapEmbed(text: string | null | undefined): boolean {
+  if (!text) return false
+  return parseChatSegments(text).some((seg) => seg.kind === 'map')
+}
+
+export function chatTextHasQrEmbed(text: string | null | undefined): boolean {
+  if (!text) return false
+  return parseChatSegments(text).some((seg) => seg.kind === 'qr')
 }
 
 export function mimeFromFilename(filename: string): string {

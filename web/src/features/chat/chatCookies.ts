@@ -148,3 +148,40 @@ export function clearChatCookie(name: string, chatbotId?: string | null): null {
   }
   return null
 }
+
+/** Remove every FlowForge chat cookie for this chatbot (cookie + localStorage mirror). */
+export function clearAllChatCookies(chatbotId: string | null | undefined): void {
+  if (!canUseDom()) return
+  let botId: string
+  try {
+    botId = requireChatbotId(chatbotId)
+  } catch {
+    return
+  }
+  const scope = chatCookieScope(botId)
+  if (!scope) return
+  const cookiePrefix = `${COOKIE_PREFIX}${scope}.`
+  const storagePrefix = `${STORAGE_PREFIX}${scope}.`
+
+  try {
+    const parts = document.cookie ? document.cookie.split(';') : []
+    for (const part of parts) {
+      const rawK = part.split('=')[0]?.trim() ?? ''
+      if (!rawK.startsWith(cookiePrefix)) continue
+      document.cookie = `${rawK}=; path=/; max-age=0; SameSite=Lax`
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const toRemove: string[] = []
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i)
+      if (key && key.startsWith(storagePrefix)) toRemove.push(key)
+    }
+    for (const key of toRemove) window.localStorage.removeItem(key)
+  } catch {
+    // ignore
+  }
+}

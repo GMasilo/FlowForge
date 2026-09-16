@@ -1,5 +1,7 @@
 import {
   nodeTypeLabel,
+  chatAnimationFromConfig,
+  chatBubbleFromConfig,
   readDelaySeconds,
   readOnRun,
   readRunAfter,
@@ -39,11 +41,8 @@ import { conversationFilesToMedia } from '@/features/designer/model/conversation
 import { validateQuestionAnswer } from '@/features/designer/model/answerValidation'
 import { captchaAnswersMatch, generateCaptchaPuzzle } from '@/features/designer/model/captchaChallenge'
 import { resolveMediaAttachments, mediaExprMap, stripFileEmbeds } from '@/features/designer/model/chatbotMedia'
-import {
-  nodesBypassedBySkipJump,
-  readSkipToTargetKey,
-  readSkipVariableDefaults,
-} from '@/features/designer/model/skipToStep'
+import { nodesBypassedBySkipJump, readSkipToTargetKey, readSkipVariableDefaults } from '@/features/designer/model/skipToStep'
+import { readRestartClearCookies } from '@/features/designer/model/restartStep'
 import { parseTemplateBindingMap, type TemplateBindingMap } from '@/features/templates/templateModel'
 import { findContinueRootIds } from '@/features/designer/utils/conditionGraph'
 import type { FlowNodeType } from '@/shared/types/database'
@@ -73,6 +72,16 @@ export interface ChatMessage {
   suggestions?: string[]
   /** Action buttons under a bot message (button steps). */
   buttons?: ResolvedButtonOption[]
+  /** Step-level animation overrides (falls back to chatbot branding when omitted). */
+  animation?: {
+    entrance?: 'none' | 'fade' | 'rise' | 'slide'
+    emphasis?: 'pulse'
+  }
+  /** Step-level bubble colour / shading (falls back to chatbot branding when omitted). */
+  bubble?: {
+    color?: string
+    shading?: 'soft' | 'strong'
+  }
 }
 
 export type PreviewPhase =
@@ -122,6 +131,8 @@ export type PreviewPhase =
     }
   | { kind: 'typing' }
   | { kind: 'finished' }
+  /** Host should clear the conversation and start again from the first step. */
+  | { kind: 'restart'; nodeId: string; clearCookies: boolean }
 
 /** In-memory OTP challenge for preview (never exposed in messages/vars). */
 export type PreviewOtpChallenge = {
@@ -437,6 +448,15 @@ export interface PreviewEngineState {
   templates: Record<string, unknown>
   /** Scopes cookie()/setCookie()/clearCookie() to this chatbot. */
   chatbotId?: string | null
+  /** Seed globals used when restarting (answers / setVar from this run are not included). */
+  globalDefaults?: Record<string, unknown>
+  /**
+   * When true, Restart steps are skipped until the visitor hits a waiting step
+   * (prevents Message → Restart auto-loops after a restart / cold start).
+   */
+  suppressRestart?: boolean
+  /** Node ids visited during the current auto-advance streak (cycle guard). */
+  autoAdvanceSeenIds?: string[]
 }
 
 function appendRun(
@@ -575,6 +595,9 @@ export function createInitialPreviewState(
     mediaCatalog,
     templates,
     chatbotId: chatbotId?.trim() || null,
+    globalDefaults: { ...globalDefaults },
+    suppressRestart: true,
+    autoAdvanceSeenIds: [],
   }
 }
 
@@ -1061,6 +1084,15 @@ function skipDueToRunAfter(
   return resolveAfterStep(next, edges, nodes, skipTarget ?? nextNodeId(edges, node.id))
 }
 
+/** Clear auto-advance bookkeeping when the flow pauses for the visitor. */
+function withInteractionGate(state: PreviewEngineState): PreviewEngineState {
+  return {
+    ...state,
+    suppressRestart: false,
+    autoAdvanceSeenIds: [],
+  }
+}
+
 /**
  * Advance one automated tick. Returns updated state.
  * For questions, transitions to waiting_input and does not auto-advance further.
@@ -1076,7 +1108,8 @@ export function tickPreview(
     state.phase.kind === 'waiting_input' ||
     state.phase.kind === 'waiting_suggestion' ||
     state.phase.kind === 'waiting_button' ||
-    state.phase.kind === 'finished'
+    state.phase.kind === 'finished' ||
+    state.phase.kind === 'restart'
   ) {
     return state
   }
@@ -1086,11 +1119,36 @@ export function tickPreview(
     return { ...state, phase: { kind: 'finished' }, currentId: null }
   }
 
-  if (!shouldRunAfterPredecessor(node.config, previousRunStatus(state))) {
-    return skipDueToRunAfter(state, node, edges, nodes)
+  const seen = state.autoAdvanceSeenIds ?? []
+  if (seen.includes(node.id)) {
+    return {
+      ...state,
+      messages: [
+        ...state.messages,
+        msg(
+          'system',
+          `Stopped: step "${node.key}" was reached again without waiting for input (possible Skip to / Restart loop).`,
+        ),
+      ],
+      currentId: null,
+      phase: { kind: 'finished' },
+      autoAdvanceSeenIds: [],
+    }
   }
 
-  let next = applyOnRunExpressions({ ...state }, node)
+  if (!shouldRunAfterPredecessor(node.config, previousRunStatus(state))) {
+    return skipDueToRunAfter(
+      { ...state, autoAdvanceSeenIds: [...seen, node.id] },
+      node,
+      edges,
+      nodes,
+    )
+  }
+
+  let next = applyOnRunExpressions(
+    { ...state, autoAdvanceSeenIds: [...seen, node.id] },
+    node,
+  )
 
   if (node.type === 'message') {
     const bindings = bindingsOf(node.config)
@@ -1108,6 +1166,8 @@ export function tickPreview(
         msg('bot', text || (media?.length ? '' : '?'), {
           media,
           suggestions: suggestions.length ? suggestions : undefined,
+          animation: chatAnimationFromConfig(node.config),
+          bubble: chatBubbleFromConfig(node.config),
         }),
       ],
       stepOutputs: { ...next.stepOutputs, [node.key]: { response: stored } },
@@ -1119,7 +1179,7 @@ export function tickPreview(
       savedAs: savedAsStep(node.key),
     })
     if (suggestions.length) {
-      return {
+      return withInteractionGate({
         ...next,
         currentId: node.id,
         phase: {
@@ -1128,7 +1188,7 @@ export function tickPreview(
           suggestions,
           startedAt: new Date().toISOString(),
         },
-      }
+      })
     }
     return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
   }
@@ -1147,6 +1207,8 @@ export function tickPreview(
         ...next.messages,
         msg('bot', text || (buttons.length ? '' : 'Choose an action'), {
           buttons,
+          animation: chatAnimationFromConfig(node.config),
+          bubble: chatBubbleFromConfig(node.config),
         }),
       ],
       stepOutputs: { ...next.stepOutputs, [node.key]: { response: stripFileEmbeds(text) } },
@@ -1157,7 +1219,7 @@ export function tickPreview(
       outputs: { response: stripFileEmbeds(text) },
       savedAs: savedAsStep(node.key),
     })
-    return {
+    return withInteractionGate({
       ...next,
       currentId: node.id,
       phase: {
@@ -1166,7 +1228,7 @@ export function tickPreview(
         buttons,
         startedAt: new Date().toISOString(),
       },
-    }
+    })
   }
 
   if (node.type === 'question') {
@@ -1258,10 +1320,17 @@ export function tickPreview(
       captchaChallenge = null
     }
 
-    return {
+    return withInteractionGate({
       ...next,
       captchaChallenge,
-      messages: [...next.messages, msg('bot', prompt || (media?.length ? '' : '?'), { media })],
+      messages: [
+        ...next.messages,
+        msg('bot', prompt || (media?.length ? '' : '?'), {
+          media,
+          animation: chatAnimationFromConfig(node.config),
+          bubble: chatBubbleFromConfig(node.config),
+        }),
+      ],
       phase: {
         kind: 'waiting_input',
         nodeId: node.id,
@@ -1273,7 +1342,7 @@ export function tickPreview(
         ...(payment ? { payment } : {}),
         ...(captchaPrompt ? { captchaPrompt } : {}),
       },
-    }
+    })
   }
 
   if (node.type === 'set_variable') {
@@ -1586,9 +1655,16 @@ export function tickPreview(
     const prompt = String(node.config.prompt ?? 'Sign in to continue')
     const text = interpolateChat(prompt, next.vars, next.stepOutputs, next.media, next.templates, bindingsOf(node.config))
     const media = attachmentsFor(node, next.mediaCatalog)
-    return {
+    return withInteractionGate({
       ...next,
-      messages: [...next.messages, msg('bot', text, { media })],
+      messages: [
+        ...next.messages,
+        msg('bot', text, {
+          media,
+          animation: chatAnimationFromConfig(node.config),
+          bubble: chatBubbleFromConfig(node.config),
+        }),
+      ],
       currentId: node.id,
       phase: {
         kind: 'waiting_input',
@@ -1597,7 +1673,7 @@ export function tickPreview(
         answerType: 'sign_in',
         startedAt: new Date().toISOString(),
       },
-    }
+    })
   }
 
   if (node.type === 'handoff') {
@@ -1610,9 +1686,16 @@ export function tickPreview(
       outputs: { message: text, escalated: true },
       savedAs: null,
     })
-    return {
+    return withInteractionGate({
       ...next,
-      messages: [...next.messages, msg('bot', text, { media })],
+      messages: [
+        ...next.messages,
+        msg('bot', text, {
+          media,
+          animation: chatAnimationFromConfig(node.config),
+          bubble: chatBubbleFromConfig(node.config),
+        }),
+      ],
       currentId: node.id,
       phase: {
         kind: 'waiting_handoff',
@@ -1620,7 +1703,7 @@ export function tickPreview(
         message: text,
         startedAt: new Date().toISOString(),
       },
-    }
+    })
   }
 
   if (node.type === 'end') {
@@ -1635,7 +1718,14 @@ export function tickPreview(
     })
     return {
       ...next,
-      messages: [...next.messages, msg('bot', text, { media })],
+      messages: [
+        ...next.messages,
+        msg('bot', text, {
+          media,
+          animation: chatAnimationFromConfig(node.config),
+          bubble: chatBubbleFromConfig(node.config),
+        }),
+      ],
       currentId: null,
       loopStack: [],
       phase: { kind: 'finished' },
@@ -1674,15 +1764,20 @@ export function tickPreview(
         for (const row of defaults) {
           const key = row.variableKey.trim()
           if (!key) continue
-          const value = resolveValue(
-            row.value,
-            vars,
-            next.stepOutputs,
-            next.media,
-            next.templates,
-            bindingsOf(node.config),
-            next.chatbotId,
-          )
+          const trimmed = row.value.trim()
+          // Blank inspector value → null (matches “leave blank for null”).
+          const value =
+            trimmed === ''
+              ? null
+              : resolveValue(
+                  row.value,
+                  vars,
+                  next.stepOutputs,
+                  next.media,
+                  next.templates,
+                  bindingsOf(node.config),
+                  next.chatbotId,
+                )
           vars[key] = value
           applied[key] = value
         }
@@ -1703,6 +1798,39 @@ export function tickPreview(
       }
     }
     return resolveAfterStep(next, edges, nodes, skipTarget ?? nextNodeId(edges, node.id))
+  }
+
+  if (node.type === 'restart') {
+    const clearCookies = readRestartClearCookies(node.config)
+    if (next.suppressRestart) {
+      // Treat as Succeeded so the next step's default "run after succeeded" still fires.
+      // (Status Skipped would cascade-skip everything after a leading Restart.)
+      next = appendRun(next, node, {
+        status: 'Succeeded',
+        inputs: { clearCookies },
+        processed: {
+          restart: false,
+          suppressed: true,
+          reason: 'suppressed_until_interaction',
+          note: 'Restart is ignored until the visitor answers a question or clicks a button',
+        },
+        outputs: { restarted: false, suppressed: true },
+        savedAs: null,
+      })
+      return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
+    }
+    next = appendRun(next, node, {
+      inputs: { clearCookies },
+      processed: { restart: true },
+      outputs: { restarted: true, clearCookies },
+      savedAs: null,
+    })
+    return {
+      ...next,
+      currentId: node.id,
+      phase: { kind: 'restart', nodeId: node.id, clearCookies },
+      autoAdvanceSeenIds: [],
+    }
   }
 
   return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
@@ -1812,6 +1940,11 @@ export type ButtonInteractSideEffect =
       value: string
       nodeKey?: string
     }
+  | {
+      type: 'restart_chat'
+      nodeKey?: string
+      clearCookies: boolean
+    }
 
 export function handlePreviewButtonInteract(
   state: PreviewEngineState,
@@ -1889,6 +2022,23 @@ export function handlePreviewButtonInteract(
           value: fromPhase.value,
           nodeKey: node?.key,
         })
+      }
+      continue
+    }
+    if (lst.action === 'restart') {
+      advanced = true
+      sideEffects.push({
+        type: 'restart_chat',
+        nodeKey: node?.key,
+        clearCookies: false,
+      })
+      current = {
+        ...current,
+        phase: {
+          kind: 'restart',
+          nodeId: node?.id ?? phase.nodeId,
+          clearCookies: false,
+        },
       }
       continue
     }

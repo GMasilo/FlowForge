@@ -231,3 +231,107 @@ export function upsertSkipVariableDefault(
   current.push({ variableKey: key, value })
   return current.sort((a, b) => a.variableKey.localeCompare(b.variableKey))
 }
+
+/**
+ * Ensure every referenced missing key has a variableDefaults row (empty = null at runtime).
+ * Drops rows for keys that are no longer missing/referenced for this jump.
+ */
+export function syncSkipVariableDefaults(
+  config: Record<string, unknown>,
+  referencedMissingKeys: string[],
+): SkipVariableDefault[] {
+  const existing = readSkipVariableDefaults(config)
+  const byKey = new Map(existing.map((row) => [row.variableKey, row.value]))
+  const want = new Set(referencedMissingKeys.map((k) => k.trim()).filter(Boolean))
+  const next: SkipVariableDefault[] = []
+  for (const key of want) {
+    next.push({ variableKey: key, value: byKey.get(key) ?? '' })
+  }
+  // Keep manually set defaults for keys still in config but not currently listed? Drop them —
+  // they would still apply at runtime but confuse the inspector. Prefer only current missing.
+  return next.sort((a, b) => a.variableKey.localeCompare(b.variableKey))
+}
+
+/** True when target is reachable from source following graph edges. */
+export function canReachNode(
+  fromId: string,
+  targetId: string,
+  nodes: DesignerNode[],
+  edges: DesignerEdge[],
+): boolean {
+  if (!fromId || !targetId) return false
+  if (fromId === targetId) return true
+  const outgoing = new Map<string, string[]>()
+  for (const n of nodes) outgoing.set(n.id, [])
+  for (const e of edges) outgoing.get(e.source)?.push(e.target)
+  const q = [fromId]
+  const seen = new Set<string>()
+  while (q.length) {
+    const cur = q.shift()!
+    if (seen.has(cur)) continue
+    seen.add(cur)
+    if (cur === targetId) return true
+    for (const next of outgoing.get(cur) ?? []) q.push(next)
+  }
+  return false
+}
+
+/**
+ * Variables a skip-capable step makes available when it jumps (explicit defaults +
+ * outputs of bypassed steps, which runtime nulls). Matches previewRuntime behaviour.
+ */
+export function variablesProvidedBySkipJump(
+  source: DesignerNode,
+  nodes: DesignerNode[],
+  edges: DesignerEdge[],
+): string[] {
+  const keys = new Set<string>()
+  for (const row of readSkipVariableDefaults(source.config)) {
+    if (row.variableKey) keys.add(row.variableKey)
+  }
+
+  const byKey = new Map(nodes.map((n) => [n.key, n]))
+  for (const targetKey of collectSkipTargetKeys(source)) {
+    if (!targetKey || targetKey === source.key) continue
+    const target = byKey.get(targetKey)
+    if (!target) continue
+    if (!canReachNode(source.id, target.id, nodes, edges)) continue
+
+    const bypassed = nodesBypassedBySkipJump(source.id, target.id, nodes, edges)
+    for (const step of bypassed) {
+      for (const key of getStepOutputVariables(step)) keys.add(key)
+    }
+
+    // Run-after skip also skips the source step itself.
+    if (String(source.config.runAfterSkipTo ?? '').trim() === targetKey) {
+      for (const key of getStepOutputVariables(source)) {
+        // Avoid counting this source's own skip defaults twice; still include real outputs.
+        if (source.type === 'skip_to') continue
+        keys.add(key)
+      }
+    }
+  }
+  return [...keys]
+}
+
+/** Step keys whose outputs are marked skipped when this source jumps. */
+export function stepsSkippedByJump(
+  source: DesignerNode,
+  nodes: DesignerNode[],
+  edges: DesignerEdge[],
+): string[] {
+  const keys = new Set<string>()
+  const byKey = new Map(nodes.map((n) => [n.key, n]))
+  for (const targetKey of collectSkipTargetKeys(source)) {
+    if (!targetKey || targetKey === source.key) continue
+    const target = byKey.get(targetKey)
+    if (!target || !canReachNode(source.id, target.id, nodes, edges)) continue
+    for (const step of nodesBypassedBySkipJump(source.id, target.id, nodes, edges)) {
+      keys.add(step.key)
+    }
+    if (String(source.config.runAfterSkipTo ?? '').trim() === targetKey) {
+      keys.add(source.key)
+    }
+  }
+  return [...keys]
+}

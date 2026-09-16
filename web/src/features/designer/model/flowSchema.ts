@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { FlowNodeType, QuestionAnswerType, VariableType } from '@/shared/types/database'
 import { collectPathRefs } from '@/features/designer/preview/expressionEval'
 import { buttonAssignedVariableKeys } from '@/features/designer/model/buttonStep'
+import { normalizeBrandAccent } from '@/shared/lib/instanceBranding'
 
 /** Predecessor outcomes that can gate a step. */
 export const RUN_AFTER_KEYS = ['succeeded', 'failed', 'skipped', 'timedOut'] as const
@@ -43,6 +44,61 @@ export function readDelaySeconds(config: Record<string, unknown> | undefined | n
   return n
 }
 
+/** Inherit chatbot branding unless overridden on the step. */
+export type StepEnterAnimation = 'default' | 'none' | 'fade' | 'rise' | 'slide'
+export type StepEmphasis = 'none' | 'pulse'
+export type StepBubbleShading = 'none' | 'soft' | 'strong'
+
+export function readEnterAnimation(
+  config: Record<string, unknown> | undefined | null,
+): StepEnterAnimation {
+  const v = String(config?.enterAnimation ?? 'default')
+  if (v === 'none' || v === 'fade' || v === 'rise' || v === 'slide' || v === 'default') return v
+  return 'default'
+}
+
+export function readEmphasis(config: Record<string, unknown> | undefined | null): StepEmphasis {
+  return config?.emphasis === 'pulse' ? 'pulse' : 'none'
+}
+
+export function readBubbleColor(config: Record<string, unknown> | undefined | null): string | null {
+  return normalizeBrandAccent(typeof config?.bubbleColor === 'string' ? config.bubbleColor : null)
+}
+
+export function readBubbleShading(
+  config: Record<string, unknown> | undefined | null,
+): StepBubbleShading {
+  const v = config?.bubbleShading
+  if (v === 'soft' || v === 'strong') return v
+  return 'none'
+}
+
+/** Animation hints attached to bot chat messages from step config. */
+export function chatAnimationFromConfig(
+  config: Record<string, unknown> | undefined | null,
+): { entrance?: 'none' | 'fade' | 'rise' | 'slide'; emphasis?: 'pulse' } | undefined {
+  const enter = readEnterAnimation(config)
+  const emphasis = readEmphasis(config)
+  if (enter === 'default' && emphasis === 'none') return undefined
+  return {
+    ...(enter !== 'default' ? { entrance: enter } : {}),
+    ...(emphasis === 'pulse' ? { emphasis: 'pulse' as const } : {}),
+  }
+}
+
+/** Bubble colour / shading attached to bot chat messages from step config. */
+export function chatBubbleFromConfig(
+  config: Record<string, unknown> | undefined | null,
+): { color?: string; shading?: 'soft' | 'strong' } | undefined {
+  const color = readBubbleColor(config)
+  const shading = readBubbleShading(config)
+  if (!color && shading === 'none') return undefined
+  return {
+    ...(color ? { color } : {}),
+    ...(shading !== 'none' ? { shading } : {}),
+  }
+}
+
 /** 0 = no timeout (unlimited). Applies to HTTP, email, and optional questions. */
 export function readTimeoutSeconds(config: Record<string, unknown> | undefined | null): number {
   const n = Number(config?.timeoutSeconds ?? 0)
@@ -59,10 +115,23 @@ export function defaultSharedSettings(): {
   runAfter: RunAfterConfig
   delaySeconds: number
   timeoutSeconds: number
+  enterAnimation: StepEnterAnimation
+  emphasis: StepEmphasis
+  bubbleColor: string
+  bubbleShading: StepBubbleShading
   /** Silent expressions evaluated when the step runs (not shown in chat). */
   onRun: string
 } {
-  return { runAfter: { ...DEFAULT_RUN_AFTER }, delaySeconds: 0, timeoutSeconds: 0, onRun: '' }
+  return {
+    runAfter: { ...DEFAULT_RUN_AFTER },
+    delaySeconds: 0,
+    timeoutSeconds: 0,
+    enterAnimation: 'default',
+    emphasis: 'none',
+    bubbleColor: '',
+    bubbleShading: 'none',
+    onRun: '',
+  }
 }
 
 /** True when delay, timeout, or run-after differs from defaults. */
@@ -77,6 +146,10 @@ export function hasCustomStepSettingsForNode(
 ): boolean {
   if (readDelaySeconds(config) > 0) return true
   if (readTimeoutSeconds(config) > 0) return true
+  if (readEnterAnimation(config) !== 'default') return true
+  if (readEmphasis(config) !== 'none') return true
+  if (readBubbleColor(config)) return true
+  if (readBubbleShading(config) !== 'none') return true
   if (String(config?.runAfterSkipTo ?? '').trim()) return true
   if (String(config?.onRun ?? '').trim()) return true
   if (isFlowStart) return false
@@ -98,6 +171,12 @@ export function stepSettingsSummary(config: Record<string, unknown> | undefined 
   if (delay > 0) parts.push(`Delay ${delay}s`)
   const timeout = readTimeoutSeconds(config)
   if (timeout > 0) parts.push(`Timeout ${timeout}s`)
+  const enter = readEnterAnimation(config)
+  if (enter !== 'default') parts.push(`Enter ${enter}`)
+  if (readEmphasis(config) === 'pulse') parts.push('Pulse')
+  if (readBubbleColor(config)) parts.push('Bubble colour')
+  const shading = readBubbleShading(config)
+  if (shading !== 'none') parts.push(`Shade ${shading}`)
   const skipTo = readRunAfterSkipTo(config)
   if (skipTo) parts.push(`Skip to ${skipTo}`)
   if (readOnRun(config)) parts.push('On run')
@@ -274,6 +353,7 @@ export const flowNodeTypes = [
   'sign_in',
   'button',
   'skip_to',
+  'restart',
   'end',
 ] as const satisfies readonly FlowNodeType[]
 
@@ -301,7 +381,7 @@ export const buttonOptionSchema = z.object({
         id: z.string(),
         event: z.enum(['click', 'hover', 'dblclick', 'focus', 'blur']).default('click'),
         action: z
-          .enum(['continue', 'emit_event', 'run_function', 'skip_to'])
+          .enum(['continue', 'emit_event', 'run_function', 'skip_to', 'restart'])
           .default('continue'),
         eventName: z.string().optional().default('button_click'),
         eventPayload: z.string().optional().default(''),
@@ -1188,6 +1268,12 @@ export const skipToConfigSchema = z.object({
   variableDefaults: z.array(skipToVariableDefaultSchema).default([]),
 })
 
+/** Clear the conversation and start again from the first step. */
+export const restartConfigSchema = z.object({
+  /** When true, also clear FlowForge chat cookies for this chatbot. */
+  clearCookies: z.boolean().optional().default(false),
+})
+
 export const CONDITION_OPERATOR_OPTIONS: Array<{
   value: z.infer<typeof conditionConfigSchema>['operator']
   label: string
@@ -1664,6 +1750,8 @@ export function defaultConfig(type: FlowNodeType): Record<string, unknown> {
         ...skipToConfigSchema.parse({ targetNodeKey: '', variableDefaults: [] }),
         ...shared,
       }
+    case 'restart':
+      return { ...restartConfigSchema.parse({ clearCookies: false }), ...shared }
     case 'end':
       return { ...endConfigSchema.parse({}), ...shared }
   }
@@ -1705,6 +1793,8 @@ export function nodeTypeLabel(type: FlowNodeType): string {
       return 'Button'
     case 'skip_to':
       return 'Skip to step'
+    case 'restart':
+      return 'Restart chat'
     case 'end':
       return 'End'
   }

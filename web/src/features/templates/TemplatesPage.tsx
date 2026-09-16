@@ -1,26 +1,41 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
   ArrowUpDown,
+  Award,
+  Bell,
+  CalendarCheck,
   Check,
+  CheckSquare,
   Clock3,
   Copy,
+  DollarSign,
   Download,
   FileDown,
   FilePenLine,
   KeyRound,
   LayoutList,
   Mail,
+  MapPin,
+  Map as MapIcon,
+  Megaphone,
   MessageSquare,
+  QrCode,
   Receipt,
   Scale,
   Search,
+  ShieldCheck,
   ShoppingCart,
   CircleHelp,
+  Smartphone,
+  Ticket,
   Trash2,
   Upload,
+  Users,
+  Webhook,
+  ClipboardList,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
@@ -32,7 +47,6 @@ import { supabase } from '@/shared/lib/supabase'
 import { canEdit, type ChatbotTemplate } from '@/shared/types/database'
 import { useTemplateActions } from '@/features/templates/useTemplateActions'
 import {
-  getTemplatePreview,
   sortTemplates,
   readTemplateFromFile,
 } from '@/features/templates/templateHelpers'
@@ -44,6 +58,7 @@ import {
   updateChatbotTemplate,
 } from '@/features/templates/templateApi'
 import { TemplateContentEditor } from '@/features/templates/TemplateContentEditor'
+import { TemplatePreview } from '@/features/templates/TemplatePreview'
 import {
   emptyTemplateContent,
   insertSnippet,
@@ -53,10 +68,14 @@ import {
   parseTemplateContent,
   starterTemplateContent,
   templateInputsOf,
+  allTemplateKindTags,
+  TEMPLATE_KIND_CATEGORIES,
+  TEMPLATE_KIND_CATEGORY_META,
   TEMPLATE_KIND_META,
   TEMPLATE_KINDS,
   type TemplateContent,
   type TemplateKind,
+  type TemplateKindCategory,
 } from '@/features/templates/templateModel'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
@@ -64,6 +83,14 @@ import { FieldError } from '@/shared/ui/field-error'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Select } from '@/shared/ui/select'
+import {
+  PaginationBar,
+  SearchField,
+  clampPage,
+  matchesQuery,
+  pageCountFor,
+  slicePage,
+} from '@/shared/ui/list-controls'
 import { cn } from '@/shared/lib/utils'
 
 const KIND_ICONS: Record<TemplateKind, typeof Mail> = {
@@ -78,6 +105,21 @@ const KIND_ICONS: Record<TemplateKind, typeof Mail> = {
   document: FileDown,
   agreement: FilePenLine,
   sso: KeyRound,
+  appointment: CalendarCheck,
+  location: MapPin,
+  map: MapIcon,
+  qr: QrCode,
+  team: Users,
+  pricing: DollarSign,
+  survey: ClipboardList,
+  announcement: Megaphone,
+  sms: Smartphone,
+  push: Bell,
+  ticket: Ticket,
+  certificate: Award,
+  checklist: CheckSquare,
+  consent: ShieldCheck,
+  webhook: Webhook,
 }
 
 type EditorState = {
@@ -87,11 +129,6 @@ type EditorState = {
   key: string
   description: string
   content: TemplateContent
-}
-
-function snippetPreview(row: ChatbotTemplate): string {
-  if (!isTemplateKind(row.kind)) return ''
-  return getTemplatePreview(row, 120)
 }
 
 function CopyChip({ value }: { value: string }) {
@@ -131,7 +168,40 @@ export function TemplatesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [editor, setEditor] = useState<EditorState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [createSearch, setCreateSearch] = useState('')
+  const [createCategory, setCreateCategory] = useState<'all' | TemplateKindCategory>('all')
+  const [createTag, setCreateTag] = useState('')
+  const [createPage, setCreatePage] = useState(1)
+  const [createPageSize, setCreatePageSize] = useState(8)
+  const [listPage, setListPage] = useState(1)
+  const [listPageSize, setListPageSize] = useState(12)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const createKindTags = useMemo(() => allTemplateKindTags(), [])
+
+  const filteredCreateKinds = useMemo(() => {
+    return TEMPLATE_KINDS.filter((kind) => {
+      const meta = TEMPLATE_KIND_META[kind]
+      if (createCategory !== 'all' && meta.category !== createCategory) return false
+      if (createTag && !meta.tags.includes(createTag)) return false
+      return matchesQuery(createSearch, [meta.label, meta.hint, kind, ...meta.tags, TEMPLATE_KIND_CATEGORY_META[meta.category].label])
+    })
+  }, [createSearch, createCategory, createTag])
+
+  useEffect(() => {
+    setCreatePage(1)
+  }, [createSearch, createCategory, createTag])
+
+  const createPageCount = pageCountFor(filteredCreateKinds.length, createPageSize)
+  const safeCreatePage = clampPage(createPage, createPageCount)
+  useEffect(() => {
+    if (createPage !== safeCreatePage) setCreatePage(safeCreatePage)
+  }, [createPage, safeCreatePage])
+
+  const pagedCreateKinds = useMemo(
+    () => slicePage(filteredCreateKinds, safeCreatePage, createPageSize),
+    [filteredCreateKinds, safeCreatePage, createPageSize],
+  )
 
   const templateActions = useTemplateActions(chatbotId)
 
@@ -189,11 +259,30 @@ export function TemplatesPage() {
       return (
         row.name.toLowerCase().includes(q) ||
         row.key.toLowerCase().includes(q) ||
-        (row.description ?? '').toLowerCase().includes(q)
+        (row.description ?? '').toLowerCase().includes(q) ||
+        (isTemplateKind(row.kind)
+          ? TEMPLATE_KIND_META[row.kind].tags.some((tag) => tag.includes(q)) ||
+            TEMPLATE_KIND_META[row.kind].label.toLowerCase().includes(q)
+          : false)
       )
     })
     return sortTemplates(rows, sortBy, sortOrder)
   }, [templates.data, kindFilter, query, sortBy, sortOrder])
+
+  useEffect(() => {
+    setListPage(1)
+  }, [query, kindFilter, sortBy, sortOrder])
+
+  const listPageCount = pageCountFor(filtered.length, listPageSize)
+  const safeListPage = clampPage(listPage, listPageCount)
+  useEffect(() => {
+    if (listPage !== safeListPage) setListPage(safeListPage)
+  }, [listPage, safeListPage])
+
+  const pagedTemplates = useMemo(
+    () => slicePage(filtered, safeListPage, listPageSize),
+    [filtered, safeListPage, listPageSize],
+  )
 
   const save = useMutation({
     mutationFn: async (draft: EditorState) => {
@@ -431,15 +520,24 @@ export function TemplatesPage() {
                 onChange={(e) => setEditor((prev) => (prev ? { ...prev, description: e.target.value } : prev))}
               />
             </div>
-            <TemplateContentEditor
-              kind={editor.kind}
-              content={editor.content}
-              suggestions={suggestions}
-              readOnly={!editable}
-              media={media}
-              onChange={(content) => setEditor((prev) => (prev ? { ...prev, content } : prev))}
-            />
-            {error ? <FieldError>{error}</FieldError> : null}
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+              <TemplateContentEditor
+                kind={editor.kind}
+                content={editor.content}
+                suggestions={suggestions}
+                readOnly={!editable}
+                media={media}
+                onChange={(content) => setEditor((prev) => (prev ? { ...prev, content } : prev))}
+              />
+              <div className="xl:sticky xl:top-4 xl:self-start">
+                <TemplatePreview
+                  kind={editor.kind}
+                  content={editor.content}
+                  name={editor.name}
+                  media={media}
+                />
+              </div>
+            </div>            {error ? <FieldError>{error}</FieldError> : null}
             {editable ? (
               <div className="flex flex-wrap gap-2">
                 <Button type="submit" disabled={save.isPending}>
@@ -471,39 +569,141 @@ export function TemplatesPage() {
         <>
           {editable ? (
             <Card className="space-y-3">
-              <div>
-                <h2 className="text-sm font-semibold text-[var(--color-ink)]">Create a template</h2>
-                <p className="text-xs text-[var(--color-ink-muted)]">Start blank or with sample content.</p>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-[var(--color-ink)]">Create a template</h2>
+                  <p className="text-xs text-[var(--color-ink-muted)]">
+                    Start blank or with sample content.
+                    {filteredCreateKinds.length !== TEMPLATE_KINDS.length
+                      ? ` Showing ${filteredCreateKinds.length} of ${TEMPLATE_KINDS.length} types.`
+                      : null}
+                  </p>
+                </div>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {TEMPLATE_KINDS.map((kind) => {
-                  const Icon = KIND_ICONS[kind]
-                  return (
-                    <div
-                      key={kind}
-                      className="flex flex-col gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-3"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <div>
-                          <p className="text-sm font-medium text-[var(--color-ink)]">{TEMPLATE_KIND_META[kind].label}</p>
-                          <p className="text-[11px] text-[var(--color-ink-muted)]">{TEMPLATE_KIND_META[kind].hint}</p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <SearchField
+                  id="template-create-search"
+                  value={createSearch}
+                  onChange={setCreateSearch}
+                  placeholder="Search types…"
+                  className="sm:max-w-xs"
+                />
+                <Select
+                  aria-label="Filter by category"
+                  className="h-10 w-full sm:w-44"
+                  value={createCategory}
+                  onChange={(e) => setCreateCategory(e.target.value as 'all' | TemplateKindCategory)}
+                >
+                  <option value="all">All categories</option>
+                  {TEMPLATE_KIND_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {TEMPLATE_KIND_CATEGORY_META[cat].label}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  aria-label="Filter by tag"
+                  className="h-10 w-full sm:w-44"
+                  value={createTag}
+                  onChange={(e) => setCreateTag(e.target.value)}
+                >
+                  <option value="">All tags</option>
+                  {createKindTags.map((tag) => (
+                    <option key={tag} value={tag}>
+                      {tag}
+                    </option>
+                  ))}
+                </Select>
+                {createSearch || createCategory !== 'all' || createTag ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setCreateSearch('')
+                      setCreateCategory('all')
+                      setCreateTag('')
+                    }}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+              {createCategory !== 'all' ? (
+                <p className="text-[11px] text-[var(--color-ink-muted)]">
+                  {TEMPLATE_KIND_CATEGORY_META[createCategory].hint}
+                </p>
+              ) : null}
+              {!filteredCreateKinds.length ? (
+                <p className="rounded-xl border border-dashed border-[var(--color-border)] px-3 py-6 text-center text-sm text-[var(--color-ink-muted)]">
+                  No template types match these filters.
+                </p>
+              ) : (
+                <>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    {pagedCreateKinds.map((kind) => {
+                      const Icon = KIND_ICONS[kind]
+                      const meta = TEMPLATE_KIND_META[kind]
+                      return (
+                        <div
+                          key={kind}
+                          className="flex flex-col gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-3"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
+                              <Icon className="h-4 w-4" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-[var(--color-ink)]">{meta.label}</p>
+                              <p className="text-[11px] text-[var(--color-ink-muted)]">{meta.hint}</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            <span className="rounded-md bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-ink-muted)]">
+                              {TEMPLATE_KIND_CATEGORY_META[meta.category].label}
+                            </span>
+                            {meta.tags.slice(0, 2).map((tag) => (
+                              <button
+                                key={tag}
+                                type="button"
+                                className={cn(
+                                  'rounded-md px-1.5 py-0.5 text-[10px] font-medium transition',
+                                  createTag === tag
+                                    ? 'bg-[var(--color-accent)] text-[var(--color-accent-fg)]'
+                                    : 'bg-[var(--color-accent-soft)]/70 text-[var(--color-accent)] hover:opacity-90',
+                                )}
+                                onClick={() => setCreateTag((prev) => (prev === tag ? '' : tag))}
+                              >
+                                {tag}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="mt-auto flex gap-1.5">
+                            <Button size="sm" variant="secondary" onClick={() => startCreate(kind, false)}>
+                              Blank
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => startCreate(kind, true)}>
+                              Sample
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                      <div className="mt-auto flex gap-1.5">
-                        <Button size="sm" variant="secondary" onClick={() => startCreate(kind, false)}>
-                          Blank
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => startCreate(kind, true)}>
-                          Sample
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+                      )
+                    })}
+                  </div>
+                  <PaginationBar
+                    page={safeCreatePage}
+                    pageSize={createPageSize}
+                    total={filteredCreateKinds.length}
+                    label="types"
+                    pageSizeOptions={[8, 12, 24]}
+                    onPageChange={setCreatePage}
+                    onPageSizeChange={(n) => {
+                      setCreatePageSize(n)
+                      setCreatePage(1)
+                    }}
+                  />
+                </>
+              )}
             </Card>
           ) : null}
 
@@ -599,8 +799,9 @@ export function TemplatesPage() {
               </p>
             </Card>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {filtered.map((row) => {
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {pagedTemplates.map((row) => {
                 const Icon = KIND_ICONS[row.kind]
                 const isSelected = selected.has(row.id)
                 return (
@@ -642,9 +843,24 @@ export function TemplatesPage() {
                         </span>
                       </div>
                       <h3 className="mt-3 text-sm font-semibold text-[var(--color-ink)]">{row.name}</h3>
-                      <p className="mt-1 line-clamp-2 text-xs text-[var(--color-ink-muted)]">
-                        {snippetPreview(row) || row.description || 'Empty'}
-                      </p>
+                      {row.description?.trim() ? (
+                        <p className="mt-1 line-clamp-1 text-xs text-[var(--color-ink-muted)]">
+                          {row.description.trim()}
+                        </p>
+                      ) : null}
+                      <div className="pointer-events-none mt-3">
+                        {isTemplateKind(row.kind) ? (
+                          <TemplatePreview
+                            kind={row.kind}
+                            content={parseTemplateContent(row.kind, row.content)}
+                            name={row.name}
+                            media={media}
+                            compact
+                          />
+                        ) : (
+                          <p className="text-xs text-[var(--color-ink-muted)]">Unsupported template type</p>
+                        )}
+                      </div>
                     </div>
                     <div className="relative mt-3 flex flex-wrap items-center gap-2">
                       <CopyChip value={insertSnippet(row.key, row.kind)} />
@@ -678,6 +894,18 @@ export function TemplatesPage() {
                   </div>
                 )
               })}
+              </div>
+              <PaginationBar
+                page={safeListPage}
+                pageSize={listPageSize}
+                total={filtered.length}
+                label="templates"
+                onPageChange={setListPage}
+                onPageSizeChange={(n) => {
+                  setListPageSize(n)
+                  setListPage(1)
+                }}
+              />
             </div>
           )}
         </>
