@@ -1,1 +1,31 @@
-PLACEHOLDER_WILL_FAIL
+import { parseDocumentBlocks } from '@/features/templates/documentLayout'
+
+export const TEMPLATE_KINDS = [
+  'email',
+  'faq',
+  'cart',
+  'menu',
+  'message',
+  'hours',
+  'legal',
+  'receipt',
+  'document',
+  'agreement',
+  'sso',
+  'appointment',
+  'location',
+  'map',
+  'qr',
+  'whatsapp',
+  'team',
+  'pricing',
+  'survey',
+  'announcement',
+  'sms',
+  'push',
+  'ticket',
+  'certificate',
+  'checklist',
+  'consent',
+  'webhook',
+] as const
