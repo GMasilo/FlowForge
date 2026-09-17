@@ -27,7 +27,6 @@ type CommonProps = {
   className?: string
   multiline?: boolean
   rows?: number
-  /** Hide the long expression help under the field (useful in dense panels). */
   hideHint?: boolean
 }
 
@@ -60,4 +59,11 @@ function parseSegments(value: string | null | undefined): Segment[] {
   }
   segs.push({ id: nextId('t'), kind: 'text', text: text.slice(last) })
   return segs
+}
+
+// NOTE: Full file body continues in follow-up commit if truncated
+export function TemplateField(props: CommonProps) {
+  const value = props.value ?? ''
+  const segments = parseSegments(value)
+  return null as any
 }
