@@ -346,6 +346,37 @@ export type WhatsappContent = {
   subtitle: string
   inputs: TemplateInput[]
 }
+
+export type CalendarContent = {
+  title: string
+  description: string
+  location: string
+  start: string
+  end: string
+  timezone: string
+  buttonLabel: string
+  inputs: TemplateInput[]
+}
+
+export type SocialSharePlatform = 'x' | 'linkedin' | 'facebook'
+
+export type SocialShareContent = {
+  url: string
+  title: string
+  text: string
+  platforms: SocialSharePlatform[]
+  inputs: TemplateInput[]
+}
+
+export type WaitlistContent = {
+  title: string
+  subtitle: string
+  position: string
+  eta: string
+  message: string
+  notifyLabel: string
+  inputs: TemplateInput[]
+}
 export type TeamMember = {
   name: string
   role: string
@@ -477,6 +508,9 @@ export type TemplateContent =
   | MapContent
   | QrContent
   | WhatsappContent
+  | CalendarContent
+  | SocialShareContent
+  | WaitlistContent
   | TeamContent
   | PricingContent
   | SurveyContent
@@ -996,6 +1030,12 @@ export function emptyTemplateContent(kind: TemplateKind): TemplateContent {
       return emptyQrContent()
     case 'whatsapp':
       return emptyWhatsappContent()
+    case 'calendar':
+      return emptyCalendarContent()
+    case 'social_share':
+      return emptySocialShareContent()
+    case 'waitlist':
+      return emptyWaitlistContent()
     case 'team':
       return emptyTeamContent()
     case 'pricing':
@@ -1136,6 +1176,27 @@ export function emptyWhatsappContent(): WhatsappContent {
     title: '',
     subtitle: '',
     inputs: [],
+  }
+}
+
+export function emptyCalendarContent(): CalendarContent {
+  return {
+    title: '', description: '', location: '', start: '', end: '', timezone: '',
+    buttonLabel: 'Add to calendar', inputs: [],
+  }
+}
+
+export function emptySocialShareContent(): SocialShareContent {
+  return {
+    url: '', title: '', text: '',
+    platforms: ['x', 'linkedin', 'facebook'], inputs: [],
+  }
+}
+
+export function emptyWaitlistContent(): WaitlistContent {
+  return {
+    title: '', subtitle: '', position: '', eta: '', message: '',
+    notifyLabel: 'Notify me', inputs: [],
   }
 }
 export function emptyTeamMember(): TeamMember {
@@ -1846,6 +1907,12 @@ export function parseTemplateContent(kind: TemplateKind, raw: unknown): Template
       return parseQrContent(c)
     case 'whatsapp':
       return parseWhatsappContent(c)
+    case 'calendar':
+      return parseCalendarContent(c)
+    case 'social_share':
+      return parseSocialShareContent(c)
+    case 'waitlist':
+      return parseWaitlistContent(c)
     case 'team':
       return parseTeamContent(c)
     case 'pricing':
@@ -1996,6 +2063,39 @@ export function parseWhatsappContent(raw: unknown): WhatsappContent {
     buttonLabel: str(c.buttonLabel) || 'Chat to us on WhatsApp',
     title: str(c.title),
     subtitle: str(c.subtitle),
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+export function parseCalendarContent(raw: unknown): CalendarContent {
+  const c = asRecord(raw)
+  return {
+    title: str(c.title), description: str(c.description), location: str(c.location),
+    start: str(c.start), end: str(c.end), timezone: str(c.timezone),
+    buttonLabel: str(c.buttonLabel) || 'Add to calendar',
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+export function parseSocialShareContent(raw: unknown): SocialShareContent {
+  const c = asRecord(raw)
+  const allowed = new Set(['x', 'linkedin', 'facebook'])
+  const platforms = Array.isArray(c.platforms)
+    ? (c.platforms as unknown[]).map((p) => String(p)).filter((p): p is SocialSharePlatform => allowed.has(p))
+    : (['x', 'linkedin', 'facebook'] as SocialSharePlatform[])
+  return {
+    url: str(c.url), title: str(c.title), text: str(c.text),
+    platforms: platforms.length ? platforms : ['x', 'linkedin', 'facebook'],
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
+
+export function parseWaitlistContent(raw: unknown): WaitlistContent {
+  const c = asRecord(raw)
+  return {
+    title: str(c.title), subtitle: str(c.subtitle), position: str(c.position),
+    eta: str(c.eta), message: str(c.message),
+    notifyLabel: str(c.notifyLabel) || 'Notify me',
     inputs: parseTemplateInputs(c.inputs),
   }
 }

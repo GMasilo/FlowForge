@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect,
   useId,
   useLayoutEffect,
@@ -192,7 +192,7 @@ export function TemplateField({
   hideHint = false,
 }: CommonProps) {
   const listId = useId()
-  const [segments, setSegments] = useState<Segment[]>(() => parseSegments(value))
+  const [segments, setSegments] = useState<Segment[]>(() => parseSegments(value ?? ''))
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const [query, setQuery] = useState('')
@@ -248,7 +248,7 @@ export function TemplateField({
       return
     }
     if (serialized === value) return
-    setSegments(parseSegments(value))
+    setSegments(parseSegments(value ?? ''))
     setOpen(false)
     setTokenStart(null)
     setEditSegId(null)
