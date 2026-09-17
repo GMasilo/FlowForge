@@ -1,4 +1,4 @@
-﻿import { parseDocumentBlocks } from '@/features/templates/documentLayout'
+import { parseDocumentBlocks } from '@/features/templates/documentLayout'
 
 export const TEMPLATE_KINDS = [
   'email',
@@ -16,6 +16,7 @@ export const TEMPLATE_KINDS = [
   'location',
   'map',
   'qr',
+  'whatsapp',
   'team',
   'pricing',
   'survey',
@@ -97,6 +98,7 @@ export const COPY_TEMPLATE_KINDS = [
   'location',
   'map',
   'qr',
+  'whatsapp',
   'team',
   'pricing',
   'survey',
@@ -333,6 +335,17 @@ export type QrContent = {
   inputs: TemplateInput[]
 }
 
+
+export type WhatsappContent = {
+  /** Phone for wa.me — digits or {{inputs.*}} */
+  phone: string
+  /** Prefill message — plain text or {{inputs.*}} */
+  message: string
+  buttonLabel: string
+  title: string
+  subtitle: string
+  inputs: TemplateInput[]
+}
 export type TeamMember = {
   name: string
   role: string
@@ -463,6 +476,7 @@ export type TemplateContent =
   | LocationContent
   | MapContent
   | QrContent
+  | WhatsappContent
   | TeamContent
   | PricingContent
   | SurveyContent
@@ -588,7 +602,13 @@ export const TEMPLATE_KIND_META: Record<
     category: 'content',
     tags: ['qr', 'barcode', 'link', 'embed'],
   },
-  team: {
+  whatsapp: {
+    label: 'WhatsApp',
+    hint: 'Chat to us on WhatsApp — builds https://wa.me/{number}?text={message}',
+    insertField: 'text',
+    category: 'messaging',
+    tags: ['whatsapp', 'chat', 'cta', 'embed', 'contact', 'wa.me'],
+  },  team: {
     label: 'Team',
     hint: 'Team members with roles, skills, and handoff keys',
     insertField: 'text',
@@ -974,6 +994,8 @@ export function emptyTemplateContent(kind: TemplateKind): TemplateContent {
       return emptyMapContent()
     case 'qr':
       return emptyQrContent()
+    case 'whatsapp':
+      return emptyWhatsappContent()
     case 'team':
       return emptyTeamContent()
     case 'pricing':
@@ -1105,6 +1127,17 @@ export function emptyQrContent(): QrContent {
   }
 }
 
+
+export function emptyWhatsappContent(): WhatsappContent {
+  return {
+    phone: '',
+    message: '',
+    buttonLabel: 'Chat to us on WhatsApp',
+    title: '',
+    subtitle: '',
+    inputs: [],
+  }
+}
 export function emptyTeamMember(): TeamMember {
   return { name: '', role: '', skills: '', email: '', handoffKey: '' }
 }
@@ -1524,6 +1557,18 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
           { key: 'label', label: 'Short label', type: 'string', required: false },
         ],
       }
+    case 'whatsapp':
+      return {
+        title: 'Need help?',
+        subtitle: 'Message us on WhatsApp — we typically reply within a few minutes.',
+        phone: '{{inputs.phone}}',
+        message: 'Hi! I have a question about {{inputs.topic}}.',
+        buttonLabel: 'Chat to us on WhatsApp',
+        inputs: [
+          { key: 'phone', label: 'WhatsApp number', type: 'string', required: true },
+          { key: 'topic', label: 'Topic', type: 'string', required: false },
+        ],
+      }
     case 'team':
       return {
         intro: 'Meet our team:',
@@ -1799,6 +1844,8 @@ export function parseTemplateContent(kind: TemplateKind, raw: unknown): Template
       return parseMapContent(c)
     case 'qr':
       return parseQrContent(c)
+    case 'whatsapp':
+      return parseWhatsappContent(c)
     case 'team':
       return parseTeamContent(c)
     case 'pricing':
@@ -1940,6 +1987,18 @@ export function parseQrContent(raw: unknown): QrContent {
   }
 }
 
+
+export function parseWhatsappContent(raw: unknown): WhatsappContent {
+  const c = asRecord(raw)
+  return {
+    phone: str(c.phone),
+    message: str(c.message),
+    buttonLabel: str(c.buttonLabel) || 'Chat to us on WhatsApp',
+    title: str(c.title),
+    subtitle: str(c.subtitle),
+    inputs: parseTemplateInputs(c.inputs),
+  }
+}
 /** Build an OpenStreetMap embed URL from map center / first numeric pin. */
 export function mapEmbedUrlFromContent(content: MapContent): string {
   const custom = content.embedUrl.trim()
@@ -2277,6 +2336,21 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       const c = content as QrContent
       return [c.title.trim(), c.caption.trim(), c.payload.trim()].filter(Boolean).join('\n')
     }
+    case 'whatsapp': {
+      const c = content as WhatsappContent
+      const phone = c.phone.trim()
+      const message = c.message.trim()
+      const digits = phone.replace(/[^0-9]/g, '')
+      const wa =
+        digits.length > 0
+          ? message
+            ? `https://wa.me/${digits}?text=${encodeURIComponent(message)}`
+            : `https://wa.me/${digits}`
+          : ''
+      return [c.title.trim(), c.subtitle.trim(), c.buttonLabel.trim() || 'Chat to us on WhatsApp', wa]
+        .filter(Boolean)
+        .join('\n')
+    }
     case 'team': {
       const c = content as TeamContent
       const members = c.members
@@ -2398,6 +2472,20 @@ export function templateExprValue(args: {
     base.payload = c.payload
     base.filename = c.filename
     base.size = c.size
+  }
+  if (args.kind === 'whatsapp') {
+    const c = content as WhatsappContent
+    const digits = c.phone.trim().replace(/[^0-9]/g, '')
+    const message = c.message.trim()
+    base.phone = c.phone
+    base.message = c.message
+    base.buttonLabel = c.buttonLabel
+    base.url =
+      digits.length > 0
+        ? message
+          ? `https://wa.me/${digits}?text=${encodeURIComponent(message)}`
+          : `https://wa.me/${digits}`
+        : ''
   }
   if (args.kind === 'cart') {
     const c = content as CartContent
