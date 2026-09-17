@@ -642,7 +642,27 @@ export const TEMPLATE_KIND_META: Record<
     insertField: 'text',
     category: 'messaging',
     tags: ['whatsapp', 'chat', 'cta', 'embed', 'contact', 'wa.me'],
-  },  team: {
+  },    calendar: {
+    label: 'Calendar invite',
+    hint: 'Booking invite — Google Calendar URL from start/end/title',
+    insertField: 'text',
+    category: 'engagement',
+    tags: ['calendar', 'booking', 'ics', 'google', 'invite'],
+  },
+  social_share: {
+    label: 'Social share',
+    hint: 'Prefilled share links for X, LinkedIn, and Facebook',
+    insertField: 'text',
+    category: 'engagement',
+    tags: ['share', 'x', 'twitter', 'linkedin', 'facebook', 'social'],
+  },
+  waitlist: {
+    label: 'Waitlist',
+    hint: 'Queue position, ETA, and notify-me copy',
+    insertField: 'text',
+    category: 'engagement',
+    tags: ['waitlist', 'queue', 'eta', 'notify'],
+  },team: {
     label: 'Team',
     hint: 'Team members with roles, skills, and handoff keys',
     insertField: 'text',
