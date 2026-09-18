@@ -17,6 +17,9 @@ export const TEMPLATE_KINDS = [
   'map',
   'qr',
   'whatsapp',
+  'calendar',
+  'social_share',
+  'waitlist',
   'team',
   'pricing',
   'survey',
@@ -99,6 +102,9 @@ export const COPY_TEMPLATE_KINDS = [
   'map',
   'qr',
   'whatsapp',
+  'calendar',
+  'social_share',
+  'waitlist',
   'team',
   'pricing',
   'survey',
@@ -1650,6 +1656,50 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
           { key: 'topic', label: 'Topic', type: 'string', required: false },
         ],
       }
+    case 'calendar':
+      return {
+        title: '{{inputs.title}}',
+        description: '{{inputs.description}}',
+        location: '{{inputs.location}}',
+        start: '{{inputs.start}}',
+        end: '{{inputs.end}}',
+        timezone: '{{inputs.timezone}}',
+        buttonLabel: 'Add to Google Calendar',
+        inputs: [
+          { key: 'title', label: 'Event title', type: 'string', required: true },
+          { key: 'description', label: 'Description', type: 'string', required: false },
+          { key: 'location', label: 'Location', type: 'string', required: false },
+          { key: 'start', label: 'Start (YYYY-MM-DDTHH:mm)', type: 'string', required: true },
+          { key: 'end', label: 'End (YYYY-MM-DDTHH:mm)', type: 'string', required: true },
+          { key: 'timezone', label: 'Timezone', type: 'string', required: false },
+        ],
+      }
+    case 'social_share':
+      return {
+        url: '{{inputs.url}}',
+        title: '{{inputs.title}}',
+        text: '{{inputs.text}}',
+        platforms: ['x', 'linkedin', 'facebook'],
+        inputs: [
+          { key: 'url', label: 'Page URL', type: 'string', required: true },
+          { key: 'title', label: 'Title', type: 'string', required: false },
+          { key: 'text', label: 'Share text', type: 'string', required: false },
+        ],
+      }
+    case 'waitlist':
+      return {
+        title: 'You are on the waitlist',
+        subtitle: 'We will notify you when it is your turn.',
+        position: '{{inputs.position}}',
+        eta: '{{inputs.eta}}',
+        message: 'There are {{inputs.ahead}} people ahead of you.',
+        notifyLabel: 'Notify me',
+        inputs: [
+          { key: 'position', label: 'Position', type: 'string', required: true },
+          { key: 'eta', label: 'ETA', type: 'string', required: false },
+          { key: 'ahead', label: 'People ahead', type: 'string', required: false },
+        ],
+      }
     case 'team':
       return {
         intro: 'Meet our team:',
@@ -2468,6 +2518,45 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
             : `https://wa.me/${digits}`
           : ''
       return [c.title.trim(), c.subtitle.trim(), c.buttonLabel.trim() || 'Chat to us on WhatsApp', wa]
+        .filter(Boolean)
+        .join('\n')
+    }
+    case 'calendar': {
+      const c = content as CalendarContent
+      const title = encodeURIComponent(c.title.trim())
+      const details = encodeURIComponent(c.description.trim())
+      const location = encodeURIComponent(c.location.trim())
+      const start = c.start.trim().replace(/[-:]/g, '')
+      const end = c.end.trim().replace(/[-:]/g, '')
+      const dates = start && end ? `${start}/${end}` : start
+      const gcal =
+        dates.length > 0
+          ? `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${encodeURIComponent(dates)}&details=${details}&location=${location}`
+          : ''
+      return [c.title.trim(), c.description.trim(), c.location.trim(), c.start.trim(), c.end.trim(), c.buttonLabel.trim() || 'Add to calendar', gcal]
+        .filter(Boolean)
+        .join('\n')
+    }
+    case 'social_share': {
+      const c = content as SocialShareContent
+      const url = encodeURIComponent(c.url.trim())
+      const text = encodeURIComponent((c.text || c.title).trim())
+      const lines: string[] = [c.title.trim(), c.text.trim(), c.url.trim()]
+      if (c.platforms.includes('x')) lines.push(`https://twitter.com/intent/tweet?url=${url}&text=${text}`)
+      if (c.platforms.includes('linkedin')) lines.push(`https://www.linkedin.com/sharing/share-offsite/?url=${url}`)
+      if (c.platforms.includes('facebook')) lines.push(`https://www.facebook.com/sharer/sharer.php?u=${url}`)
+      return lines.filter(Boolean).join('\n')
+    }
+    case 'waitlist': {
+      const c = content as WaitlistContent
+      return [
+        c.title.trim(),
+        c.subtitle.trim(),
+        c.position.trim() ? `Position: ${c.position.trim()}` : '',
+        c.eta.trim() ? `ETA: ${c.eta.trim()}` : '',
+        c.message.trim(),
+        c.notifyLabel.trim() || 'Notify me',
+      ]
         .filter(Boolean)
         .join('\n')
     }

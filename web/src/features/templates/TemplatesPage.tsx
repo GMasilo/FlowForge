@@ -37,6 +37,9 @@ import {
   Users,
   Webhook,
   ClipboardList,
+  CalendarPlus,
+  Share2,
+  ListOrdered,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
@@ -590,7 +593,7 @@ export function TemplatesPage() {
                   id="template-create-search"
                   value={createSearch}
                   onChange={setCreateSearch}
-                  placeholder="Search typesΓÇª"
+                  placeholder="Search types"
                   className="sm:max-w-xs"
                 />
                 <Select
