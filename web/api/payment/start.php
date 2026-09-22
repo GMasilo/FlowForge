@@ -7,10 +7,12 @@ declare(strict_types=1);
  */
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/lib/PayFast.php';
+require_once dirname(__DIR__) . '/lib/Stripe.php';
 
 use FlowForge\Api\PayFast;
 use FlowForge\Api\Response;
 use FlowForge\Api\Security;
+use FlowForge\Api\Stripe;
 use FlowForge\Api\SupabaseRest;
 
 $boot = flowforge_bootstrap_deferred_auth(['POST']);
@@ -55,7 +57,7 @@ if ($returnUrl !== '' && !preg_match('#^https?://#i', $returnUrl)) {
 $resolved = SupabaseRest::resolveConnection($config, $body);
 $connection = $resolved['connection'];
 $provider = strtolower(trim((string) ($connection['provider'] ?? 'payfast')));
-if ($provider !== 'payfast' && $provider !== 'custom') {
+if (!in_array($provider, ['payfast', 'custom', 'stripe'], true)) {
     $provider = 'payfast';
 }
 
@@ -93,6 +95,24 @@ if ($provider === 'payfast') {
     ];
     $fields = PayFast::withSignature($fields, $passphrase);
     $checkoutUrl = PayFast::processUrl($sandbox);
+}
+
+if ($provider === 'stripe') {
+    $secretKey = trim((string) ($connection['secretKey'] ?? ''));
+    $stripeSession = Stripe::createCheckoutSession(
+        $secretKey,
+        $reference,
+        $currency,
+        $amount,
+        $itemName,
+        $returnUrl !== '' ? $returnUrl : $apiBase,
+        $cancelUrl !== '' ? $cancelUrl : ($returnUrl !== '' ? $returnUrl : $apiBase),
+        $buyerEmail,
+    );
+    if (!$stripeSession['ok']) {
+        Response::error($stripeSession['error'] ?? 'Could not create Stripe checkout session', 502);
+    }
+    $checkoutUrl = $stripeSession['url'];
 }
 
 if ($provider === 'custom' && $checkoutUrl === '') {
