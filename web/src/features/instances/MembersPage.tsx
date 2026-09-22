@@ -1,30 +1,39 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Download, Pencil, Plus, Trash2, Upload, X, Mail } from 'lucide-react'
-import { useRequiredInstance } from '@/features/instances/InstanceContext'
-import { useAuth } from '@/features/auth/AuthProvider'
-import { formatQuotaCap } from '@/features/billing/planCatalog'
-import { canAdmin, instanceFeatureEnabled } from '@/shared/types/database'
-import type { InstanceRole } from '@/shared/types/database'
-import { supabase } from '@/shared/lib/supabase'
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Copy,
+  Download,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
+  X,
+  Mail,
+} from "lucide-react";
+import { useRequiredInstance } from "@/features/instances/InstanceContext";
+import { useAuth } from "@/features/auth/AuthProvider";
+import { formatQuotaCap } from "@/features/billing/planCatalog";
+import { canAdmin, instanceFeatureEnabled } from "@/shared/types/database";
+import type { InstanceRole } from "@/shared/types/database";
+import { supabase } from "@/shared/lib/supabase";
 import {
   inviteOrganisationMember,
   isFlowForgeApiConfigured,
   resendOrganisationInvite,
-} from '@/shared/lib/flowforgeApi'
-import { Button } from '@/shared/ui/button'
-import { Card } from '@/shared/ui/card'
-import { Input } from '@/shared/ui/input'
-import { Label } from '@/shared/ui/label'
-import { Select } from '@/shared/ui/select'
-import { Textarea } from '@/shared/ui/textarea'
-import { Badge } from '@/shared/ui/badge'
-import { SuperuserBadge } from '@/shared/ui/superuser-badge'
-import { InitialsAvatar } from '@/shared/ui/initials-avatar'
-import { FieldError } from '@/shared/ui/field-error'
-import { PAGE_HELP } from '@/shared/help/pageHelp'
-import { PageHeader } from '@/shared/ui/page-header'
+} from "@/shared/lib/flowforgeApi";
+import { Button } from "@/shared/ui/button";
+import { Card } from "@/shared/ui/card";
+import { Input } from "@/shared/ui/input";
+import { Label } from "@/shared/ui/label";
+import { Select } from "@/shared/ui/select";
+import { Textarea } from "@/shared/ui/textarea";
+import { Badge } from "@/shared/ui/badge";
+import { SuperuserBadge } from "@/shared/ui/superuser-badge";
+import { InitialsAvatar } from "@/shared/ui/initials-avatar";
+import { FieldError } from "@/shared/ui/field-error";
+import { PAGE_HELP } from "@/shared/help/pageHelp";
+import { PageHeader } from "@/shared/ui/page-header";
 import {
   BulkActionBar,
   matchesQuery,
@@ -32,98 +41,213 @@ import {
   SearchField,
   setAllIds,
   toggleId,
-} from '@/shared/ui/list-controls'
+} from "@/shared/ui/list-controls";
 import {
   downloadMembersImportTemplate,
   pickMembersImportFile,
-} from '@/features/instances/membersExcel'
+  type MemberImportRow,
+} from "@/features/instances/membersExcel";
+import {
+  importMemberRows,
+  type MemberImportResult,
+} from "@/features/instances/membersImport";
 
 type OrgUserRow = {
-  kind: 'member' | 'invite'
-  status: 'active' | 'pending'
-  id: string
-  user_id: string | null
-  invite_id: string | null
-  email: string | null
-  display_name: string | null
-  role: InstanceRole
-  job_title: string | null
-  phone: string | null
-  department: string | null
-  notes: string | null
-  is_superuser: boolean
-  email_sent_at: string | null
-  email_last_error: string | null
-  token: string | null
-  last_sign_in_at: string | null
-  created_at: string
-}
+  kind: "member" | "invite";
+  status: "active" | "pending";
+  id: string;
+  user_id: string | null;
+  invite_id: string | null;
+  email: string | null;
+  display_name: string | null;
+  role: InstanceRole;
+  job_title: string | null;
+  phone: string | null;
+  department: string | null;
+  notes: string | null;
+  is_superuser: boolean;
+  email_sent_at: string | null;
+  email_last_error: string | null;
+  token: string | null;
+  last_sign_in_at: string | null;
+  created_at: string;
+};
 
 type MemberForm = {
-  email: string
-  display_name: string
-  job_title: string
-  phone: string
-  department: string
-  notes: string
-  role: InstanceRole
-}
+  email: string;
+  display_name: string;
+  job_title: string;
+  phone: string;
+  department: string;
+  notes: string;
+  role: InstanceRole;
+};
 
 const emptyForm = (): MemberForm => ({
-  email: '',
-  display_name: '',
-  job_title: '',
-  phone: '',
-  department: '',
-  notes: '',
-  role: 'editor',
-})
+  email: "",
+  display_name: "",
+  job_title: "",
+  phone: "",
+  department: "",
+  notes: "",
+  role: "editor",
+});
 
 function inviteSignupUrl(token: string): string {
-  const basename = (import.meta.env.BASE_URL as string).replace(/\/$/, '')
-  return `${window.location.origin}${basename}/signup?invite=${encodeURIComponent(token)}`
+  const basename = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+  return `${window.location.origin}${basename}/signup?invite=${encodeURIComponent(token)}`;
 }
 
 function rowKey(row: OrgUserRow): string {
-  return `${row.kind}:${row.id}`
+  return `${row.kind}:${row.id}`;
 }
 
 function memberSelectable(row: OrgUserRow, selfId?: string | null): boolean {
-  return row.kind === 'member' && row.role !== 'owner' && row.user_id !== selfId
+  return (
+    row.kind === "member" && row.role !== "owner" && row.user_id !== selfId
+  );
 }
 
 export function MembersPage() {
-  const { instance, role } = useRequiredInstance()
-  const { user } = useAuth()
-  const qc = useQueryClient()
-  const [form, setForm] = useState<MemberForm>(emptyForm)
-  const [open, setOpen] = useState(false)
-  const [editingUserId, setEditingUserId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<{ message: string; tone: 'ok' | 'error' | 'info' } | null>(null)
-  const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(() => new Set())
-  const [bulkRole, setBulkRole] = useState<InstanceRole>('editor')
-  const [importingMembers, setImportingMembers] = useState(false)
-  const [importReport, setImportReport] = useState<string | null>(null)
-  const apiConfigured = isFlowForgeApiConfigured()
-  const isAdmin = canAdmin(role)
-  const maxSeats = instance.quota_max_seats ?? -1
+  const { instance, role } = useRequiredInstance();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [form, setForm] = useState<MemberForm>(emptyForm);
+  const [open, setOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<{
+    message: string;
+    tone: "ok" | "error" | "info";
+  } | null>(null);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [bulkRole, setBulkRole] = useState<InstanceRole>("editor");
+  const [importingMembers, setImportingMembers] = useState(false);
+  const [importReport, setImportReport] = useState<MemberImportResult[] | null>(
+    null,
+  );
+  const [importPreview, setImportPreview] = useState<{
+    name: string;
+    rows: MemberImportRow[];
+  } | null>(null);
+  const [importProgress, setImportProgress] = useState(0);
+  const apiConfigured = isFlowForgeApiConfigured();
+  const isAdmin = canAdmin(role);
+  const maxSeats = instance.quota_max_seats ?? -1;
 
   const users = useQuery({
-    queryKey: ['organisation-users', instance.id],
+    queryKey: ["organisation-users", instance.id],
     queryFn: async () => {
-      const { data, error: qError } = await supabase.rpc('list_organisation_users', {
-        p_instance_id: instance.id,
-      })
-      if (qError) throw qError
-      const rows = (Array.isArray(data) ? data : []) as OrgUserRow[]
-      return rows
+      const { data, error: qError } = await supabase.rpc(
+        "list_organisation_users",
+        {
+          p_instance_id: instance.id,
+        },
+      );
+      if (qError) throw qError;
+      const rows = (Array.isArray(data) ? data : []) as OrgUserRow[];
+      return rows;
     },
-  })
+  });
 
-  const seatCount = (users.data ?? []).length
-  const atSeatLimit = maxSeats >= 0 && seatCount >= maxSeats
+  const seatCount = (users.data ?? []).length;
+  const atSeatLimit = maxSeats >= 0 && seatCount >= maxSeats;
+  const existingEmails = new Set(
+    (users.data ?? []).flatMap((row) =>
+      row.email ? [row.email.toLowerCase()] : [],
+    ),
+  );
+  const newImportCount =
+    importPreview?.rows.filter((row) => !existingEmails.has(row.email))
+      .length ?? 0;
+  const importExceedsSeats =
+    maxSeats >= 0 && seatCount + newImportCount > maxSeats;
+
+  async function chooseImport() {
+    if (!isAdmin || importingMembers) return;
+    setImportingMembers(true);
+    setInfo(null);
+    setImportPreview(null);
+    try {
+      const selection = await pickMembersImportFile({
+        allowAgent: instanceFeatureEnabled(instance, "agent_console"),
+      });
+      if (selection) {
+        setImportPreview({ name: selection.file.name, rows: selection.rows });
+        setImportReport(null);
+      }
+    } catch (err) {
+      setInfo({
+        tone: "error",
+        message:
+          err instanceof Error ? err.message : "Could not read spreadsheet",
+      });
+    } finally {
+      setImportingMembers(false);
+    }
+  }
+
+  async function confirmImport() {
+    if (
+      !isAdmin ||
+      !apiConfigured ||
+      !importPreview ||
+      importingMembers ||
+      importExceedsSeats
+    )
+      return;
+    setImportingMembers(true);
+    setImportProgress(0);
+    setInfo(null);
+    try {
+      // Refresh before writing so re-imports also skip recently added users and invites.
+      const current = await users.refetch();
+      if (current.error) throw current.error;
+      const emails = new Set(
+        (current.data ?? []).flatMap((row) =>
+          row.email ? [row.email.toLowerCase()] : [],
+        ),
+      );
+      const needed = importPreview.rows.filter(
+        (row) => !emails.has(row.email),
+      ).length;
+      if (maxSeats >= 0 && (current.data ?? []).length + needed > maxSeats) {
+        throw new Error(
+          "There are not enough available seats for this import. Reduce the file or upgrade your plan.",
+        );
+      }
+      const results = await importMemberRows(
+        importPreview.rows,
+        emails,
+        (row) =>
+          inviteOrganisationMember({
+            instanceId: instance.id,
+            email: row.email,
+            role: row.role,
+            displayName: row.display_name || null,
+            jobTitle: row.job_title || null,
+            phone: row.phone || null,
+            department: row.department || null,
+            notes: row.notes || null,
+            sendEmail: true,
+          }),
+        setImportProgress,
+      );
+      setImportReport(results);
+      setImportPreview(null);
+    } catch (err) {
+      setInfo({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Import failed",
+      });
+    } finally {
+      await qc.invalidateQueries({
+        queryKey: ["organisation-users", instance.id],
+      });
+      setImportingMembers(false);
+    }
+  }
 
   const filteredUsers = useMemo(() => {
     return (users.data ?? []).filter((row) =>
@@ -137,69 +261,73 @@ export function MembersPage() {
         row.role,
         row.status,
       ]),
-    )
-  }, [users.data, search])
+    );
+  }, [users.data, search]);
 
   const selectableKeys = useMemo(
     () =>
       filteredUsers
         .filter((row) => {
-          if (row.kind === 'invite') return isAdmin
-          return memberSelectable(row, user?.id)
+          if (row.kind === "invite") return isAdmin;
+          return memberSelectable(row, user?.id);
         })
         .map(rowKey),
     [filteredUsers, isAdmin, user?.id],
-  )
+  );
 
   const allSelected =
-    selectableKeys.length > 0 && selectableKeys.every((key) => selected.has(key))
+    selectableKeys.length > 0 &&
+    selectableKeys.every((key) => selected.has(key));
 
   useEffect(() => {
-    const valid = new Set((users.data ?? []).map(rowKey))
+    const valid = new Set((users.data ?? []).map(rowKey));
     setSelected((prev) => {
-      const next = new Set<string>()
-      for (const id of prev) if (valid.has(id)) next.add(id)
-      return next
-    })
-  }, [users.data])
+      const next = new Set<string>();
+      for (const id of prev) if (valid.has(id)) next.add(id);
+      return next;
+    });
+  }, [users.data]);
 
   const selectedActiveUserIds = useMemo(() => {
-    const ids: string[] = []
+    const ids: string[] = [];
     for (const row of users.data ?? []) {
-      if (row.kind === 'member' && selected.has(rowKey(row)) && row.user_id) {
-        ids.push(row.user_id)
+      if (row.kind === "member" && selected.has(rowKey(row)) && row.user_id) {
+        ids.push(row.user_id);
       }
     }
-    return ids
-  }, [selected, users.data])
+    return ids;
+  }, [selected, users.data]);
 
   const selectedPending = useMemo(() => {
     return (users.data ?? []).filter(
-      (row) => row.status === 'pending' && selected.has(rowKey(row)),
-    )
-  }, [selected, users.data])
+      (row) => row.status === "pending" && selected.has(rowKey(row)),
+    );
+  }, [selected, users.data]);
 
   const saveMember = useMutation({
     mutationFn: async () => {
       if (editingUserId) {
-        const { error: rpcError } = await supabase.rpc('update_organisation_member', {
-          p_instance_id: instance.id,
-          p_user_id: editingUserId,
-          p_role: form.role,
-          p_display_name: form.display_name,
-          p_job_title: form.job_title,
-          p_phone: form.phone,
-          p_department: form.department,
-          p_notes: form.notes,
-        })
-        if (rpcError) throw rpcError
-        return { status: 'updated' as const }
+        const { error: rpcError } = await supabase.rpc(
+          "update_organisation_member",
+          {
+            p_instance_id: instance.id,
+            p_user_id: editingUserId,
+            p_role: form.role,
+            p_display_name: form.display_name,
+            p_job_title: form.job_title,
+            p_phone: form.phone,
+            p_department: form.department,
+            p_notes: form.notes,
+          },
+        );
+        if (rpcError) throw rpcError;
+        return { status: "updated" as const };
       }
 
       if (!apiConfigured) {
         throw new Error(
-          'VITE_FLOWFORGE_API_URL is not configured. Invitation emails are sent through the FlowForge API.',
-        )
+          "VITE_FLOWFORGE_API_URL is not configured. Invitation emails are sent through the FlowForge API.",
+        );
       }
 
       const result = await inviteOrganisationMember({
@@ -212,181 +340,228 @@ export function MembersPage() {
         department: form.department.trim() || null,
         notes: form.notes.trim() || null,
         sendEmail: true,
-      })
+      });
 
       if (!result.ok && result.error) {
-        throw new Error(result.error)
+        throw new Error(result.error);
       }
 
-      return result
+      return result;
     },
     onSuccess: async (result) => {
       const status =
-        result && typeof result === 'object' && 'status' in result ? result.status : null
-      if (status === 'invited') {
-        const emailSent = 'email_sent' in result && result.email_sent
-        const emailSkipped = 'email_skipped' in result && result.email_skipped
+        result && typeof result === "object" && "status" in result
+          ? result.status
+          : null;
+      if (status === "invited") {
+        const emailSent = "email_sent" in result && result.email_sent;
+        const emailSkipped = "email_skipped" in result && result.email_skipped;
         const emailError =
-          'email_error' in result && result.email_error ? String(result.email_error) : ''
+          "email_error" in result && result.email_error
+            ? String(result.email_error)
+            : "";
         setInfo(
           emailSent
             ? {
-                tone: 'ok',
+                tone: "ok",
                 message:
-                  'User added as Pending and invitation email sent. They become Active after signing in.',
+                  "User added as Pending and invitation email sent. They become Active after signing in.",
               }
             : emailSkipped
               ? {
-                  tone: 'info',
-                  message: 'User saved as Pending without sending email.',
+                  tone: "info",
+                  message: "User saved as Pending without sending email.",
                 }
               : {
-                  tone: 'error',
+                  tone: "error",
                   message: `User saved as Pending, but the invitation email was not sent${
-                    emailError ? `: ${emailError}` : ''
+                    emailError ? `: ${emailError}` : ""
                   }. Use Resend invite to try again.`,
                 },
-        )
-      } else if (status === 'updated') {
-        setInfo({ tone: 'ok', message: 'User updated.' })
-      } else if (status === 'added') {
+        );
+      } else if (status === "updated") {
+        setInfo({ tone: "ok", message: "User updated." });
+      } else if (status === "added") {
         setInfo({
-          tone: 'ok',
-          message: 'Existing account added to the organisation (Active).',
-        })
+          tone: "ok",
+          message: "Existing account added to the organisation (Active).",
+        });
       } else {
-        setInfo({ tone: 'ok', message: 'User saved.' })
+        setInfo({ tone: "ok", message: "User saved." });
       }
-      resetForm()
-      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
+      resetForm();
+      await qc.invalidateQueries({
+        queryKey: ["organisation-users", instance.id],
+      });
     },
     onError: (err: Error) => setError(err.message),
-  })
+  });
 
   const resendInvite = useMutation({
     mutationFn: async (row: OrgUserRow) => {
       if (!apiConfigured) {
-        throw new Error('VITE_FLOWFORGE_API_URL is not configured')
+        throw new Error("VITE_FLOWFORGE_API_URL is not configured");
       }
       await resendOrganisationInvite({
         inviteId: row.invite_id ?? undefined,
         instanceId: instance.id,
         userId: row.user_id ?? undefined,
         email: row.email ?? undefined,
-      })
+      });
     },
     onSuccess: async () => {
-      setInfo({ tone: 'ok', message: 'Invitation email resent.' })
-      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
+      setInfo({ tone: "ok", message: "Invitation email resent." });
+      await qc.invalidateQueries({
+        queryKey: ["organisation-users", instance.id],
+      });
     },
     onError: async (err: Error) => {
-      setInfo({ tone: 'error', message: `Invite email failed: ${err.message}` })
-      setError(err.message)
-      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
+      setInfo({
+        tone: "error",
+        message: `Invite email failed: ${err.message}`,
+      });
+      setError(err.message);
+      await qc.invalidateQueries({
+        queryKey: ["organisation-users", instance.id],
+      });
     },
-  })
+  });
 
   const removeInvite = useMutation({
     mutationFn: async (id: string) => {
-      const { error: delError } = await supabase.from('instance_invites').delete().eq('id', id)
-      if (delError) throw delError
+      const { error: delError } = await supabase
+        .from("instance_invites")
+        .delete()
+        .eq("id", id);
+      if (delError) throw delError;
     },
     onSuccess: async () => {
-      setInfo({ tone: 'ok', message: 'Pending invite cancelled.' })
-      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
+      setInfo({ tone: "ok", message: "Pending invite cancelled." });
+      await qc.invalidateQueries({
+        queryKey: ["organisation-users", instance.id],
+      });
     },
-  })
+  });
 
   const removeMember = useMutation({
     mutationFn: async (userId: string) => {
-      const { error: rpcError } = await supabase.rpc('remove_organisation_member', {
-        p_instance_id: instance.id,
-        p_user_id: userId,
-      })
-      if (rpcError) throw rpcError
+      const { error: rpcError } = await supabase.rpc(
+        "remove_organisation_member",
+        {
+          p_instance_id: instance.id,
+          p_user_id: userId,
+        },
+      );
+      if (rpcError) throw rpcError;
     },
     onSuccess: async () => {
-      setInfo({ tone: 'ok', message: 'User removed from the organisation.' })
-      if (editingUserId) resetForm()
-      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
+      setInfo({ tone: "ok", message: "User removed from the organisation." });
+      if (editingUserId) resetForm();
+      await qc.invalidateQueries({
+        queryKey: ["organisation-users", instance.id],
+      });
     },
     onError: (err: Error) => {
-      setInfo({ tone: 'error', message: err.message })
-      setError(err.message)
+      setInfo({ tone: "error", message: err.message });
+      setError(err.message);
     },
-  })
+  });
 
   const bulkRemoveMembers = useMutation({
     mutationFn: async (userIds: string[]) => {
-      const errors: string[] = []
+      const errors: string[] = [];
       for (const userId of userIds) {
-        const { error: rpcError } = await supabase.rpc('remove_organisation_member', {
-          p_instance_id: instance.id,
-          p_user_id: userId,
-        })
-        if (rpcError) errors.push(rpcError.message)
+        const { error: rpcError } = await supabase.rpc(
+          "remove_organisation_member",
+          {
+            p_instance_id: instance.id,
+            p_user_id: userId,
+          },
+        );
+        if (rpcError) errors.push(rpcError.message);
       }
-      if (errors.length) throw new Error(errors[0] ?? 'Failed to remove some users')
+      if (errors.length)
+        throw new Error(errors[0] ?? "Failed to remove some users");
     },
     onSuccess: async (_, userIds) => {
-      setSelected(new Set())
+      setSelected(new Set());
       setInfo({
-        tone: 'ok',
-        message: `Removed ${userIds.length} user${userIds.length === 1 ? '' : 's'}.`,
-      })
-      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
+        tone: "ok",
+        message: `Removed ${userIds.length} user${userIds.length === 1 ? "" : "s"}.`,
+      });
+      await qc.invalidateQueries({
+        queryKey: ["organisation-users", instance.id],
+      });
     },
-    onError: (err: Error) => setInfo({ tone: 'error', message: err.message }),
-  })
+    onError: (err: Error) => setInfo({ tone: "error", message: err.message }),
+  });
 
   const bulkSetRole = useMutation({
-    mutationFn: async ({ userIds, nextRole }: { userIds: string[]; nextRole: InstanceRole }) => {
-      if (nextRole === 'owner') throw new Error('Cannot assign the owner role in bulk')
-      const errors: string[] = []
+    mutationFn: async ({
+      userIds,
+      nextRole,
+    }: {
+      userIds: string[];
+      nextRole: InstanceRole;
+    }) => {
+      if (nextRole === "owner")
+        throw new Error("Cannot assign the owner role in bulk");
+      const errors: string[] = [];
       for (const userId of userIds) {
-        const { error: rpcError } = await supabase.rpc('update_organisation_member', {
-          p_instance_id: instance.id,
-          p_user_id: userId,
-          p_role: nextRole,
-        })
-        if (rpcError) errors.push(rpcError.message)
+        const { error: rpcError } = await supabase.rpc(
+          "update_organisation_member",
+          {
+            p_instance_id: instance.id,
+            p_user_id: userId,
+            p_role: nextRole,
+          },
+        );
+        if (rpcError) errors.push(rpcError.message);
       }
-      if (errors.length) throw new Error(errors[0] ?? 'Failed to update some roles')
+      if (errors.length)
+        throw new Error(errors[0] ?? "Failed to update some roles");
     },
     onSuccess: async (_, { userIds, nextRole }) => {
-      setSelected(new Set())
+      setSelected(new Set());
       setInfo({
-        tone: 'ok',
-        message: `Updated ${userIds.length} user${userIds.length === 1 ? '' : 's'} to ${nextRole}.`,
-      })
-      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
+        tone: "ok",
+        message: `Updated ${userIds.length} user${userIds.length === 1 ? "" : "s"} to ${nextRole}.`,
+      });
+      await qc.invalidateQueries({
+        queryKey: ["organisation-users", instance.id],
+      });
     },
-    onError: (err: Error) => setInfo({ tone: 'error', message: err.message }),
-  })
+    onError: (err: Error) => setInfo({ tone: "error", message: err.message }),
+  });
 
   const bulkCancelInvites = useMutation({
     mutationFn: async (ids: string[]) => {
-      const { error: delError } = await supabase.from('instance_invites').delete().in('id', ids)
-      if (delError) throw delError
+      const { error: delError } = await supabase
+        .from("instance_invites")
+        .delete()
+        .in("id", ids);
+      if (delError) throw delError;
     },
     onSuccess: async (_, ids) => {
-      setSelected(new Set())
+      setSelected(new Set());
       setInfo({
-        tone: 'ok',
-        message: `Cancelled ${ids.length} pending invite${ids.length === 1 ? '' : 's'}.`,
-      })
-      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
+        tone: "ok",
+        message: `Cancelled ${ids.length} pending invite${ids.length === 1 ? "" : "s"}.`,
+      });
+      await qc.invalidateQueries({
+        queryKey: ["organisation-users", instance.id],
+      });
     },
-    onError: (err: Error) => setInfo({ tone: 'error', message: err.message }),
-  })
+    onError: (err: Error) => setInfo({ tone: "error", message: err.message }),
+  });
 
   const bulkResendInvites = useMutation({
     mutationFn: async (rows: OrgUserRow[]) => {
       if (!apiConfigured) {
-        throw new Error('VITE_FLOWFORGE_API_URL is not configured')
+        throw new Error("VITE_FLOWFORGE_API_URL is not configured");
       }
-      let sent = 0
-      const errors: string[] = []
+      let sent = 0;
+      const errors: string[] = [];
       for (const row of rows) {
         try {
           await resendOrganisationInvite({
@@ -394,182 +569,155 @@ export function MembersPage() {
             instanceId: instance.id,
             userId: row.user_id ?? undefined,
             email: row.email ?? undefined,
-          })
-          sent += 1
+          });
+          sent += 1;
         } catch (err) {
-          errors.push(err instanceof Error ? err.message : 'Failed to send invite email')
+          errors.push(
+            err instanceof Error ? err.message : "Failed to send invite email",
+          );
         }
       }
-      if (!sent && errors.length) throw new Error(errors[0] ?? 'Failed to resend invites')
-      return { sent, failed: errors.length }
+      if (!sent && errors.length)
+        throw new Error(errors[0] ?? "Failed to resend invites");
+      return { sent, failed: errors.length };
     },
     onSuccess: async (result) => {
-      setSelected(new Set())
+      setSelected(new Set());
       setInfo({
-        tone: result.failed ? 'error' : 'ok',
+        tone: result.failed ? "error" : "ok",
         message: result.failed
           ? `Resent ${result.sent}, failed ${result.failed}.`
-          : `Resent ${result.sent} invite email${result.sent === 1 ? '' : 's'}.`,
-      })
-      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
+          : `Resent ${result.sent} invite email${result.sent === 1 ? "" : "s"}.`,
+      });
+      await qc.invalidateQueries({
+        queryKey: ["organisation-users", instance.id],
+      });
     },
-    onError: (err: Error) => setInfo({ tone: 'error', message: err.message }),
-  })
+    onError: (err: Error) => setInfo({ tone: "error", message: err.message }),
+  });
 
   async function copyInviteLink(row: OrgUserRow) {
     if (!row.token) {
       setInfo({
-        tone: 'info',
-        message: 'No signup link available for this user. Use Resend invite instead.',
-      })
-      return
+        tone: "info",
+        message:
+          "No signup link available for this user. Use Resend invite instead.",
+      });
+      return;
     }
     try {
-      await navigator.clipboard.writeText(inviteSignupUrl(row.token))
-      setInfo({ tone: 'ok', message: `Invite link copied for ${row.email}.` })
+      await navigator.clipboard.writeText(inviteSignupUrl(row.token));
+      setInfo({ tone: "ok", message: `Invite link copied for ${row.email}.` });
     } catch {
-      setInfo({ tone: 'error', message: 'Could not copy invite link to the clipboard.' })
+      setInfo({
+        tone: "error",
+        message: "Could not copy invite link to the clipboard.",
+      });
     }
   }
 
   function confirmRemove(row: OrgUserRow) {
-    if (row.kind === 'invite' && row.invite_id) {
-      if (!window.confirm(`Cancel pending invite for ${row.email}?`)) return
-      removeInvite.mutate(row.invite_id)
-      return
+    if (row.kind === "invite" && row.invite_id) {
+      if (!window.confirm(`Cancel pending invite for ${row.email}?`)) return;
+      removeInvite.mutate(row.invite_id);
+      return;
     }
-    if (!memberSelectable(row, user?.id) || !row.user_id) return
-    const name = row.display_name ?? row.email ?? 'this user'
-    if (!window.confirm(`Remove ${name} from ${instance.name}? They will lose access immediately.`)) {
-      return
-    }
-    removeMember.mutate(row.user_id)
-  }
-
-
-  async function runMembersImport(sendEmail: boolean) {
-    if (!isAdmin) return
-    setImportReport(null)
-    try {
-      const { rows } = await pickMembersImportFile()
-      setImportingMembers(true)
-      let ok = 0
-      let failed = 0
-      const errors: string[] = []
-      for (const row of rows) {
-        try {
-          const result = await inviteOrganisationMember({
-            instanceId: instance.id,
-            email: row.email,
-            role: row.role,
-            displayName: row.display_name || null,
-            jobTitle: row.job_title || null,
-            phone: row.phone || null,
-            department: row.department || null,
-            notes: row.notes || null,
-            sendEmail,
-          })
-          if (result.ok === false && result.error) {
-            failed++
-            errors.push(`Row ${row.rowNumber} (${row.email}): ${result.error}`)
-          } else {
-            ok++
-          }
-        } catch (e) {
-          failed++
-          errors.push(`Row ${row.rowNumber} (${row.email}): ${e instanceof Error ? e.message : String(e)}`)
-        }
-      }
-      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
-      const summary =
-        `Imported ${ok} of ${rows.length} user(s)` +
-        (failed ? `, ${failed} failed` : '') +
-        (sendEmail ? ' (invite emails requested)' : ' (no emails sent)')
-      setImportReport(errors.length ? `${summary}. ${errors.slice(0, 5).join(' ┬╖ ')}` : summary)
-      setInfo({ tone: failed && !ok ? 'error' : 'ok', message: summary })
-    } catch (e) {
-      setInfo({ tone: 'error', message: e instanceof Error ? e.message : 'Import failed' })
-    } finally {
-      setImportingMembers(false)
-    }
-  }
-  function confirmBulkRemoveMembers() {
-    const ids = selectedActiveUserIds
-    if (!ids.length) return
+    if (!memberSelectable(row, user?.id) || !row.user_id) return;
+    const name = row.display_name ?? row.email ?? "this user";
     if (
       !window.confirm(
-        `Remove ${ids.length} user${ids.length === 1 ? '' : 's'} from ${instance.name}? They will lose access immediately.`,
+        `Remove ${name} from ${instance.name}? They will lose access immediately.`,
       )
     ) {
-      return
+      return;
     }
-    bulkRemoveMembers.mutate(ids)
+    removeMember.mutate(row.user_id);
+  }
+
+  function confirmBulkRemoveMembers() {
+    const ids = selectedActiveUserIds;
+    if (!ids.length) return;
+    if (
+      !window.confirm(
+        `Remove ${ids.length} user${ids.length === 1 ? "" : "s"} from ${instance.name}? They will lose access immediately.`,
+      )
+    ) {
+      return;
+    }
+    bulkRemoveMembers.mutate(ids);
   }
 
   function confirmBulkCancelInvites() {
     const ids = selectedPending
       .map((row) => row.invite_id)
-      .filter((id): id is string => !!id)
-    if (!ids.length) return
-    if (!window.confirm(`Cancel ${ids.length} pending invite${ids.length === 1 ? '' : 's'}?`)) {
-      return
+      .filter((id): id is string => !!id);
+    if (!ids.length) return;
+    if (
+      !window.confirm(
+        `Cancel ${ids.length} pending invite${ids.length === 1 ? "" : "s"}?`,
+      )
+    ) {
+      return;
     }
-    bulkCancelInvites.mutate(ids)
+    bulkCancelInvites.mutate(ids);
   }
 
   function resetForm() {
-    setForm(emptyForm())
-    setEditingUserId(null)
-    setOpen(false)
-    setError(null)
+    setForm(emptyForm());
+    setEditingUserId(null);
+    setOpen(false);
+    setError(null);
   }
 
   function startCreate() {
     if (atSeatLimit) {
-      setError(`Seat limit reached for this organisation plan (${seatCount} of ${maxSeats}).`)
-      return
+      setError(
+        `Seat limit reached for this organisation plan (${seatCount} of ${maxSeats}).`,
+      );
+      return;
     }
-    setForm(emptyForm())
-    setEditingUserId(null)
-    setInfo(null)
-    setError(null)
-    setOpen(true)
+    setForm(emptyForm());
+    setEditingUserId(null);
+    setInfo(null);
+    setError(null);
+    setOpen(true);
   }
 
   function startEdit(row: OrgUserRow) {
-    if (row.kind !== 'member' || row.role === 'owner' || !row.user_id) return
+    if (row.kind !== "member" || row.role === "owner" || !row.user_id) return;
     setForm({
-      email: row.email ?? '',
-      display_name: row.display_name ?? '',
-      job_title: row.job_title ?? '',
-      phone: row.phone ?? '',
-      department: row.department ?? '',
-      notes: row.notes ?? '',
+      email: row.email ?? "",
+      display_name: row.display_name ?? "",
+      job_title: row.job_title ?? "",
+      phone: row.phone ?? "",
+      department: row.department ?? "",
+      notes: row.notes ?? "",
       role: row.role,
-    })
-    setEditingUserId(row.user_id)
-    setInfo(null)
-    setError(null)
-    setOpen(true)
+    });
+    setEditingUserId(row.user_id);
+    setInfo(null);
+    setError(null);
+    setOpen(true);
   }
 
   function setField<K extends keyof MemberForm>(key: K, value: MemberForm[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }))
+    setForm((prev) => ({ ...prev, [key]: value }));
   }
 
   function onSubmit(e: FormEvent) {
-    e.preventDefault()
-    if (!isAdmin) return
-    if (!editingUserId && !form.email.trim()) return
-    saveMember.mutate()
+    e.preventDefault();
+    if (!isAdmin) return;
+    if (!editingUserId && !form.email.trim()) return;
+    saveMember.mutate();
   }
 
-  const colSpan = isAdmin ? 7 : 5
+  const colSpan = isAdmin ? 7 : 5;
   const bulkBusy =
+    importingMembers ||
     bulkRemoveMembers.isPending ||
     bulkSetRole.isPending ||
     bulkCancelInvites.isPending ||
-    bulkResendInvites.isPending
+    bulkResendInvites.isPending;
 
   return (
     <div className="space-y-6">
@@ -579,18 +727,48 @@ export function MembersPage() {
         help={PAGE_HELP.users}
         actions={
           isAdmin ? (
-            <Button
-              onClick={() => (open && !editingUserId ? resetForm() : startCreate())}
-              disabled={!editingUserId && atSeatLimit && !open}
-              title={
-                atSeatLimit
-                  ? `Plan limit: ${formatQuotaCap(maxSeats)} seat${maxSeats === 1 ? '' : 's'}`
-                  : undefined
-              }
-            >
-              <Plus className="h-4 w-4" />
-              Add user
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                onClick={downloadMembersImportTemplate}
+              >
+                <Download className="h-4 w-4" /> Template
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => void chooseImport()}
+                disabled={
+                  importingMembers ||
+                  saveMember.isPending ||
+                  !apiConfigured ||
+                  users.isPending ||
+                  users.isError
+                }
+                title={
+                  !apiConfigured
+                    ? "Invitation email service is not configured"
+                    : undefined
+                }
+              >
+                <Upload className="h-4 w-4" /> Import Excel
+              </Button>
+              <Button
+                onClick={() =>
+                  open && !editingUserId ? resetForm() : startCreate()
+                }
+                disabled={
+                  importingMembers || (!editingUserId && atSeatLimit && !open)
+                }
+                title={
+                  atSeatLimit
+                    ? `Plan limit: ${formatQuotaCap(maxSeats)} seat${maxSeats === 1 ? "" : "s"}`
+                    : undefined
+                }
+              >
+                <Plus className="h-4 w-4" />
+                Add user
+              </Button>
+            </div>
           ) : null
         }
       />
@@ -600,9 +778,12 @@ export function MembersPage() {
           Seats used: {seatCount} / {formatQuotaCap(maxSeats)}
           {atSeatLimit ? (
             <>
-              {' '}
-              ΓÇö plan limit reached.{' '}
-              <Link to="/pricing" className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline">
+              {" "}
+              plan limit reached.{" "}
+              <Link
+                to="/pricing"
+                className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
+              >
                 View pricing
               </Link>
             </>
@@ -613,11 +794,11 @@ export function MembersPage() {
       {info ? (
         <p
           className={
-            info.tone === 'ok'
-              ? 'rounded-xl border border-teal-200/80 bg-teal-50/80 px-3 py-2 text-sm text-teal-900'
-              : info.tone === 'error'
-                ? 'rounded-xl border border-rose-200/80 bg-rose-50/80 px-3 py-2 text-sm text-rose-900'
-                : 'rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-sm text-slate-800'
+            info.tone === "ok"
+              ? "rounded-xl border border-teal-200/80 bg-teal-50/80 px-3 py-2 text-sm text-teal-900"
+              : info.tone === "error"
+                ? "rounded-xl border border-rose-200/80 bg-rose-50/80 px-3 py-2 text-sm text-rose-900"
+                : "rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-sm text-slate-800"
           }
           role="status"
         >
@@ -625,14 +806,136 @@ export function MembersPage() {
         </p>
       ) : null}
 
+      {isAdmin && importPreview ? (
+        <Card className="space-y-4">
+          <h2 className="font-semibold">
+            Import users from {importPreview.name}
+          </h2>
+          <p className="text-sm text-[var(--color-ink-muted)]">
+            {newImportCount} new users;{" "}
+            {importPreview.rows.length - newImportCount} existing users or
+            invitations will be skipped. New accounts receive an invitation
+            email. Existing accounts are added as Active.
+          </p>
+          <p className="text-xs text-[var(--color-ink-muted)]">
+            Replace the sample users in the template with your own before
+            importing. A blank role defaults to editor.
+          </p>
+          <div className="max-h-72 overflow-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Email</th>
+                  <th>Name</th>
+                  <th>Role</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importPreview.rows.map((row) => (
+                  <tr key={row.rowNumber}>
+                    <td>{row.rowNumber}</td>
+                    <td>{row.email}</td>
+                    <td>{row.display_name}</td>
+                    <td>{row.role}</td>
+                    <td>
+                      {existingEmails.has(row.email) ? "Skip" : "Add user"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {importingMembers ? (
+            <p role="status" className="text-sm">
+              Processed {importProgress} of {importPreview.rows.length} rows. Keep this page open until the import finishes.
+            </p>
+          ) : null}
+          {importExceedsSeats ? (
+            <FieldError>
+              Not enough seats available. Reduce the file or upgrade your plan.
+            </FieldError>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              disabled={importingMembers}
+              onClick={() => setImportPreview(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                importingMembers ||
+                importExceedsSeats ||
+                !apiConfigured ||
+                users.isError ||
+                users.isPending ||
+                !newImportCount
+              }
+              onClick={() => void confirmImport()}
+            >
+              {importingMembers
+                ? `Importing ${importProgress} / ${importPreview.rows.length}...`
+                : `Import ${newImportCount} users & send invites`}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
+      {isAdmin && importReport ? (
+        <Card className="space-y-3">
+          <h2 className="font-semibold">Import results</h2>
+          <p role="status" className="text-sm">
+            {
+              importReport.filter(
+                (r) => r.outcome === "saved" || r.outcome === "warning",
+              ).length
+            }{" "}
+            saved, {importReport.filter((r) => r.outcome === "skipped").length}{" "}
+            skipped, {importReport.filter((r) => r.outcome === "failed").length}{" "}
+            failed, {importReport.filter((r) => r.outcome === "warning").length}{" "}
+            invitation emails need attention.
+          </p>
+          <div className="max-h-72 overflow-auto text-sm">
+            {importReport.map((result) => (
+              <p
+                key={result.row.rowNumber}
+                className={
+                  result.outcome === "failed" || result.outcome === "warning"
+                    ? "text-rose-700"
+                    : ""
+                }
+              >
+                Row {result.row.rowNumber} ({result.row.email}):{" "}
+                {result.message}
+              </p>
+            ))}
+          </div>
+          <p className="text-xs text-[var(--color-ink-muted)]">
+            You can correct failed rows and import the file again. Users already
+            saved will be skipped.
+          </p>
+          <Button variant="ghost" onClick={() => setImportReport(null)}>
+            Dismiss
+          </Button>
+        </Card>
+      ) : null}
+
       {open && isAdmin ? (
         <Card className="ff-page-enter border-teal-200/60">
           <form className="space-y-4" onSubmit={onSubmit}>
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-base font-semibold">
-                {editingUserId ? 'Edit user' : 'Add user'}
+                {editingUserId ? "Edit user" : "Add user"}
               </h2>
-              <Button type="button" variant="ghost" size="sm" onClick={resetForm}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={resetForm}
+              >
                 <X className="h-4 w-4" />
                 Cancel
               </Button>
@@ -645,15 +948,15 @@ export function MembersPage() {
                   id="member-email"
                   type="email"
                   value={form.email}
-                  onChange={(e) => setField('email', e.target.value)}
+                  onChange={(e) => setField("email", e.target.value)}
                   placeholder="colleague@company.com"
                   required={!editingUserId}
                   disabled={!!editingUserId}
                 />
                 {!editingUserId ? (
                   <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
-                    New emails are added as Pending and receive an invitation link automatically.
-                    Existing accounts are added as Active.
+                    New emails are added as Pending and receive an invitation
+                    link automatically. Existing accounts are added as Active.
                   </p>
                 ) : null}
               </div>
@@ -662,7 +965,7 @@ export function MembersPage() {
                 <Input
                   id="member-name"
                   value={form.display_name}
-                  onChange={(e) => setField('display_name', e.target.value)}
+                  onChange={(e) => setField("display_name", e.target.value)}
                   placeholder="Jane Doe"
                 />
               </div>
@@ -671,11 +974,13 @@ export function MembersPage() {
                 <Select
                   id="member-role"
                   value={form.role}
-                  onChange={(e) => setField('role', e.target.value as InstanceRole)}
+                  onChange={(e) =>
+                    setField("role", e.target.value as InstanceRole)
+                  }
                 >
                   <option value="admin">admin</option>
                   <option value="editor">editor</option>
-                  {instanceFeatureEnabled(instance, 'agent_console') ? (
+                  {instanceFeatureEnabled(instance, "agent_console") ? (
                     <option value="agent">agent</option>
                   ) : null}
                   <option value="viewer">viewer</option>
@@ -686,7 +991,7 @@ export function MembersPage() {
                 <Input
                   id="member-job"
                   value={form.job_title}
-                  onChange={(e) => setField('job_title', e.target.value)}
+                  onChange={(e) => setField("job_title", e.target.value)}
                   placeholder="Operations manager"
                 />
               </div>
@@ -695,7 +1000,7 @@ export function MembersPage() {
                 <Input
                   id="member-dept"
                   value={form.department}
-                  onChange={(e) => setField('department', e.target.value)}
+                  onChange={(e) => setField("department", e.target.value)}
                   placeholder="Customer success"
                 />
               </div>
@@ -705,7 +1010,7 @@ export function MembersPage() {
                   id="member-phone"
                   type="tel"
                   value={form.phone}
-                  onChange={(e) => setField('phone', e.target.value)}
+                  onChange={(e) => setField("phone", e.target.value)}
                   placeholder="+31 6 1234 5678"
                 />
               </div>
@@ -714,14 +1019,15 @@ export function MembersPage() {
                 <Textarea
                   id="member-notes"
                   value={form.notes}
-                  onChange={(e) => setField('notes', e.target.value)}
+                  onChange={(e) => setField("notes", e.target.value)}
                   placeholder="Internal notes about this person"
                   rows={3}
                 />
               </div>
               {!editingUserId && !apiConfigured ? (
                 <p className="sm:col-span-2 text-xs text-amber-800">
-                  Set `VITE_FLOWFORGE_API_URL` so invitation emails can be sent when you add a user.
+                  Set `VITE_FLOWFORGE_API_URL` so invitation emails can be sent
+                  when you add a user.
                 </p>
               ) : null}
             </div>
@@ -732,14 +1038,17 @@ export function MembersPage() {
               <Button type="button" variant="ghost" onClick={resetForm}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={saveMember.isPending}>
+              <Button
+                type="submit"
+                disabled={saveMember.isPending || importingMembers}
+              >
                 {saveMember.isPending
                   ? editingUserId
-                    ? 'SavingΓÇª'
-                    : 'Adding & sending inviteΓÇª'
+                    ? "SavingΓÇª"
+                    : "Adding & sending inviteΓÇª"
                   : editingUserId
-                    ? 'Save changes'
-                    : 'Add user & send invite'}
+                    ? "Save changes"
+                    : "Add user & send invite"}
               </Button>
             </div>
           </form>
@@ -750,11 +1059,14 @@ export function MembersPage() {
         id="users-search"
         value={search}
         onChange={setSearch}
-        placeholder="Search usersΓÇª"
+        placeholder="Search users"
       />
 
       {isAdmin && selected.size > 0 ? (
-        <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <BulkActionBar
+          count={selected.size}
+          onClear={() => setSelected(new Set())}
+        >
           <div className="flex flex-wrap items-center gap-2">
             {selectedActiveUserIds.length > 0 ? (
               <>
@@ -766,7 +1078,7 @@ export function MembersPage() {
                 >
                   <option value="admin">admin</option>
                   <option value="editor">editor</option>
-                  {instanceFeatureEnabled(instance, 'agent_console') ? (
+                  {instanceFeatureEnabled(instance, "agent_console") ? (
                     <option value="agent">agent</option>
                   ) : null}
                   <option value="viewer">viewer</option>
@@ -777,7 +1089,10 @@ export function MembersPage() {
                   variant="secondary"
                   disabled={bulkBusy}
                   onClick={() =>
-                    bulkSetRole.mutate({ userIds: selectedActiveUserIds, nextRole: bulkRole })
+                    bulkSetRole.mutate({
+                      userIds: selectedActiveUserIds,
+                      nextRole: bulkRole,
+                    })
                   }
                 >
                   Set role
@@ -827,8 +1142,10 @@ export function MembersPage() {
       <Card className="overflow-x-auto p-0">
         {users.isError ? (
           <p className="px-5 py-4 text-sm text-rose-700">
-            Could not load users:{' '}
-            {users.error instanceof Error ? users.error.message : 'Unknown error'}
+            Could not load users:{" "}
+            {users.error instanceof Error
+              ? users.error.message
+              : "Unknown error"}
           </p>
         ) : null}
         <table className="w-full text-left text-sm">
@@ -838,7 +1155,9 @@ export function MembersPage() {
                 <th className="px-5 py-3 font-medium">
                   <RowCheckbox
                     checked={allSelected}
-                    onChange={(on) => setSelected(setAllIds(selectableKeys, on))}
+                    onChange={(on) =>
+                      setSelected(setAllIds(selectableKeys, on))
+                    }
                     label="Select all users"
                     className="mt-0"
                   />
@@ -855,25 +1174,35 @@ export function MembersPage() {
           <tbody>
             {users.isLoading ? (
               <tr>
-                <td colSpan={colSpan} className="px-5 py-8 text-center text-[var(--color-ink-muted)]">
+                <td
+                  colSpan={colSpan}
+                  className="px-5 py-8 text-center text-[var(--color-ink-muted)]"
+                >
                   Loading usersΓÇª
                 </td>
               </tr>
             ) : null}
             {filteredUsers.map((row) => {
-              const name = row.display_name ?? row.email ?? 'User'
-              const email = row.email
+              const name = row.display_name ?? row.email ?? "User";
+              const email = row.email;
               const canSelect =
-                row.kind === 'invite' ? isAdmin : memberSelectable(row, user?.id)
-              const key = rowKey(row)
+                row.kind === "invite"
+                  ? isAdmin
+                  : memberSelectable(row, user?.id);
+              const key = rowKey(row);
               return (
-                <tr key={key} className="border-b border-[var(--color-border)] last:border-0">
+                <tr
+                  key={key}
+                  className="border-b border-[var(--color-border)] last:border-0"
+                >
                   {isAdmin ? (
                     <td className="px-5 py-3 align-top">
                       {canSelect ? (
                         <RowCheckbox
                           checked={selected.has(key)}
-                          onChange={(on) => setSelected((prev) => toggleId(prev, key, on))}
+                          onChange={(on) =>
+                            setSelected((prev) => toggleId(prev, key, on))
+                          }
                           label={`Select ${name}`}
                         />
                       ) : null}
@@ -893,13 +1222,17 @@ export function MembersPage() {
                           <div className="font-medium">{name}</div>
                           {row.is_superuser ? <SuperuserBadge /> : null}
                         </div>
-                        <div className="text-xs text-[var(--color-ink-muted)]">{email}</div>
+                        <div className="text-xs text-[var(--color-ink-muted)]">
+                          {email}
+                        </div>
                         {row.notes ? (
                           <p className="mt-1 max-w-xs text-xs text-[var(--color-ink-muted)] line-clamp-2">
                             {row.notes}
                           </p>
                         ) : null}
-                        {row.status === 'pending' && row.email_last_error && !row.email_sent_at ? (
+                        {row.status === "pending" &&
+                        row.email_last_error &&
+                        !row.email_sent_at ? (
                           <p className="mt-1 max-w-xs text-[11px] text-rose-700/90 line-clamp-2">
                             {row.email_last_error}
                           </p>
@@ -908,11 +1241,13 @@ export function MembersPage() {
                     </div>
                   </td>
                   <td className="px-5 py-3 align-top text-[var(--color-ink-muted)]">
-                    <div>{row.job_title ?? 'ΓÇö'}</div>
-                    {row.department ? <div className="text-xs">{row.department}</div> : null}
+                    <div>{row.job_title ?? ""}</div>
+                    {row.department ? (
+                      <div className="text-xs">{row.department}</div>
+                    ) : null}
                   </td>
                   <td className="px-5 py-3 align-top text-[var(--color-ink-muted)]">
-                    {row.phone ?? 'ΓÇö'}
+                    {row.phone ?? ""}
                   </td>
                   <td className="px-5 py-3 align-top">
                     <Badge>{row.role}</Badge>
@@ -920,18 +1255,18 @@ export function MembersPage() {
                   <td className="px-5 py-3 align-top">
                     <Badge
                       className={
-                        row.status === 'active'
+                        row.status === "active"
                           ? undefined
-                          : 'from-amber-500/15 to-amber-500/10 text-amber-900 ring-amber-600/15'
+                          : "from-amber-500/15 to-amber-500/10 text-amber-900 ring-amber-600/15"
                       }
                     >
-                      {row.status === 'active' ? 'Active' : 'Pending'}
+                      {row.status === "active" ? "Active" : "Pending"}
                     </Badge>
                   </td>
                   {isAdmin ? (
                     <td className="px-5 py-3 align-top">
                       <div className="flex flex-wrap items-center justify-end gap-1">
-                        {row.status === 'pending' ? (
+                        {row.status === "pending" ? (
                           <Button
                             type="button"
                             variant="secondary"
@@ -940,7 +1275,7 @@ export function MembersPage() {
                             disabled={resendInvite.isPending || !apiConfigured}
                             title={
                               !apiConfigured
-                                ? 'Invite email API is not configured'
+                                ? "Invite email API is not configured"
                                 : `Resend invitation email to ${email}`
                             }
                             onClick={() => resendInvite.mutate(row)}
@@ -949,7 +1284,7 @@ export function MembersPage() {
                             Resend invite
                           </Button>
                         ) : null}
-                        {row.kind === 'invite' && row.token ? (
+                        {row.kind === "invite" && row.token ? (
                           <Button
                             type="button"
                             variant="ghost"
@@ -961,7 +1296,8 @@ export function MembersPage() {
                             <Copy className="h-4 w-4" />
                           </Button>
                         ) : null}
-                        {row.kind === 'member' && memberSelectable(row, user?.id) ? (
+                        {row.kind === "member" &&
+                        memberSelectable(row, user?.id) ? (
                           <Button
                             type="button"
                             variant="ghost"
@@ -972,15 +1308,20 @@ export function MembersPage() {
                             <Pencil className="h-4 w-4" />
                           </Button>
                         ) : null}
-                        {(row.kind === 'invite' || memberSelectable(row, user?.id)) ? (
+                        {row.kind === "invite" ||
+                        memberSelectable(row, user?.id) ? (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             aria-label={
-                              row.kind === 'invite' ? `Cancel invite for ${email}` : `Remove ${name}`
+                              row.kind === "invite"
+                                ? `Cancel invite for ${email}`
+                                : `Remove ${name}`
                             }
-                            disabled={removeMember.isPending || removeInvite.isPending}
+                            disabled={
+                              removeMember.isPending || removeInvite.isPending
+                            }
                             onClick={() => confirmRemove(row)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -990,12 +1331,17 @@ export function MembersPage() {
                     </td>
                   ) : null}
                 </tr>
-              )
+              );
             })}
             {!users.isLoading && !filteredUsers.length ? (
               <tr>
-                <td colSpan={colSpan} className="px-5 py-8 text-center text-[var(--color-ink-muted)]">
-                  {users.data?.length ? 'No users match your search.' : 'No users yet.'}
+                <td
+                  colSpan={colSpan}
+                  className="px-5 py-8 text-center text-[var(--color-ink-muted)]"
+                >
+                  {users.data?.length
+                    ? "No users match your search."
+                    : "No users yet."}
                 </td>
               </tr>
             ) : null}
@@ -1003,5 +1349,5 @@ export function MembersPage() {
         </table>
       </Card>
     </div>
-  )
+  );
 }

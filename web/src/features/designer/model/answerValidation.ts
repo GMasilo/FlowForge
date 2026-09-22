@@ -18,6 +18,7 @@ import {
   parseConversationFileList,
 } from '@/features/designer/model/conversationFiles'
 import { countryDisplayLabel, normalizeCountryValue } from '@/shared/lib/countries'
+import { maskedCreditCardNumber, validateCreditCardDetails } from './creditCard'
 import { mediaKeyFromFilename } from '@/features/designer/model/chatbotMedia'
 import {
   buildShopCart,
@@ -796,6 +797,12 @@ export function validateQuestionAnswer(
     const patErr = checkPattern(digits, pattern, patternMessage)
     if (patErr) return { ok: false, error: patErr }
     return { ok: true, value: digits, displayText: digits }
+  }
+
+  if (answerType === 'credit_card') {
+    const result = validateCreditCardDetails(answer)
+    if (!result.ok) return result
+    return { ok: true, value: result.value, displayText: maskedCreditCardNumber(result.value.number) }
   }
 
   if (answerType === 'password') {

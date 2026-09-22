@@ -521,6 +521,7 @@ export function chatBrandingCssVars(branding: ResolvedChatBranding): ChatBrandin
     '--ff-chat-page-bg': page,
     '--ff-chat-page-bg-2': page2,
     '--ff-chat-accent': accent,
+    '--ff-chat-accent-fg': relativeLuminance(accent) > 0.179 ? '#000000' : '#ffffff',
     '--ff-chat-accent-soft':
       branding.appearanceTheme === 'midnight' ? mix(accent, 'black', 0.72) : mix(accent, 'white', 0.85),
     '--ff-chat-bubble-radius': radius,

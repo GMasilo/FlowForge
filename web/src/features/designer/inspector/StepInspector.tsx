@@ -4856,6 +4856,14 @@ export function StepInspector({
               variable for later steps.
             </p>
           ) : null}
+          {String(node.config.answerType) === 'credit_card' ? (
+            <p className="text-[11px] text-[var(--color-ink-muted)]">
+              Collects a card number, expiry date (MM/YY), and CVV. Chat shows only the last four
+              digits. The response and output variable contain an object with number, expiry, and
+              cvv fields, all stored as text.
+              This does not charge the card or verify that it is active. Use Payment to take a payment.
+            </p>
+          ) : null}
           {String(node.config.answerType) === 'location' ? (
             <p className="text-[11px] text-[var(--color-ink-muted)]">
               Asks the visitor for GPS coordinates (lat/lng) plus an optional label. Stored as an

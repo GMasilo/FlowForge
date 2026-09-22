@@ -90,7 +90,7 @@ export function decodeSocialShareEmbed(b64: string): SocialShareEmbedPayload | n
       if (!row || typeof row !== 'object') continue
       const r = row as Partial<SocialShareEmbedPlatform>
       const id = r.id
-      if (!(['x','linkedin','facebook','instagram','tiktok','youtube','twitch','threads','pinterest'] as string[]).includes(id as string)) continue
+      if (typeof id !== 'string' || !(['x','linkedin','facebook','instagram','tiktok','youtube','twitch','threads','pinterest'] as string[]).includes(id)) continue
       const url = typeof r.url === 'string' ? r.url.trim() : ''
       if (!url) continue
       platforms.push({

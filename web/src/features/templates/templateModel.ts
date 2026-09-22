@@ -244,14 +244,14 @@ export type DocumentContent = {
 
 export type SsoProtocol = 'oidc' | 'saml'
 
-/** IdP config for visitor Sign-in SSO ΓÇö stored on chatbot Templates, referenced by key. */
+/** IdP config for visitor Sign-in SSO  stored on chatbot Templates, referenced by key. */
 export type SsoContent = {
   protocol: SsoProtocol
   providerName: string
   buttonLabel: string
   oidcIssuer: string
   oidcClientId: string
-  /** Optional secret reference / value ΓÇö prefer server vault for production. */
+  /** Optional secret reference / value  prefer server vault for production. */
   oidcClientSecret: string
   oidcAuthorizationUrl: string
   oidcTokenUrl: string
@@ -690,21 +690,21 @@ export const TEMPLATE_KIND_META: Record<
   },
   document: {
     label: 'Downloadable file',
-    hint: 'PDF, Word, or Excel filled from answers ΓÇö list layout or a visual A4 page (portrait or landscape)',
+    hint: 'PDF, Word, or Excel filled from answers  list layout or a visual A4 page (portrait or landscape)',
     insertField: 'file',
     category: 'documents',
     tags: ['pdf', 'word', 'excel', 'download'],
   },
   agreement: {
     label: 'Agreement',
-    hint: 'Adobe SignΓÇôstyle PDF: parties, terms, signature, and date signed ΓÇö download after the visitor signs',
+    hint: 'Adobe SignΓÇôstyle PDF: parties, terms, signature, and date signed  download after the visitor signs',
     insertField: 'file',
     category: 'documents',
     tags: ['pdf', 'signature', 'legal'],
   },
   sso: {
     label: 'SSO / IdP',
-    hint: 'OIDC or SAML identity provider for Sign-in steps ΓÇö configure here, then select on the step',
+    hint: 'OIDC or SAML identity provider for Sign-in steps  configure here, then select on the step',
     insertField: 'providerName',
     category: 'integrations',
     tags: ['auth', 'oidc', 'saml'],
@@ -725,14 +725,14 @@ export const TEMPLATE_KIND_META: Record<
   },
   map: {
     label: 'Map view',
-    hint: 'Interactive map with pins ΓÇö show stores, meetups, or delivery zones in chat',
+    hint: 'Interactive map with pins  show stores, meetups, or delivery zones in chat',
     insertField: 'text',
     category: 'content',
     tags: ['map', 'pins', 'geo', 'embed'],
   },
   qr: {
     label: 'QR code',
-    hint: 'Generate a scannable QR from a URL or text ΓÇö show and download in chat',
+    hint: 'Generate a scannable QR from a URL or text  show and download in chat',
     insertField: 'text',
     category: 'content',
     tags: ['qr', 'barcode', 'link', 'embed'],
@@ -814,14 +814,14 @@ export const TEMPLATE_KIND_META: Record<
   },
   certificate: {
     label: 'Certificate',
-    hint: 'PDF certificate filled from answers ΓÇö download after completion',
+    hint: 'PDF certificate filled from answers  download after completion',
     insertField: 'file',
     category: 'documents',
     tags: ['pdf', 'certificate'],
   },
   checklist: {
     label: 'Checklist',
-    hint: 'PDF checklist document ΓÇö download after completion',
+    hint: 'PDF checklist document  download after completion',
     insertField: 'file',
     category: 'documents',
     tags: ['pdf', 'checklist'],
@@ -835,7 +835,7 @@ export const TEMPLATE_KIND_META: Record<
   },
   webhook: {
     label: 'Webhook',
-    hint: 'HTTP request config ΓÇö method, headers, and JSON body',
+    hint: 'HTTP request config  method, headers, and JSON body',
     insertField: 'text',
     category: 'integrations',
     tags: ['http', 'api', 'webhook'],
@@ -1465,9 +1465,9 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
         </tr>
         <tr>
           <td style="padding:28px 32px;color:#334155;font-size:15px;line-height:1.65;">
-            <p style="margin:0 0 16px;">Thanks for getting in touch. HereΓÇÖs a quick update:</p>
+            <p style="margin:0 0 16px;">Thanks for getting in touch. Heres a quick update:</p>
             <p style="margin:0 0 20px;">{{inputs.message}}</p>
-            <p style="margin:0;color:#64748b;font-size:13px;">If you didnΓÇÖt request this, you can ignore the email.</p>
+            <p style="margin:0;color:#64748b;font-size:13px;">If you didnt request this, you can ignore the email.</p>
           </td>
         </tr>
       </table>
@@ -1483,7 +1483,7 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
         items: [
           { question: 'What are your hours?', answer: 'See {{templates.hours_main.text}} or ask a teammate.' },
           { question: 'How do I track an order?', answer: 'Share your order number and we will look it up.' },
-          { question: 'Can I talk to a person?', answer: 'Yes ΓÇö say ΓÇ£agentΓÇ¥ and we will hand you over.' },
+          { question: 'Can I talk to a person?', answer: 'Yes  say ΓÇ£agentΓÇ¥ and we will hand you over.' },
         ],
       }
     case 'cart': {
@@ -1550,7 +1550,7 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
     case 'message':
       return {
         inputs: [{ key: 'name', label: 'Name', type: 'string', required: true }],
-        text: 'Hi {{inputs.name}} ΓÇö welcome! I can help with orders, hours, and common questions.',
+        text: 'Hi {{inputs.name}}  welcome! I can help with orders, hours, and common questions.',
       }
     case 'hours':
       return {
@@ -1577,7 +1577,7 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
           { key: 'order_id', label: 'Order id', type: 'string', required: false },
         ],
         title: 'Order confirmation',
-        intro: 'Thanks {{inputs.name}} ΓÇö weΓÇÖve received your order {{inputs.order_id}}.',
+        intro: 'Thanks {{inputs.name}}  weve received your order {{inputs.order_id}}.',
         footer: 'Reply to this chat if anything looks wrong.',
       }
     case 'document':
@@ -2530,7 +2530,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
         const lines = items.map((p) => {
           const price = formatTemplateMoney(p.price, c.currency)
           const sku = p.sku.trim() ? ` (${p.sku.trim()})` : ''
-          const desc = p.description.trim() ? ` ΓÇö ${p.description.trim()}` : ''
+          const desc = p.description.trim() ? `  ${p.description.trim()}` : ''
           return `ΓÇó ${p.name.trim()}${sku}: ${price}${desc}`
         })
         blocks.push([cat.name.trim(), ...lines].filter(Boolean).join('\n'))
@@ -2551,7 +2551,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       const lines = c.items
         .filter((i) => i.label.trim())
         .map((i) => {
-          const desc = i.description.trim() ? ` ΓÇö ${i.description.trim()}` : ''
+          const desc = i.description.trim() ? `  ${i.description.trim()}` : ''
           return `ΓÇó ${i.label.trim()}${desc}`
         })
       return [c.title.trim(), ...lines].filter(Boolean).join('\n')
@@ -2597,7 +2597,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       const c = content as AppointmentContent
       const services = c.services
         .filter((s) => s.name.trim())
-        .map((s) => `ΓÇó ${s.name.trim()} (${s.durationMinutes}min)${s.description.trim() ? ` ΓÇö ${s.description.trim()}` : ''}`)
+        .map((s) => `ΓÇó ${s.name.trim()} (${s.durationMinutes}min)${s.description.trim() ? `  ${s.description.trim()}` : ''}`)
       return [c.title.trim(), c.intro.trim(), ...services, c.note.trim()].filter(Boolean).join('\n')
     }
     case 'location': {
@@ -2683,7 +2683,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       const c = content as TeamContent
       const members = c.members
         .filter((m) => m.name.trim())
-        .map((m) => `ΓÇó ${m.name.trim()} (${m.role.trim()})${m.skills.trim() ? ` ΓÇö ${m.skills.trim()}` : ''}`)
+        .map((m) => `ΓÇó ${m.name.trim()} (${m.role.trim()})${m.skills.trim() ? `  ${m.skills.trim()}` : ''}`)
       return [c.intro.trim(), ...members].filter(Boolean).join('\n')
     }
     case 'pricing': {
@@ -2693,7 +2693,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
         .map((p) => {
           const price = formatTemplateMoney(p.price, c.currency)
           const features = p.features.filter(Boolean).join(', ')
-          return `ΓÇó ${p.name.trim()}: ${price}/${p.period}${features ? ` ΓÇö ${features}` : ''}`
+          return `ΓÇó ${p.name.trim()}: ${price}/${p.period}${features ? `  ${features}` : ''}`
         })
       return [c.intro.trim(), ...plans].filter(Boolean).join('\n')
     }
@@ -3020,7 +3020,7 @@ export function renderReceiptFromCart(
   if (cart?.itemCount) {
     lines.push('')
     for (const item of cart.items) {
-      lines.push(`${item.name} ├ù ${item.qty} ΓÇö ${formatTemplateMoney(item.lineTotal, cart.currency)}`)
+      lines.push(`${item.name} ├ù ${item.qty}  ${formatTemplateMoney(item.lineTotal, cart.currency)}`)
     }
     if (cart.fees?.length) {
       lines.push(`Subtotal ${formatTemplateMoney(cart.subtotal, cart.currency)}`)

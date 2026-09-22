@@ -42,6 +42,7 @@ export type QuestionAnswerType =
   | 'appointment'
   | 'matrix'
   | 'national_id'
+  | 'credit_card'
   | 'password'
   | 'autocomplete'
   | 'audio'

@@ -2145,7 +2145,7 @@ export function submitPreviewAnswer(
   const answerType = String(node.config.answerType ?? 'text')
   if (!validated.ok) {
     const failedText =
-      answerType === 'password'
+      answerType === 'password' || answerType === 'credit_card'
         ? '••••••'
         : Array.isArray(answer)
           ? answer
@@ -2331,7 +2331,7 @@ export function submitPreviewAnswer(
       outputVariable: key || undefined,
       answerRequired: isAnswerRequired(node.config),
     },
-    processed: { rawAnswer: answer, coercedValue: value },
+    processed: { rawAnswer: answerType === 'credit_card' ? validated.displayText : answer, coercedValue: value },
     outputs: { response: value },
     savedAs: savedAsVar(key) ?? savedAsStep(node.key),
   })

@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "typecheck": "tsc -b --pretty false",
     "test:preview": "tsx scripts/run-preview-checks.ts",
+    "test:users-import": "tsx --tsconfig tsconfig.app.json src/features/instances/membersExcel.check.ts",
     "preview": "vite preview"
   },
   "dependencies": {

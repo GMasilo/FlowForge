@@ -29,14 +29,15 @@ export type MemberImportRow = {
   rowNumber: number
 }
 
-const ASSIGNABLE_ROLES: InstanceRole[] = ['admin', 'editor', 'viewer']
+const ASSIGNABLE_ROLES: InstanceRole[] = ['admin', 'editor', 'agent', 'viewer']
+export const MAX_MEMBER_IMPORT_ROWS = 1000
 
 function xmlEscape(value: string): string {
   return value
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 function colLetter(index: number): string {
@@ -69,7 +70,7 @@ function buildSheetXml(rows: string[][], sheetName: string): { sheet: string; wo
   return { sheet, workbook }
 }
 
-function buildXlsx(rows: string[][], sheetName: string): Uint8Array {
+export function buildMembersXlsx(rows: string[][], sheetName = 'Members'): Uint8Array {
   const { sheet, workbook } = buildSheetXml(rows, sheetName)
   const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -96,7 +97,7 @@ function buildXlsx(rows: string[][], sheetName: string): Uint8Array {
   })
 }
 
-/** Download a blank members import template (.xlsx). */
+/** Download a members import template with replaceable sample rows (.xlsx). */
 export function downloadMembersImportTemplate() {
   const example: string[][] = [
     [...MEMBER_IMPORT_HEADERS],
@@ -119,7 +120,7 @@ export function downloadMembersImportTemplate() {
       '',
     ],
   ]
-  const bytes = buildXlsx(example, 'Members')
+  const bytes = buildMembersXlsx(example)
   const copy = Uint8Array.from(bytes)
   downloadBlob(
     'flowforge-members-import-template.xlsx',
@@ -129,13 +130,13 @@ export function downloadMembersImportTemplate() {
 
 function decodeXmlEntities(s: string): string {
   return s
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
-    .replace(/'/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
-    .replace(/&/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&amp;/g, '&')
 }
 
 function parseColLetters(letters: string): number {
@@ -181,8 +182,8 @@ function parseSheetRows(xml: string, shared: string[]): string[][] {
     const t = typeM?.[1] ?? ''
     let value = ''
     if (t === 'inlineStr') {
-      const tm = /<t[^>]*>([\s\S]*?)<\/t>/i.exec(body)
-      value = tm ? decodeXmlEntities(tm[1] ?? '') : ''
+      value = [...body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/gi)]
+        .map((tm) => decodeXmlEntities(tm[1] ?? '')).join('')
     } else if (t === 's') {
       const vm = /<v[^>]*>([\s\S]*?)<\/v>/i.exec(body)
       const idx = Number(vm?.[1] ?? '')
@@ -190,6 +191,10 @@ function parseSheetRows(xml: string, shared: string[]): string[][] {
     } else {
       const vm = /<v[^>]*>([\s\S]*?)<\/v>/i.exec(body)
       value = vm ? decodeXmlEntities(vm[1] ?? '') : ''
+    }
+    if (!value.trim()) continue
+    if (parsed.row > MAX_MEMBER_IMPORT_ROWS || parsed.col > 100) {
+      throw new Error(`Use at most ${MAX_MEMBER_IMPORT_ROWS} data rows and 101 columns`)
     }
     grid.set(`${parsed.row}:${parsed.col}`, value)
     maxRow = Math.max(maxRow, parsed.row)
@@ -207,14 +212,25 @@ function parseSheetRows(xml: string, shared: string[]): string[][] {
 }
 
 function parseXlsxBytes(bytes: Uint8Array): string[][] {
-  const files = unzipSync(bytes)
+  let expandedSize = 0
+  const files = unzipSync(bytes, { filter: (entry) => {
+    if (!entry.name.startsWith('xl/') || !/\.(xml|rels)$/.test(entry.name)) return false
+    expandedSize += entry.originalSize
+    if (expandedSize > 20 * 1024 * 1024) throw new Error('Spreadsheet is too large when expanded')
+    return true
+  } })
   const decoder = new TextDecoder()
   let shared: string[] = []
   const ss = files['xl/sharedStrings.xml']
   if (ss) shared = parseSharedStrings(decoder.decode(ss))
-  const sheet =
-    files['xl/worksheets/sheet1.xml'] ??
-    Object.entries(files).find(([k]) => k.startsWith('xl/worksheets/sheet') && k.endsWith('.xml'))?.[1]
+  const workbook = decoder.decode(files['xl/workbook.xml'])
+  const firstSheet = /<sheet\b[^>]*\br:id="([^"]+)"/.exec(workbook)?.[1]
+  const relationships = decoder.decode(files['xl/_rels/workbook.xml.rels'])
+  const relationship = [...relationships.matchAll(/<Relationship\b[^>]*>/g)]
+    .find(([tag]) => /\bId="([^"]+)"/.exec(tag)?.[1] === firstSheet)
+  const target = relationship ? /\bTarget="([^"]+)"/.exec(relationship[0])?.[1] : undefined
+  const sheetPath = target ? (target.startsWith('/') ? target.slice(1) : `xl/${target.replace(/^\.\//, '')}`) : 'xl/worksheets/sheet1.xml'
+  const sheet = files[sheetPath]
   if (!sheet) throw new Error('Spreadsheet has no worksheet')
   return parseSheetRows(decoder.decode(sheet), shared)
 }
@@ -252,12 +268,13 @@ function parseCsvText(text: string): string[][] {
       if (ch === '\r' && text[i + 1] === '\n') i++
       row.push(cur)
       cur = ''
-      if (row.some((c) => c.trim())) rows.push(row)
+      rows.push(row)
       row = []
       continue
     }
     cur += ch
   }
+  if (inQuotes) throw new Error('CSV contains an unclosed quoted field')
   row.push(cur)
   if (row.some((c) => c.trim())) rows.push(row)
   return rows
@@ -272,11 +289,12 @@ function normalizeRole(raw: string): InstanceRole {
   if (r === 'admin' || r === 'administrator') return 'admin'
   if (r === 'editor' || r === 'edit' || r === 'member') return 'editor'
   if (r === 'viewer' || r === 'view' || r === 'read' || r === 'readonly') return 'viewer'
+  if (r === 'agent') return 'agent'
   if (r === 'owner') {
     throw new Error('role "owner" cannot be assigned via import — use admin, editor, or viewer')
   }
   if (!r) return 'editor'
-  throw new Error(`invalid role "${raw}" (use admin, editor, or viewer)`)
+    throw new Error(`invalid role "${raw}" (use admin, editor, agent, or viewer)`)
 }
 
 function isEmail(value: string): boolean {
@@ -284,14 +302,17 @@ function isEmail(value: string): boolean {
 }
 
 /** Parse an .xlsx or .csv members file into validated rows. */
-export async function parseMembersImportFile(file: File): Promise<MemberImportRow[]> {
+export async function parseMembersImportFile(file: File, options: { allowAgent?: boolean } = {}): Promise<MemberImportRow[]> {
+  if (file.size > 5 * 1024 * 1024) throw new Error('Choose a file smaller than 5 MB')
   const name = file.name.toLowerCase()
   let grid: string[][]
   if (name.endsWith('.csv') || file.type === 'text/csv') {
     grid = parseCsvText(await file.text())
-  } else {
+  } else if (name.endsWith('.xlsx')) {
     const buf = new Uint8Array(await file.arrayBuffer())
     grid = parseXlsxBytes(buf)
+  } else {
+    throw new Error('Choose an .xlsx or .csv file')
   }
   if (!grid.length) throw new Error('Spreadsheet is empty')
 
@@ -309,10 +330,12 @@ export async function parseMembersImportFile(file: File): Promise<MemberImportRo
   const notesIdx = idx(['notes', 'note', 'comment'])
 
   const out: MemberImportRow[] = []
+  const seen = new Map<string, number>()
   for (let r = 1; r < grid.length; r++) {
     const cells = grid[r] ?? []
     const email = (cells[emailIdx] ?? '').trim()
-    if (!email) continue
+    if (!cells.some((cell) => cell.trim())) continue
+    if (!email) throw new Error(`Row ${r + 1}: email is required`)
     if (!isEmail(email)) {
       throw new Error(`Row ${r + 1}: invalid email "${email}"`)
     }
@@ -326,6 +349,13 @@ export async function parseMembersImportFile(file: File): Promise<MemberImportRo
     if (!ASSIGNABLE_ROLES.includes(role)) {
       throw new Error(`Row ${r + 1}: role must be admin, editor, or viewer`)
     }
+    if (role === 'agent' && !options.allowAgent) {
+      throw new Error(`Row ${r + 1}: agent access is not enabled for this organisation`)
+    }
+    const previous = seen.get(email.toLowerCase())
+    if (previous) throw new Error(`Row ${r + 1}: duplicate email "${email}" (also on row ${previous})`)
+    seen.set(email.toLowerCase(), r + 1)
+    if (out.length >= MAX_MEMBER_IMPORT_ROWS) throw new Error(`Import at most ${MAX_MEMBER_IMPORT_ROWS} users at a time`)
     out.push({
       email: email.toLowerCase(),
       display_name: displayIdx >= 0 ? (cells[displayIdx] ?? '').trim() : '',
@@ -341,20 +371,24 @@ export async function parseMembersImportFile(file: File): Promise<MemberImportRo
   return out
 }
 
-export function pickMembersImportFile(): Promise<{ file: File; rows: MemberImportRow[] }> {
+export function pickMembersImportFile(options: { allowAgent?: boolean } = {}): Promise<{ file: File; rows: MemberImportRow[] } | null> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv'
     input.style.display = 'none'
+    input.addEventListener('cancel', () => {
+      input.remove()
+      resolve(null)
+    }, { once: true })
     input.addEventListener('change', () => {
       const file = input.files?.[0]
       input.remove()
       if (!file) {
-        reject(new Error('No file selected'))
+        resolve(null)
         return
       }
-      parseMembersImportFile(file)
+      parseMembersImportFile(file, options)
         .then((rows) => resolve({ file, rows }))
         .catch(reject)
     })

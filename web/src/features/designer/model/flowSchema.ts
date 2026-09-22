@@ -229,6 +229,7 @@ export const questionAnswerTypes = [
   'appointment',
   'matrix',
   'national_id',
+  'credit_card',
   'password',
   'autocomplete',
   'audio',
@@ -278,6 +279,7 @@ export const QUESTION_ANSWER_TYPE_OPTIONS: Array<{
   { value: 'matrix', label: 'Matrix', hint: 'Rate several rows on the same scale' },
   { value: 'location', label: 'Location', hint: 'Share GPS coordinates, with an optional label' },
   { value: 'national_id', label: 'National ID', hint: 'ID / national number; SA ID checksum supported' },
+  { value: 'credit_card', label: 'Credit card', hint: 'Card number, expiry date and CVV; masked in chat' },
   { value: 'password', label: 'Password', hint: 'Masked secret; shown as dots in chat' },
   { value: 'audio', label: 'Voice note', hint: 'Record a short audio reply into the conversation folder' },
   { value: 'payment', label: 'Payment', hint: 'PayFast or a pay link; server can confirm via a payment connection' },
@@ -1046,6 +1048,12 @@ export function describeQuestionResponse(
       ])
     case 'matrix':
       return wrapQuestionResponse('object', '{ "Row": "Agree" }')
+    case 'credit_card':
+      return wrapQuestionResponse('object', '{ number, expiry, cvv }', [
+        { path: 'number', type: 'string' },
+        { path: 'expiry', type: 'string' },
+        { path: 'cvv', type: 'string' },
+      ])
     case 'payment':
       return wrapQuestionResponse('object', '{ status, amount, currency, reference }', [
         { path: 'status', type: 'string' },

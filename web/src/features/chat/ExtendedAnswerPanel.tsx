@@ -6,6 +6,7 @@ import { AppointmentAnswerField } from '@/features/chat/AppointmentAnswerField'
 import { MatrixAnswerField } from '@/features/chat/MatrixAnswerField'
 import { NationalIdAnswerField } from '@/features/chat/NationalIdAnswerField'
 import { PasswordAnswerField } from '@/features/chat/PasswordAnswerField'
+import { CreditCardAnswerField } from '@/features/chat/CreditCardAnswerField'
 import { AutocompleteAnswerField } from '@/features/chat/AutocompleteAnswerField'
 import { AudioAnswerField } from '@/features/chat/AudioAnswerField'
 import { PaymentAnswerField, type PaymentPhase, type PaymentCheckout } from '@/features/chat/PaymentAnswerField'
@@ -25,6 +26,7 @@ export const EXTENDED_ANSWER_TYPES = [
   'appointment',
   'matrix',
   'national_id',
+  'credit_card',
   'password',
   'autocomplete',
   'audio',
@@ -158,6 +160,9 @@ export function ExtendedAnswerPanel({
             <Send className="h-4 w-4" />
           </Button>
         </form>
+      ) : null}
+      {answerType === 'credit_card' ? (
+        <CreditCardAnswerField onSubmit={onSubmit} />
       ) : null}
       {answerType === 'autocomplete' ? (
         <form
