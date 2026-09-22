@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Pencil, Plus, Trash2, X, Mail } from 'lucide-react'
+import { Copy, Download, Pencil, Plus, Trash2, Upload, X, Mail } from 'lucide-react'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { formatQuotaCap } from '@/features/billing/planCatalog'
@@ -33,6 +33,10 @@ import {
   setAllIds,
   toggleId,
 } from '@/shared/ui/list-controls'
+import {
+  downloadMembersImportTemplate,
+  pickMembersImportFile,
+} from '@/features/instances/membersExcel'
 
 type OrgUserRow = {
   kind: 'member' | 'invite'
@@ -100,6 +104,8 @@ export function MembersPage() {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [bulkRole, setBulkRole] = useState<InstanceRole>('editor')
+  const [importingMembers, setImportingMembers] = useState(false)
+  const [importReport, setImportReport] = useState<string | null>(null)
   const apiConfigured = isFlowForgeApiConfigured()
   const isAdmin = canAdmin(role)
   const maxSeats = instance.quota_max_seats ?? -1
@@ -440,6 +446,53 @@ export function MembersPage() {
     removeMember.mutate(row.user_id)
   }
 
+
+  async function runMembersImport(sendEmail: boolean) {
+    if (!isAdmin) return
+    setImportReport(null)
+    try {
+      const { rows } = await pickMembersImportFile()
+      setImportingMembers(true)
+      let ok = 0
+      let failed = 0
+      const errors: string[] = []
+      for (const row of rows) {
+        try {
+          const result = await inviteOrganisationMember({
+            instanceId: instance.id,
+            email: row.email,
+            role: row.role,
+            displayName: row.display_name || null,
+            jobTitle: row.job_title || null,
+            phone: row.phone || null,
+            department: row.department || null,
+            notes: row.notes || null,
+            sendEmail,
+          })
+          if (result.ok === false && result.error) {
+            failed++
+            errors.push(`Row ${row.rowNumber} (${row.email}): ${result.error}`)
+          } else {
+            ok++
+          }
+        } catch (e) {
+          failed++
+          errors.push(`Row ${row.rowNumber} (${row.email}): ${e instanceof Error ? e.message : String(e)}`)
+        }
+      }
+      await qc.invalidateQueries({ queryKey: ['organisation-users', instance.id] })
+      const summary =
+        `Imported ${ok} of ${rows.length} user(s)` +
+        (failed ? `, ${failed} failed` : '') +
+        (sendEmail ? ' (invite emails requested)' : ' (no emails sent)')
+      setImportReport(errors.length ? `${summary}. ${errors.slice(0, 5).join(' · ')}` : summary)
+      setInfo({ tone: failed && !ok ? 'error' : 'ok', message: summary })
+    } catch (e) {
+      setInfo({ tone: 'error', message: e instanceof Error ? e.message : 'Import failed' })
+    } finally {
+      setImportingMembers(false)
+    }
+  }
   function confirmBulkRemoveMembers() {
     const ids = selectedActiveUserIds
     if (!ids.length) return
