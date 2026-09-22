@@ -485,7 +485,7 @@ export function MembersPage() {
         `Imported ${ok} of ${rows.length} user(s)` +
         (failed ? `, ${failed} failed` : '') +
         (sendEmail ? ' (invite emails requested)' : ' (no emails sent)')
-      setImportReport(errors.length ? `${summary}. ${errors.slice(0, 5).join(' · ')}` : summary)
+      setImportReport(errors.length ? `${summary}. ${errors.slice(0, 5).join(' ┬╖ ')}` : summary)
       setInfo({ tone: failed && !ok ? 'error' : 'ok', message: summary })
     } catch (e) {
       setInfo({ tone: 'error', message: e instanceof Error ? e.message : 'Import failed' })
@@ -601,7 +601,7 @@ export function MembersPage() {
           {atSeatLimit ? (
             <>
               {' '}
-              — plan limit reached.{' '}
+              ΓÇö plan limit reached.{' '}
               <Link to="/pricing" className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline">
                 View pricing
               </Link>
@@ -735,8 +735,8 @@ export function MembersPage() {
               <Button type="submit" disabled={saveMember.isPending}>
                 {saveMember.isPending
                   ? editingUserId
-                    ? 'Saving…'
-                    : 'Adding & sending invite…'
+                    ? 'SavingΓÇª'
+                    : 'Adding & sending inviteΓÇª'
                   : editingUserId
                     ? 'Save changes'
                     : 'Add user & send invite'}
@@ -750,7 +750,7 @@ export function MembersPage() {
         id="users-search"
         value={search}
         onChange={setSearch}
-        placeholder="Search users…"
+        placeholder="Search usersΓÇª"
       />
 
       {isAdmin && selected.size > 0 ? (
@@ -856,7 +856,7 @@ export function MembersPage() {
             {users.isLoading ? (
               <tr>
                 <td colSpan={colSpan} className="px-5 py-8 text-center text-[var(--color-ink-muted)]">
-                  Loading users…
+                  Loading usersΓÇª
                 </td>
               </tr>
             ) : null}
@@ -908,11 +908,11 @@ export function MembersPage() {
                     </div>
                   </td>
                   <td className="px-5 py-3 align-top text-[var(--color-ink-muted)]">
-                    <div>{row.job_title ?? '—'}</div>
+                    <div>{row.job_title ?? 'ΓÇö'}</div>
                     {row.department ? <div className="text-xs">{row.department}</div> : null}
                   </td>
                   <td className="px-5 py-3 align-top text-[var(--color-ink-muted)]">
-                    {row.phone ?? '—'}
+                    {row.phone ?? 'ΓÇö'}
                   </td>
                   <td className="px-5 py-3 align-top">
                     <Badge>{row.role}</Badge>
