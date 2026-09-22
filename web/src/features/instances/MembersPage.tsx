@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-<<<<<<< HEAD
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Download, Pencil, Plus, Trash2, Upload, X, Mail } from 'lucide-react'
@@ -1006,6 +1005,3 @@ export function MembersPage() {
     </div>
   )
 }
-=======
-// SEE LOCAL ARTIFACT - if this is small the push failed
->>>>>>> 1def26512744837835a94f8bb5c67d172437b169
