@@ -1,4 +1,8 @@
-import { Plus, Trash2 } from 'lucide-react'
+import {
+  Users,
+  Briefcase,
+  Share2,
+  Plus, Trash2 } from 'lucide-react'
 import { TemplateField } from '@/features/designer/inspector/TemplateField'
 import type { TemplateSuggestion } from '@/features/designer/inspector/TemplateField'
 import {
@@ -38,6 +42,8 @@ import {
   type PricingContent,
   type PricingPlan,
   type PushContent,
+  type SocialShareContent,
+  type SocialSharePlatform,
   type QrContent,
   type QrErrorCorrection,
   type ReceiptContent,
@@ -57,7 +63,7 @@ import {
   type WebhookContent,
   type WebhookHeader,
   type WebhookMethod,
-} from '@/features/templates/templateModel'
+SOCIAL_SHARE_PLATFORM_META, defaultSocialSharePlatforms, } from '@/features/templates/templateModel'
 import { DocumentPageEditor, ensurePageBlocks } from '@/features/templates/DocumentPageEditor'
 import { StoreCatalogEditor } from '@/features/templates/StoreCatalogEditor'
 import { TemplateInputsEditor } from '@/features/templates/TemplateInputsEditor'
@@ -1512,6 +1518,76 @@ function TemplateKindFields({
     )
   }
 
+  if (kind === 'social_share') {
+    const c = (content as SocialShareContent)
+    const platforms = c.platforms?.length ? c.platforms : defaultSocialSharePlatforms()
+    function patchPlatform(id: string, patch: Partial<SocialSharePlatform>) {
+      const next = platforms.map((p: SocialSharePlatform) => (p.id === id ? { ...p, ...patch } : p))
+      onChange({ ...c, platforms: next })
+    }
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label>Title</Label>
+          <TemplateField
+            disabled={readOnly}
+            value={c.title ?? ''}
+            suggestions={suggestions}
+            onChange={(title) => onChange({ ...c, title })}
+          />
+        </div>
+        <div>
+          <Label>Share text</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.text ?? ''}
+            suggestions={suggestions}
+            onChange={(text) => onChange({ ...c, text })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Platforms</Label>
+          <p className="text-[11px] text-[var(--color-ink-muted)]">
+            Enable an app and set its own URL or @username. Off or empty = hidden.
+          </p>
+          {platforms.map((p: SocialSharePlatform) => (
+            <div
+              key={p.id}
+              className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 sm:flex-row sm:items-center"
+            >
+              <label className="flex min-w-[9rem] items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  disabled={readOnly}
+                  checked={!!p.enabled}
+                  onChange={(ev) => patchPlatform(p.id, { enabled: ev.target.checked })}
+                />
+                {p.id === 'x' ? (
+                  <Share2 className="h-4 w-4 shrink-0 text-sky-500" />
+                ) : p.id === 'linkedin' ? (
+                  <Briefcase className="h-4 w-4 shrink-0 text-blue-600" />
+                ) : (
+                  <Users className="h-4 w-4 shrink-0 text-blue-500" />
+                )}
+                {SOCIAL_SHARE_PLATFORM_META[p.id]?.label ?? p.id}
+              </label>
+              <div className="min-w-0 flex-1">
+                <TemplateField
+                  disabled={readOnly || !p.enabled}
+                  value={p.url ?? ''}
+                  suggestions={suggestions}
+                  onChange={(url) => patchPlatform(p.id, { url })}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  
   if (kind === 'team') {
     const c = asTeam(content)
     function patchMember(index: number, patch: Partial<TeamMember>) {

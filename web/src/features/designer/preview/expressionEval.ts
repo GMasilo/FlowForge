@@ -62,6 +62,12 @@ import {
   type QrEmbedPayload,
 } from '@/features/templates/qrEmbed'
 import {
+  encodeSocialShareEmbed,
+  fillSocialShareTemplateForEmbed,
+  socialShareEmbedFromTemplate,
+  socialShareEmbedPlainSummary,
+} from '@/features/templates/socialShareEmbed'
+import {
   encodeSocialEmbed,
   isSocialEmbedExprValue,
   parseSocialEmbedUrl,
@@ -1202,6 +1208,15 @@ function resolvePath(parts: string[], ctx: ExprContext): unknown {
         return encodeMapEmbed(mapEmbedFromTemplate(filledTpl))
       }
       return mapEmbedPlainSummary(mapEmbedFromTemplate(filledTpl))
+    }
+    if (tpl.kind === 'social_share' && field === 'text') {
+      const filledTpl = fillSocialShareTemplateForEmbed(tpl, (raw) =>
+        filledCopyString(raw, fillCtx, `${name}.social_share:${raw.slice(0, 48)}`),
+      )
+      if (ctx.embedMedia) {
+        return encodeSocialShareEmbed(socialShareEmbedFromTemplate(filledTpl))
+      }
+      return socialShareEmbedPlainSummary(socialShareEmbedFromTemplate(filledTpl))
     }
     if (tpl.kind === 'qr' && field === 'text') {
       const filledTpl = fillQrTemplateForEmbed(tpl, (raw) =>

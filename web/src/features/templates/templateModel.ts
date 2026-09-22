@@ -364,14 +364,109 @@ export type CalendarContent = {
   inputs: TemplateInput[]
 }
 
-export type SocialSharePlatform = 'x' | 'linkedin' | 'facebook'
+export type SocialSharePlatformId =
+  | 'x'
+  | 'linkedin'
+  | 'facebook'
+  | 'instagram'
+  | 'tiktok'
+  | 'youtube'
+  | 'twitch'
+  | 'threads'
+  | 'pinterest'
+
+export type SocialSharePlatform = {
+  id: SocialSharePlatformId
+  enabled: boolean
+  /** Profile/page URL or @username — differs per app */
+  url: string
+}
 
 export type SocialShareContent = {
-  url: string
   title: string
   text: string
   platforms: SocialSharePlatform[]
   inputs: TemplateInput[]
+}
+
+export const SOCIAL_SHARE_PLATFORM_META: Record<
+  SocialSharePlatformId,
+  { label: string; placeholder: string }
+> = {
+  x: { label: 'X', placeholder: 'https://x.com/yourbrand or @yourbrand' },
+  linkedin: { label: 'LinkedIn', placeholder: 'https://www.linkedin.com/company/yourbrand' },
+  facebook: { label: 'Facebook', placeholder: 'https://www.facebook.com/yourbrand' },
+  instagram: { label: 'Instagram', placeholder: 'https://www.instagram.com/yourbrand or @yourbrand' },
+  tiktok: { label: 'TikTok', placeholder: 'https://www.tiktok.com/@yourbrand' },
+  youtube: { label: 'YouTube', placeholder: 'https://www.youtube.com/@yourbrand' },
+  twitch: { label: 'Twitch', placeholder: 'https://www.twitch.tv/yourbrand' },
+  threads: { label: 'Threads', placeholder: 'https://www.threads.net/@yourbrand' },
+  pinterest: { label: 'Pinterest', placeholder: 'https://www.pinterest.com/yourbrand' },
+}
+
+export function defaultSocialSharePlatforms(): SocialSharePlatform[] {
+  return (Object.keys(SOCIAL_SHARE_PLATFORM_META) as SocialSharePlatformId[]).map((id) => ({
+    id,
+    enabled: id === 'x' || id === 'linkedin' || id === 'facebook' || id === 'instagram',
+    url: '',
+  }))
+}
+
+/** Build a clickable profile URL. Null if disabled or empty. */
+export function socialShareLinkFor(platform: SocialSharePlatform, _shareText: string): string | null {
+  if (!platform.enabled) return null
+  let raw = platform.url.trim()
+  if (!raw) return null
+
+  if (raw.startsWith('@')) {
+    const handle = raw.slice(1).replace(/^\/+/, '')
+    switch (platform.id) {
+      case 'x':
+        return `https://x.com/${handle}`
+      case 'linkedin':
+        return `https://www.linkedin.com/in/${handle}`
+      case 'facebook':
+        return `https://www.facebook.com/${handle}`
+      case 'instagram':
+        return `https://www.instagram.com/${handle}`
+      case 'tiktok':
+        return `https://www.tiktok.com/@${handle}`
+      case 'youtube':
+        return `https://www.youtube.com/@${handle}`
+      case 'twitch':
+        return `https://www.twitch.tv/${handle}`
+      case 'threads':
+        return `https://www.threads.net/@${handle}`
+      case 'pinterest':
+        return `https://www.pinterest.com/${handle}`
+    }
+  }
+
+  if (/^https?:\/\//i.test(raw)) return raw
+
+  const handle = raw.replace(/^\/+/, '').replace(/^@/, '')
+  switch (platform.id) {
+    case 'x':
+      return `https://x.com/${handle}`
+    case 'linkedin':
+      return `https://www.linkedin.com/in/${handle}`
+    case 'facebook':
+      return `https://www.facebook.com/${handle}`
+    case 'instagram':
+      return `https://www.instagram.com/${handle}`
+    case 'tiktok':
+      return `https://www.tiktok.com/@${handle}`
+    case 'youtube':
+      return `https://www.youtube.com/@${handle}`
+    case 'twitch':
+      return `https://www.twitch.tv/${handle}`
+    case 'threads':
+      return `https://www.threads.net/@${handle}`
+    case 'pinterest':
+      return `https://www.pinterest.com/${handle}`
+    default:
+      return raw
+  }
 }
 
 export type WaitlistContent = {
@@ -1214,8 +1309,10 @@ export function emptyCalendarContent(): CalendarContent {
 
 export function emptySocialShareContent(): SocialShareContent {
   return {
-    url: '', title: '', text: '',
-    platforms: ['x', 'linkedin', 'facebook'], inputs: [],
+    title: '',
+    text: '',
+    platforms: defaultSocialSharePlatforms(),
+    inputs: [],
   }
 }
 
@@ -1676,14 +1773,17 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
       }
     case 'social_share':
       return {
-        url: '{{inputs.url}}',
-        title: '{{inputs.title}}',
-        text: '{{inputs.text}}',
-        platforms: ['x', 'linkedin', 'facebook'],
+        title: 'Share with us',
+        text: 'Follow us on your favourite network.',
+        platforms: [
+          { id: 'x', enabled: true, url: '{{inputs.x}}' },
+          { id: 'linkedin', enabled: true, url: '{{inputs.linkedin}}' },
+          { id: 'facebook', enabled: true, url: '{{inputs.facebook}}' },
+        ],
         inputs: [
-          { key: 'url', label: 'Page URL', type: 'string', required: true },
-          { key: 'title', label: 'Title', type: 'string', required: false },
-          { key: 'text', label: 'Share text', type: 'string', required: false },
+          { key: 'x', label: 'X URL or @username', type: 'string', required: false },
+          { key: 'linkedin', label: 'LinkedIn URL', type: 'string', required: false },
+          { key: 'facebook', label: 'Facebook URL', type: 'string', required: false },
         ],
       }
     case 'waitlist':
@@ -2149,13 +2249,33 @@ export function parseCalendarContent(raw: unknown): CalendarContent {
 
 export function parseSocialShareContent(raw: unknown): SocialShareContent {
   const c = asRecord(raw)
-  const allowed = new Set(['x', 'linkedin', 'facebook'])
-  const platforms = Array.isArray(c.platforms)
-    ? (c.platforms as unknown[]).map((p) => String(p)).filter((p): p is SocialSharePlatform => allowed.has(p))
-    : (['x', 'linkedin', 'facebook'] as SocialSharePlatform[])
+  const allowed = new Set(['x','linkedin','facebook','instagram','tiktok','youtube','twitch','threads','pinterest'])
+  let platforms: SocialSharePlatform[] = defaultSocialSharePlatforms()
+  if (Array.isArray(c.platforms)) {
+    const parsed: SocialSharePlatform[] = []
+    for (const row of c.platforms as unknown[]) {
+      if (typeof row === 'string' && allowed.has(row)) {
+        parsed.push({ id: row as SocialSharePlatformId, enabled: true, url: str(c.url) })
+        continue
+      }
+      const r = asRecord(row)
+      const id = str(r.id)
+      if (!allowed.has(id)) continue
+      parsed.push({
+        id: id as SocialSharePlatformId,
+        enabled: r.enabled === undefined ? true : Boolean(r.enabled),
+        url: str(r.url),
+      })
+    }
+    if (parsed.length) {
+      const byId = new Map(parsed.map((p) => [p.id, p]))
+      platforms = defaultSocialSharePlatforms().map((d) => byId.get(d.id) ?? d)
+    }
+  }
   return {
-    url: str(c.url), title: str(c.title), text: str(c.text),
-    platforms: platforms.length ? platforms : ['x', 'linkedin', 'facebook'],
+    title: str(c.title),
+    text: str(c.text),
+    platforms,
     inputs: parseTemplateInputs(c.inputs),
   }
 }
@@ -2539,12 +2659,11 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
     }
     case 'social_share': {
       const c = content as SocialShareContent
-      const url = encodeURIComponent(c.url.trim())
-      const text = encodeURIComponent((c.text || c.title).trim())
-      const lines: string[] = [c.title.trim(), c.text.trim(), c.url.trim()]
-      if (c.platforms.includes('x')) lines.push(`https://twitter.com/intent/tweet?url=${url}&text=${text}`)
-      if (c.platforms.includes('linkedin')) lines.push(`https://www.linkedin.com/sharing/share-offsite/?url=${url}`)
-      if (c.platforms.includes('facebook')) lines.push(`https://www.facebook.com/sharer/sharer.php?u=${url}`)
+      const lines: string[] = [c.title.trim(), c.text.trim()]
+      for (const p of c.platforms) {
+        const link = socialShareLinkFor(p, c.text)
+        if (link) lines.push(`${SOCIAL_SHARE_PLATFORM_META[p.id].label}: ${link}`)
+      }
       return lines.filter(Boolean).join('\n')
     }
     case 'waitlist': {

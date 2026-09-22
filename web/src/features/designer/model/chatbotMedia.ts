@@ -23,6 +23,11 @@ import {
   type WhatsappEmbedPayload,
 } from '@/features/templates/whatsappEmbed'
 import {
+  decodeSocialShareEmbed,
+  socialShareEmbedPlainSummary,
+  type SocialShareEmbedPayload,
+} from '@/features/templates/socialShareEmbed'
+import {
   decodeSocialEmbed,
   socialEmbedPlainSummary,
   type SocialEmbedPayload,
@@ -222,10 +227,11 @@ export type ChatContentSegment =
   | { kind: 'map'; map: MapEmbedPayload }
   | { kind: 'qr'; qr: QrEmbedPayload }
   | { kind: 'whatsapp'; whatsapp: WhatsappEmbedPayload }
+  | { kind: 'socialshare'; socialshare: SocialShareEmbedPayload }
   | { kind: 'social'; social: SocialEmbedPayload }
 
 const CHAT_EMBED_RE =
-  /<<ff:embed:([A-Za-z0-9+/=]+)>>|<<ff:hours:([A-Za-z0-9+/=]+)>>|<<ff:map:([A-Za-z0-9+/=]+)>>|<<ff:qr:([A-Za-z0-9+/=]+)>>|<<ff:whatsapp:([A-Za-z0-9+/=]+)>>|<<ff:doc:([A-Za-z0-9+/=]+)>>|<<ff:file:([A-Za-z0-9+/=]+)>>|(https?:\/\/[^\s<>"]+\/file\/get\?[^\s<>"]+)|(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)(?:\?[^\s<>"]*)?)/gi
+  /<<ff:embed:([A-Za-z0-9+/=]+)>>|<<ff:hours:([A-Za-z0-9+/=]+)>>|<<ff:map:([A-Za-z0-9+/=]+)>>|<<ff:qr:([A-Za-z0-9+/=]+)>>|<<ff:whatsapp:([A-Za-z0-9+/=]+)>>|<<ff:socialshare:([A-Za-z0-9+/=]+)>>|<<ff:doc:([A-Za-z0-9+/=]+)>>|<<ff:file:([A-Za-z0-9+/=]+)>>|(https?:\/\/[^\s<>"]+\/file\/get\?[^\s<>"]+)|(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)(?:\?[^\s<>"]*)?)/gi
 
 export function parseChatSegments(text: string): ChatContentSegment[] {
   if (!text) return []
@@ -242,10 +248,11 @@ export function parseChatSegments(text: string): ChatContentSegment[] {
     const mapB64 = match[3]
     const qrB64 = match[4]
     const whatsappB64 = match[5]
-    const docB64 = match[6]
-    const fileB64 = match[7]
-    const fileGetUrl = match[8]
-    const mediaUrl = match[9]
+    const socialshareB64 = match[6]
+    const docB64 = match[7]
+    const fileB64 = match[8]
+    const fileGetUrl = match[9]
+    const mediaUrl = match[10]
     if (socialB64) {
       const social = decodeSocialEmbed(socialB64)
       if (social) segments.push({ kind: 'social', social })
@@ -265,6 +272,10 @@ export function parseChatSegments(text: string): ChatContentSegment[] {
     } else if (whatsappB64) {
       const whatsapp = decodeWhatsappEmbed(whatsappB64)
       if (whatsapp) segments.push({ kind: 'whatsapp', whatsapp })
+      else segments.push({ kind: 'text', text: match[0] })
+    } else if (socialshareB64) {
+      const socialshare = decodeSocialShareEmbed(socialshareB64)
+      if (socialshare) segments.push({ kind: 'socialshare', socialshare })
       else segments.push({ kind: 'text', text: match[0] })
     } else if (docB64) {
       const document = decodeDocumentEmbed(docB64)
@@ -298,6 +309,7 @@ export function stripFileEmbeds(text: string): string {
       if (seg.kind === 'map') return mapEmbedPlainSummary(seg.map)
       if (seg.kind === 'qr') return qrEmbedPlainSummary(seg.qr)
       if (seg.kind === 'whatsapp') return whatsappEmbedPlainSummary(seg.whatsapp)
+      if (seg.kind === 'socialshare') return socialShareEmbedPlainSummary(seg.socialshare)
       if (seg.kind === 'social') return socialEmbedPlainSummary(seg.social)
       return seg.file.url
     })
