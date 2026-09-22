@@ -73,7 +73,7 @@ export function PaymentAnswerField({
   disabled?: boolean
   className?: string
   onSubmit: (value: {
-    status: 'paid' | 'verified'
+    status: 'verified'
     url?: string
     amount?: string | number
     currency?: string
@@ -87,21 +87,26 @@ export function PaymentAnswerField({
 }) {
   const amountText = formatAmount(payment.amount, payment.currency)
   const url = payment.url.trim()
-  const verify = payment.verify === true && !!onStartPayment
+  const verify = payment.verify === true && !!payment.connectionId && !!onStartPayment && !!onCheckPayment
   const [busy, setBusy] = useState(false)
+  const [checking, setChecking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reference, setReference] = useState<string | null>(null)
   const [phase, setPhase] = useState<'idle' | 'waiting' | 'verified' | 'failed'>('idle')
   const pollRef = useRef<number | null>(null)
   const submittedRef = useRef(false)
+  const checkingRef = useRef(false)
+  const activeRef = useRef(true)
 
   useEffect(() => {
+    activeRef.current = true
     return () => {
+      activeRef.current = false
       if (pollRef.current) window.clearInterval(pollRef.current)
     }
   }, [])
 
-  function paidPayload(status: 'paid' | 'verified', extra?: { reference?: string; providerPaymentId?: string }) {
+  function paidPayload(status: 'verified', extra?: { reference?: string; providerPaymentId?: string }) {
     const amountRaw = payment.amount.trim()
     const asNumber = Number(amountRaw.replace(/,/g, ''))
     return {
@@ -115,11 +120,13 @@ export function PaymentAnswerField({
   }
 
   async function startVerifiedPay() {
-    if (!onStartPayment) return
+    if (!verify || !onStartPayment || busy || disabled) return
     setBusy(true)
     setError(null)
     try {
       const started = await onStartPayment()
+      if (!activeRef.current) return
+      if (!started.reference.trim() || !started.checkoutUrl.trim()) throw new Error('Payment checkout could not be created.')
       setReference(started.reference)
       openCheckout(started.checkoutUrl, started.fields)
       setPhase('waiting')
@@ -137,9 +144,13 @@ export function PaymentAnswerField({
   }
 
   async function checkOnce(ref: string) {
-    if (!onCheckPayment) return
+    if (!onCheckPayment || checkingRef.current || submittedRef.current || !activeRef.current) return
+    checkingRef.current = true
+    setChecking(true)
+    setError(null)
     try {
       const result = await onCheckPayment(ref)
+      if (!activeRef.current) return
       if (result.status === 'verified') {
         if (submittedRef.current) return
         submittedRef.current = true
@@ -157,20 +168,23 @@ export function PaymentAnswerField({
         setError('Payment was not completed.')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not check payment')
+      if (activeRef.current) setError(err instanceof Error ? err.message : 'Could not check payment')
+    } finally {
+      checkingRef.current = false
+      if (activeRef.current) setChecking(false)
     }
   }
 
   return (
-    <div className={cn('flex min-w-0 flex-1 flex-col gap-2', className)}>
+    <div className={cn('flex min-w-0 flex-1 flex-col gap-2 text-[var(--color-ink)]', className)}>
       {amountText ? (
-        <p className="text-sm font-semibold text-slate-800">Amount due: {amountText}</p>
+        <p className="text-sm font-semibold">Amount due: {amountText}</p>
       ) : null}
       {verify ? (
         <>
           <Button
             type="button"
-            className="h-11 rounded-2xl"
+            className="h-11 rounded-2xl bg-none bg-[var(--ff-chat-accent)] text-[var(--ff-chat-accent-fg)]"
             disabled={disabled || busy || phase === 'waiting' || phase === 'verified'}
             onClick={() => void startVerifiedPay()}
           >
@@ -178,49 +192,31 @@ export function PaymentAnswerField({
             {payment.payLabel || 'Pay now'}
           </Button>
           {phase === 'waiting' ? (
-            <p className="text-[11px] text-slate-500">
+            <p role="status" className="text-xs text-[var(--color-ink-muted)]">
               Waiting for the payment provider to confirm{reference ? ` (${reference.slice(0, 8)}…)` : ''}…
             </p>
           ) : null}
-          {phase === 'waiting' && reference && onCheckPayment ? (
+          {phase === 'waiting' && reference ? (
             <Button
               type="button"
               variant="secondary"
               className="h-11 rounded-2xl"
-              disabled={disabled || busy}
+              disabled={disabled || busy || checking}
               onClick={() => void checkOnce(reference)}
             >
-              Check payment
+              {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {checking ? 'Checking payment...' : (payment.paidLabel || "I've paid")}
             </Button>
           ) : null}
         </>
       ) : (
         <>
-          {url ? (
-            <Button
-              type="button"
-              variant="secondary"
-              className="h-11 rounded-2xl"
-              disabled={disabled}
-              onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
-            >
-              <ExternalLink className="h-4 w-4" />
-              {payment.payLabel || 'Pay now'}
-            </Button>
-          ) : (
-            <p className="text-sm text-slate-500">No pay link — confirm when the payment is done (cash, EFT, …).</p>
-          )}
-          <Button
-            type="button"
-            className="h-11 rounded-2xl"
-            disabled={disabled}
-            onClick={() => onSubmit(paidPayload('paid'))}
-          >
-            {payment.paidLabel || "I've paid"}
-          </Button>
+          <p role="alert" className="text-sm text-[var(--color-ink-muted)]">
+            Payment verification is unavailable. A payment connection must be configured before this step can continue.
+          </p>
         </>
       )}
-      {error ? <p className="text-[11px] text-rose-600">{error}</p> : null}
+      {error ? <p role="alert" className="rounded-lg bg-[var(--color-danger-soft)] px-2 py-1 text-xs text-[var(--color-danger)]">{error}</p> : null}
     </div>
   )
 }

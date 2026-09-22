@@ -659,6 +659,17 @@ export function validateFlow(
     }
 
     if (node.type === 'question') {
+      if (String(node.config.answerType ?? '') === 'payment') {
+        const connectionId = String(node.config.paymentConnectionId ?? '').trim()
+        const connection = ctx.connectionsById?.[connectionId]
+        if (!connectionId || (ctx.connectionsById && (!connection || connection.kind !== 'payment'))) {
+          issues.push({
+            severity: 'error', nodeId: node.id, field: 'paymentConnectionId',
+            code: 'payment_verification_required',
+            message: 'Payment question requires a valid Payment connection to verify payment before continuing.',
+          })
+        }
+      }
       const out = node.config.outputVariable
       if (typeof out !== 'string' || !out.trim()) {
         issues.push({

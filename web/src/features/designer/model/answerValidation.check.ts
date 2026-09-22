@@ -314,7 +314,7 @@ function assert(cond: unknown, msg: string): asserts cond {
     { answerType: 'payment', answerRequired: true },
     { status: 'paid', url: 'https://pay.example/x', amount: 150, currency: 'ZAR' },
   )
-  assert(r.ok && r.displayText.includes('150'), 'payment accepts paid confirmation')
+  assert(!r.ok, 'payment rejects unverified manual confirmation')
 }
 {
   const r = validateQuestionAnswer(

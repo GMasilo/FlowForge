@@ -282,7 +282,7 @@ export const QUESTION_ANSWER_TYPE_OPTIONS: Array<{
   { value: 'credit_card', label: 'Credit card', hint: 'Card number, expiry date and CVV; masked in chat' },
   { value: 'password', label: 'Password', hint: 'Masked secret; shown as dots in chat' },
   { value: 'audio', label: 'Voice note', hint: 'Record a short audio reply into the conversation folder' },
-  { value: 'payment', label: 'Payment', hint: 'PayFast or a pay link; server can confirm via a payment connection' },
+  { value: 'payment', label: 'Payment', hint: 'Checkout verified by a required payment connection' },
   { value: 'captcha', label: 'Captcha', hint: 'Human check (math or distorted text) before continuing' },
   { value: 'form', label: 'Form', hint: 'Several fields on one screen, stored as a single object' },
   { value: 'shop', label: 'Shop', hint: 'Browse a store catalog, add products to a cart, then checkout' },

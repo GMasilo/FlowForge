@@ -34,6 +34,7 @@ function runUntilWait(state: PreviewEngineState, nodes: DesignerNode[], edges: D
       config: {
         prompt: 'Please pay {{vars.total}}',
         answerType: 'payment',
+        paymentConnectionId: 'payment-connection',
         payUrl: 'https://pay.example/{{vars.order}}',
         paymentAmount: '{{vars.total}}',
         currencyCode: 'ZAR',
@@ -55,12 +56,13 @@ function runUntilWait(state: PreviewEngineState, nodes: DesignerNode[], edges: D
     assert(state.phase.payment?.amount === '150', 'amount interpolated')
   }
   state = submitPreviewAnswer(state, nodes, edges, {
-    status: 'paid',
+    status: 'verified',
+    reference: 'test-payment-reference',
     url: 'https://pay.example/abc',
     amount: 150,
     currency: 'ZAR',
   })
-  assert(state.vars.receipt && (state.vars.receipt as { status: string }).status === 'paid', 'payment stored')
+  assert(state.vars.receipt && (state.vars.receipt as { status: string }).status === 'verified', 'verified payment stored')
   assert(state.messages.some((m) => m.role === 'user' && m.link?.url === 'https://pay.example/abc'), 'payment user link')
 }
 

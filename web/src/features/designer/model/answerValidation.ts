@@ -315,14 +315,14 @@ export function validateQuestionAnswer(
     const rec = !Array.isArray(answer) && answer && typeof answer === 'object' ? (answer as Record<string, unknown>) : null
     const status = rec ? String(rec.status ?? '').trim().toLowerCase() : ''
     const needsVerify = String(config.paymentConnectionId ?? '').trim() !== ''
-    const accepted = needsVerify ? status === 'verified' : status === 'paid' || status === 'verified'
+    const reference = rec && typeof rec.reference === 'string' ? rec.reference.trim() : ''
+    const accepted = needsVerify && status === 'verified' && reference !== ''
     if (!accepted) {
-      if (!required) return { ok: true, value: null, displayText: '' }
       return {
         ok: false,
         error: needsVerify
           ? 'Waiting for payment confirmation from the provider.'
-          : 'Please confirm payment to continue.',
+          : 'Payment verification is not configured. Select a payment connection for this question.',
       }
     }
     const url = rec && typeof rec.url === 'string' ? rec.url.trim() : ''
@@ -334,10 +334,9 @@ export function validateQuestionAnswer(
           ? amountRaw.trim()
           : null
     const currency = rec && typeof rec.currency === 'string' ? rec.currency.trim().toUpperCase() : ''
-    const reference = rec && typeof rec.reference === 'string' ? rec.reference.trim() : ''
     const providerPaymentId =
       rec && typeof rec.providerPaymentId === 'string' ? rec.providerPaymentId.trim() : ''
-    const storedStatus = needsVerify ? 'verified' : status === 'verified' ? 'verified' : 'paid'
+    const storedStatus = 'verified'
     const value: Record<string, unknown> = {
       status: storedStatus,
       ...(url ? { url } : {}),
@@ -348,7 +347,7 @@ export function validateQuestionAnswer(
     }
     const amountText =
       amount == null ? '' : currency ? `${currency} ${amount}` : String(amount)
-    const label = storedStatus === 'verified' ? 'Paid' : 'Paid'
+    const label = 'Paid'
     return { ok: true, value, displayText: amountText ? `${label} ${amountText}` : label }
   }
 

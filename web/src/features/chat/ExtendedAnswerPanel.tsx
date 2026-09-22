@@ -204,6 +204,7 @@ export function ExtendedAnswerPanel({
       ) : null}
       {answerType === 'payment' ? (
         <PaymentAnswerField
+          key={`${payment?.nodeKey ?? ''}:${payment?.connectionId ?? ''}`}
           payment={
             payment ?? {
               url: '',

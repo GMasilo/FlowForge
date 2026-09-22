@@ -4317,7 +4317,7 @@ export function StepInspector({
                   value={String(node.config.paymentConnectionId ?? '')}
                   onChange={(e) => patchConfig({ paymentConnectionId: e.target.value || null })}
                 >
-                  <option value="">None (visitor confirms manually)</option>
+                  <option value="">Select a payment connection (required)</option>
                   {String(node.config.paymentConnectionId ?? '').trim() &&
                   !installedPaymentConnections.some(
                     (c) => c.id === String(node.config.paymentConnectionId ?? ''),
@@ -4349,7 +4349,7 @@ export function StepInspector({
                 />
                 <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
                   Optional when using PayFast (checkout is built from the connection). Required for custom /
-                  cash links. Leave empty for cash/EFT with no connection.
+                  hosted checkout links. A payment connection is always required to verify payment.
                 </p>
               </div>
               <div>
@@ -4401,15 +4401,16 @@ export function StepInspector({
                 />
               </div>
               <div>
-                <Label>Paid button label</Label>
+                <Label>Payment check button label</Label>
                 <Input
                   disabled={readOnly}
                   value={String(node.config.paidButtonLabel ?? "I've paid")}
                   onChange={(e) => patchConfig({ paidButtonLabel: e.target.value })}
                 />
                 <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
-                  Without a connection this stays honor-system. With a connection the answer is stored as{' '}
-                  {'{ status: "verified", reference, amount, currency }'} after the PHP callback succeeds.
+                  Clicking this button checks payment status. The flow continues only after the provider
+                  confirms payment, saving{' '}
+                  {'{ status: "verified", reference, amount, currency }'}.
                 </p>
               </div>
             </div>
