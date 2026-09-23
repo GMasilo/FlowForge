@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { defaultWebhookDestination, parseWebhookObject, saveWebhookDestination } from './webhookDestination'
 
 describe('webhook destination configuration', () => {
+  it('validates Jira REST API create and update endpoints', () => {
+    const form = { ...defaultWebhookDestination('jira'), token: 'api-token', email: 'user@example.test', bodyTemplate: '{"fields":{"summary":"Example"}}' }
+    expect(saveWebhookDestination(form, 'https://example.atlassian.net/rest/api/3/issue').destination_config).toMatchObject({ jiraMode: 'api', jiraAction: 'create', email: 'user@example.test' })
+    expect(() => saveWebhookDestination(form, 'https://evil.test/rest/api/3/issue')).toThrow('endpoint')
+    expect(saveWebhookDestination({ ...form, jiraMode: 'automation' }, 'https://example.atlassian.net/rest/api/3/issue').destination_config).toMatchObject({ jiraMode: 'api' })
+    expect(() => saveWebhookDestination({ ...form, jiraAction: 'update' }, 'https://example.atlassian.net/rest/api/3/issue')).toThrow('endpoint')
+    expect(saveWebhookDestination({ ...form, jiraAction: 'update' }, 'https://example.atlassian.net/rest/api/3/issue/PROJ-123').destination_config).toMatchObject({ jiraAction: 'update' })
+  })
   it('supports Slack bot tokens with channel IDs and pins the endpoint', () => {
     const form = { ...defaultWebhookDestination('slack'), slackMode: 'bot' as const, token: 'xoxb-test', channel: 'C123' }
     expect(saveWebhookDestination(form, 'https://slack.com/api/chat.postMessage').destination_config).toEqual({ slackMode: 'bot', token: 'xoxb-test', channel: 'C123', message: 'FlowForge: {{event}}' })

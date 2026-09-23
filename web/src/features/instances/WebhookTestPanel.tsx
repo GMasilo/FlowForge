@@ -20,7 +20,7 @@ export function WebhookTestPanel({ hook, onClose }: { hook: InstanceWebhook; onC
   })
   return <Card className="space-y-3">
     <h2 className="font-semibold">Test {hook.name}</h2>
-    <p className="text-sm text-[var(--color-ink-muted)]">This sends a real notification to the saved destination, even if disabled. A Jira rule may create an issue. Use sample data only. Save changes before testing.</p>
+    <p className="text-sm text-[var(--color-ink-muted)]">This sends a real notification to the saved destination, even if disabled. Jira tests may create or update a real issue. Use sample data only. Save changes before testing.</p>
     <Label htmlFor="test-hook-event">Event</Label>
     <Select id="test-hook-event" disabled={send.isPending} value={event} onChange={(e) => { setEvent(e.target.value); send.reset() }}>{hook.events.map((item) => <option key={item}>{item}</option>)}</Select>
     {event !== 'flow.published' ? <div><Label htmlFor="test-hook-vars">Sample chatbot variables (JSON)</Label><Textarea id="test-hook-vars" disabled={send.isPending} value={variables} onChange={(e) => { setVariables(e.target.value); send.reset() }} /></div> : null}

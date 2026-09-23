@@ -50,9 +50,7 @@ check($body->count === 3 && $body->active === false && is_object($body->empty), 
 check($body->email === 'test@example.test', 'Nested variable paths resolve');
 check($request['headers']['Authorization'] === 'Bearer test', 'Custom authorization header included');
 $jira = $hook + ['destination' => 'jira', 'destination_config' => ['token' => 'jira-test-token']];
-$request = WebhookDelivery::build($jira, 'conversation.completed', $envelope);
-check($request['headers']['X-Automation-Webhook-Token'] === 'jira-test-token', 'Jira token header');
-check(!str_contains($request['body'], 'jira-test-token'), 'Token must not enter payload');
+rejects(fn() => WebhookDelivery::build($jira, 'conversation.completed', $envelope), 'Old Jira webhook configuration requires API credentials');
 rejects(fn() => WebhookDelivery::build(array_replace($slack, ['url' => 'https://example.test']), 'test', $envelope), 'Reject wrong Slack host');
 rejects(fn() => WebhookDelivery::build(array_replace($jira, ['url' => 'http://example.test']), 'test', $envelope), 'Jira token requires HTTPS');
 rejects(fn() => WebhookDelivery::build($hook + ['destination_config' => ['bodyTemplate' => '{"x":"{{missing}}"}']], 'test', $envelope), 'Missing variables fail');
@@ -63,12 +61,12 @@ check(WebhookDelivery::urlError('http://127.0.0.1/hook') !== null, 'Block privat
 check(WebhookDelivery::urlError('http://user:password@example.test') !== null, 'Block URL credentials');
 $published = ['event' => 'flow.published', 'payload' => ['chatbot_id' => 'bot-2', 'version' => 4]];
 check(WebhookDelivery::context('flow.published', $published)['chatbot_id'] === 'bot-2', 'Publish context contains chatbot');
-$delivery = WebhookDelivery::send([], $hook + ['id' => 'hook-1', 'destination' => 'jira', 'destination_config' => ['token' => 'private-token']], 'conversation.completed', $envelope);
+$delivery = WebhookDelivery::send([], $hook + ['id' => 'hook-1', 'destination' => 'custom', 'destination_config' => ['headers' => ['Authorization' => 'Bearer private-token']]], 'conversation.completed', $envelope);
 check(!$delivery['ok'], 'Unresolvable target fails without sending');
-$sendHook = array_replace($hook, ['id' => 'hook-1', 'url' => 'https://8.8.8.8/webhook', 'destination' => 'jira', 'destination_config' => ['token' => 'private-token']]);
+$sendHook = array_replace($hook, ['id' => 'hook-1', 'url' => 'https://8.8.8.8/webhook', 'destination' => 'custom', 'destination_config' => ['headers' => ['Authorization' => 'Bearer private-token']]]);
 $delivery = WebhookDelivery::send([], $sendHook, 'conversation.completed', $envelope);
 check($delivery['ok'] && $delivery['logged'], 'Mock delivery and logging succeed');
-check(\FlowForge\Api\HttpClient::$request[2]['X-Automation-Webhook-Token'] === 'private-token', 'Transport receives Jira token');
+check(\FlowForge\Api\HttpClient::$request[2]['Authorization'] === 'Bearer private-token', 'Transport receives auth token');
 check(!str_contains(json_encode(\FlowForge\Api\SupabaseRest::$log), 'private-token') && !str_contains(json_encode($delivery), 'private-token'), 'Delivery logs and result exclude credentials');
 $bot = ['id' => 'bot-hook', 'url' => 'https://slack.com/api/chat.postMessage', 'secret' => 'signing-secret', 'destination' => 'slack',
     'destination_config' => ['slackMode' => 'bot', 'token' => 'xoxb-test-token', 'channel' => 'C123', 'message' => 'Hi {{name}}']];
@@ -88,6 +86,27 @@ check(isset($debug['diagnostics']['request']['body']), 'Diagnostics include outg
 check(WebhookDelivery::slackRejected($bot, ['status' => 200, 'body' => ['ok' => false, 'error' => 'invalid_auth']]), 'Slack HTTP 200 with ok false is rejected');
 check(!WebhookDelivery::slackRejected($bot, ['status' => 200, 'body' => ['ok' => true]]), 'Slack success accepted');
 check(!WebhookDelivery::slackRejected($slack, ['status' => 200, 'body' => 'ok']), 'Incoming webhook text response remains valid');
+$jiraApi = ['url' => 'https://example.atlassian.net/rest/api/3/issue', 'destination' => 'jira', 'secret' => 'sign-secret',
+    'destination_config' => ['jiraMode' => 'api', 'jiraAction' => 'create', 'email' => 'user@example.test', 'token' => 'api-secret', 'bodyTemplate' => '{"fields":{"summary":"From {{name}}","project":{"key":"PROJ"},"issuetype":{"name":"Task"}}}']];
+$built = WebhookDelivery::build($jiraApi, 'conversation.completed', $envelope);
+check($built['method'] === 'POST', 'Create issue uses POST');
+check($built['headers']['Authorization'] === 'Basic ' . base64_encode('user@example.test:api-secret'), 'Jira API uses email and API token Basic auth');
+check(!isset($built['headers']['X-Automation-Webhook-Token']), 'API mode has no automation token header');
+$jiraApi['destination_config']['jiraAction'] = 'update'; $jiraApi['url'] .= '/PROJ-123';
+check(WebhookDelivery::build($jiraApi, 'conversation.completed', $envelope)['method'] === 'PUT', 'Update issue uses PUT');
+rejects(fn() => WebhookDelivery::build(array_replace($jiraApi, ['url' => 'https://evil.test/rest/api/3/issue/PROJ-123']), 'test', $envelope), 'Jira credentials cannot go to unrelated host');
+$jiraApi['url'] = 'https://api.atlassian.com/ex/jira/cloud-id/rest/api/3/issue/PROJ-123';
+check(WebhookDelivery::build($jiraApi, 'conversation.completed', $envelope)['method'] === 'PUT', 'Scoped API token endpoint accepted');
+$masked = WebhookDelivery::redact('echo ' . base64_encode('user@example.test:api-secret'), $jiraApi);
+check(!str_contains($masked, base64_encode('user@example.test:api-secret')), 'Encoded Jira credentials redacted from diagnostics');
+$legacyJira = $jiraApi;
+unset($legacyJira['destination_config']['jiraMode']);
+check(isset(WebhookDelivery::build($legacyJira, 'conversation.completed', $envelope)['headers']['Authorization']), 'Legacy Jira REST URL selects Basic authentication');
+$legacyJira['destination_config']['email'] = '';
+rejects(fn() => WebhookDelivery::build($legacyJira, 'conversation.completed', $envelope), 'Legacy REST connection without email fails before sending');
+$wrongMode = $jiraApi; $wrongMode['destination_config']['jiraMode'] = 'automation';
+check(isset(WebhookDelivery::build($wrongMode, 'conversation.completed', $envelope)['headers']['Authorization']), 'Old mode flag cannot bypass Basic authentication');
+check(WebhookDelivery::redact(['Authorization' => 'Basic abc123'], $jiraApi)['Authorization'] === 'Basic [REDACTED]', 'Diagnostics show authentication scheme without credentials');
 echo "$checks webhook destination checks passed\n";
 
 }

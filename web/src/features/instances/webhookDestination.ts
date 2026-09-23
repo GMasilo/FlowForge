@@ -1,13 +1,14 @@
 import type { InstanceWebhook, Json } from '@/shared/types/database'
 
 export type WebhookDestination = 'custom' | 'slack' | 'jira'
-export type WebhookDestinationForm = { destination: WebhookDestination; message: string; bodyTemplate: string; token: string; headers: string; slackMode: 'webhook' | 'bot'; channel: string }
+export type WebhookDestinationForm = { destination: WebhookDestination; message: string; bodyTemplate: string; token: string; headers: string; slackMode: 'webhook' | 'bot'; channel: string; jiraMode: 'automation' | 'api'; jiraAction: 'create' | 'update'; email: string }
 export function defaultWebhookDestination(destination: WebhookDestination = 'custom'): WebhookDestinationForm {
-  return { destination, message: 'FlowForge: {{event}}', bodyTemplate: '', token: '', headers: '{}', slackMode: 'webhook', channel: '' }
+  return { destination, message: 'FlowForge: {{event}}', bodyTemplate: '', token: '', headers: '{}', slackMode: 'webhook', channel: '', jiraMode: 'api', jiraAction: 'create', email: '' }
 }
 export function readWebhookDestination(hook: InstanceWebhook): WebhookDestinationForm {
   const cfg = (hook.destination_config ?? {}) as Record<string, unknown>
   return { destination: hook.destination ?? 'custom', message: String(cfg.message ?? 'FlowForge: {{event}}'),
+    jiraMode: 'api', jiraAction: cfg.jiraAction === 'update' ? 'update' : 'create', email: String(cfg.email ?? ''),
     slackMode: cfg.slackMode === 'bot' ? 'bot' : 'webhook', channel: String(cfg.channel ?? ''),
     bodyTemplate: String(cfg.bodyTemplate ?? ''), token: String(cfg.token ?? ''), headers: JSON.stringify(cfg.headers ?? {}, null, 2) }
 }
@@ -33,9 +34,17 @@ export function saveWebhookDestination(form: WebhookDestinationForm, url: string
   }
   if (form.bodyTemplate.trim()) parseWebhookObject(form.bodyTemplate)
   if (form.destination === 'jira') {
-    if (!form.token.trim() || /[\r\n]/.test(form.token)) throw new Error('Enter a valid Jira webhook token.')
+    if (!form.token.trim() || /[\r\n]/.test(form.token)) throw new Error(form.jiraMode === 'api' ? 'Enter a valid Jira API token.' : 'Enter a valid Jira webhook token.')
     if (parsed.protocol !== 'https:') throw new Error('Jira webhooks require HTTPS.')
-    return { destination: form.destination, destination_config: { bodyTemplate: form.bodyTemplate, token: form.token } }
+    {
+      if (!/^[^\s@:]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) throw new Error('Enter your Atlassian account email.')
+      const path = parsed.hostname === 'api.atlassian.com' ? parsed.pathname.replace(/^\/ex\/jira\/[a-zA-Z0-9-]+/, '') : parsed.pathname
+      if (!(parsed.hostname.endsWith('.atlassian.net') || (parsed.hostname === 'api.atlassian.com' && path !== parsed.pathname)) || parsed.port || parsed.search || parsed.hash || !(form.jiraAction === 'update' ? /^\/rest\/api\/3\/issue\/[A-Za-z0-9_-]+$/ : /^\/rest\/api\/3\/issue$/).test(path)) throw new Error('Enter the Jira Cloud issue endpoint for the selected action.')
+      const body = parseWebhookObject(form.bodyTemplate)
+      if (!body.fields && !body.update) throw new Error('Jira API requests need fields or update in the JSON body.')
+      return { destination: 'jira', destination_config: { jiraMode: 'api', jiraAction: form.jiraAction, email: form.email.trim(), token: form.token.trim(), bodyTemplate: form.bodyTemplate } }
+    }
+
   }
   const headers = parseWebhookObject(form.headers)
   const normalized = new Set<string>()

@@ -55,6 +55,7 @@ final class WebhookDelivery
         $context = self::context($event, $envelope);
         $headers = ['Content-Type' => 'application/json', 'X-FlowForge-Event' => $event];
         $body = $envelope;
+        $method = 'POST';
         if ($destination === 'slack') {
             $url = parse_url((string) ($hook['url'] ?? ''));
             $botMode = ($cfg['slackMode'] ?? 'webhook') === 'bot';
@@ -82,8 +83,21 @@ final class WebhookDelivery
             }
             if ($destination === 'jira') {
                 $token = (string) ($cfg['token'] ?? '');
-                if (trim($token) === '' || preg_match('/[\r\n]/', $token)) throw new \InvalidArgumentException('A valid Jira webhook token is required.');
-                $headers['X-Automation-Webhook-Token'] = $token;
+                if (trim($token) === '' || preg_match('/[\r\n]/', $token)) throw new \InvalidArgumentException('A valid Jira token is required.');
+                    $email = trim((string) ($cfg['email'] ?? ''));
+                    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || str_contains($email, ':')) throw new \InvalidArgumentException('Jira REST API requires an Atlassian email and API token. Edit this destination and save the account email before testing.');
+                    $parts = parse_url((string) $hook['url']);
+                    $host = $parts['host'] ?? '';
+                    $path = $parts['path'] ?? '';
+                    if ($host === 'api.atlassian.com') $path = preg_replace('#^/ex/jira/[a-zA-Z0-9-]+#', '', $path);
+                    $update = ($cfg['jiraAction'] ?? 'create') === 'update';
+                    if (!(str_ends_with($host, '.atlassian.net') || ($host === 'api.atlassian.com' && $path !== ($parts['path'] ?? '')))
+                        || isset($parts['user']) || isset($parts['pass']) || isset($parts['port']) || isset($parts['query']) || isset($parts['fragment'])
+                        || !preg_match($update ? '#^/rest/api/3/issue/[A-Za-z0-9_-]+$#' : '#^/rest/api/3/issue$#', $path)) throw new \InvalidArgumentException('Invalid Jira Cloud issue endpoint for this action.');
+                    if (empty($cfg['bodyTemplate']) || !is_object($body) || (!isset($body->fields) && !isset($body->update))) throw new \InvalidArgumentException('Jira API body must contain fields or update.');
+                    $headers['Authorization'] = 'Basic ' . base64_encode($email . ':' . trim($token));
+                    $headers['Accept'] = 'application/json';
+                    $method = $update ? 'PUT' : 'POST';
             } else {
                 if (isset($cfg['headers']) && !is_array($cfg['headers'])) throw new \InvalidArgumentException('Custom headers must be an object.');
                 $seen = [];
@@ -104,7 +118,7 @@ final class WebhookDelivery
         }
         $json = json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $headers['X-FlowForge-Signature'] = 'sha256=' . hash_hmac('sha256', $json, (string) ($hook['secret'] ?? ''));
-        return ['body' => $json, 'headers' => $headers];
+        return ['body' => $json, 'headers' => $headers, 'method' => $method];
     }
 
     public static function send(array $config, array $hook, string $event, array $envelope, bool $diagnostics = false): array
@@ -117,7 +131,7 @@ final class WebhookDelivery
             $request = self::build($hook, $event, $envelope);
             $urlError = self::urlError((string) $hook['url']);
             if ($urlError !== null) throw new \InvalidArgumentException($urlError);
-            $response = HttpClient::request('POST', $hook['url'], $request['headers'], $request['body'], 15, 65536);
+            $response = HttpClient::request($request['method'], $hook['url'], $request['headers'], $request['body'], 15, 65536);
             $status = (int) ($response['status'] ?? 0);
             $ok = $status >= 200 && $status < 300 && !empty($response['ok']);
             $slackRejected = $ok && self::slackRejected($hook, $response);
@@ -140,7 +154,7 @@ final class WebhookDelivery
         if ($diagnostics) {
             $result['diagnostics'] = self::redact([
                 'duration_ms' => (int) round((microtime(true) - $started) * 1000),
-                'request' => ['method' => 'POST', 'url' => $hook['url'], 'headers' => $request['headers'] ?? [], 'body' => $request['body'] ?? null],
+                'request' => ['method' => $request['method'] ?? null, 'url' => $hook['url'], 'headers' => $request['headers'] ?? [], 'body' => $request['body'] ?? null],
                 'response' => $response === null ? null : ['status' => $status, 'headers' => $response['headers'] ?? [],
                     'body' => $response['raw_body'] ?? $response['body'] ?? null,
                     'error' => $response['error'] ?? null, 'detail' => $response['detail'] ?? null,
@@ -163,12 +177,20 @@ final class WebhookDelivery
     {
         $cfg = $hook['destination_config'] ?? [];
         $secrets = array_filter(array_merge([(string) ($hook['secret'] ?? ''), (string) ($cfg['token'] ?? '')], array_values($cfg['headers'] ?? [])), fn($v) => is_string($v) && $v !== '');
+        foreach ($secrets as $secret) {
+            if (preg_match('/^(?:Basic|Bearer) (.+)$/i', $secret, $match)) $secrets[] = $match[1];
+        }
+        if (!empty($cfg['email']) && !empty($cfg['token'])) $secrets[] = base64_encode(trim($cfg['email']) . ':' . trim($cfg['token']));
         $url = (string) ($hook['url'] ?? '');
         // Webhook URLs can contain credentials in the path or query.
         if ($url !== '') $secrets[] = $url;
         if (is_array($value)) {
             $out = [];
             foreach ($value as $key => $item) {
+                if (strtolower((string) $key) === 'authorization' && is_string($item) && preg_match('/^(Basic|Bearer) /i', $item, $authMatch)) {
+                    $out[$key] = $authMatch[1] . ' [REDACTED]';
+                    continue;
+                }
                 $out[$key] = preg_match('/authorization|cookie|token|secret|signature|api[-_]?key/i', (string) $key)
                     ? '[REDACTED]' : self::redact($item, $hook);
             }
