@@ -1,3 +1,4 @@
+import { DesignIntelligencePanel } from '@/features/intelligence/DesignIntelligencePanel'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
@@ -1021,6 +1022,7 @@ export function DesignerPage() {
       className="space-y-4"
       style={{ '--ff-designer-aside-top': `${asideTopPx}px` } as CSSProperties}
     >
+      <DesignIntelligencePanel editable={editable} />
       <div
         ref={toolbarRef}
         className="sticky top-14 z-[15] flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/60 bg-white/90 p-4 shadow-[var(--shadow-soft)] backdrop-blur-xl"

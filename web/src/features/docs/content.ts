@@ -1901,6 +1901,17 @@ export const DOC_SECTIONS: DocSection[] = [
     ],
   },
   {
+    id: 'intelligence',
+    title: 'FlowForge Intelligence',
+    summary: 'Explainable design checks, read-request protection, workload planning and journey analysis.',
+    body: [{ paragraphs: [
+      'Expand Design intelligence above the designer toolbar to inspect unreachable steps, cycles, branch complexity, shortest exits and paths without exits. Select a finding to inspect a step. Apply cycle-aware auto layout to reposition nodes; this changes and saves the draft through the usual designer controls. Structural checks do not evaluate scripts or conditional outcomes.',
+      'HTTP GET and HEAD steps in preview and public chat retry transient responses up to three times with exponential jittered backoff. Five transient responses open a 30-second circuit; one recovery probe is allowed. A per-browser token bucket allows ten initial reads and refills one per second per connection and chat session. Long Retry-After delays return control without retrying early. Writes and transport exceptions are not replayed. These protections complement existing server rate limits.',
+      'Operations intelligence in the inbox ranks unassigned conversations using priority, age and SLA urgency. It suggests recently online agents with the lowest loaded workload, subject to the entered assignment limit. Suggestions never change assignments and do not establish queue eligibility. Handling time and arrival rate are editable assumptions for the one-hour queue and SLA estimates, not learned predictions.',
+      'Analytics intelligence uses the current chatbot, environment and date filters. It shows step failures, median and p95 duration, robust duration outliers, version regression signals and observed consecutive journey transitions. Ten timings are required for outliers and latency comparisons; twenty outcomes per version are required for failure-rate regression. Bottlenecks are ranked by total recorded duration, including user waiting time. Results use only loaded records and must not be interpreted as complete organisation totals.',
+    ] }],
+  },
+  {
     id: 'webhooks',
     title: 'Webhooks',
     summary: 'Outbound events when flows publish or conversations finish.',

@@ -1,3 +1,4 @@
+import { AnalyticsIntelligencePanel } from '@/features/intelligence/AnalyticsIntelligencePanel'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -230,6 +231,7 @@ export function AnalyticsPage() {
         }
       />
 
+      <AnalyticsIntelligencePanel sessions={sessions.data ?? []} events={events.data ?? []} chatbotId={effectiveChatbotId} environment={environment} rangeDays={rangeDays} loading={loading} error={sessions.isError || events.isError} />
       {!experimentsEnabled ? (
         <PlanLockedState feature="experiments" title="A/B experiments" />
       ) : (

@@ -1,3 +1,4 @@
+import { OperationsIntelligencePanel } from '@/features/intelligence/OperationsIntelligencePanel'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -266,6 +267,7 @@ export function InboxPage() {
         }
       />
 
+      <OperationsIntelligencePanel items={inbox.data ?? []} agents={(presence.data ?? []).filter(a => agentMembers.data?.includes(a.user_id))} loading={inbox.isLoading || presence.isLoading || agentMembers.isLoading} error={inbox.isError || presence.isError || agentMembers.isError} />
       <Card className="flex flex-wrap items-end gap-3 p-4">
         <div className="flex w-full items-center gap-1.5 pb-1 sm:w-auto sm:pb-0">
           <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-muted)]">Filters</span>

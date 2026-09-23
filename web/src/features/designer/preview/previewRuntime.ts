@@ -1,3 +1,4 @@
+import { runtimeResilience } from '@/features/intelligence/runtimeResilience'
 import { resolvePaymentQuestionConfig } from '@/features/templates/paymentTemplate'
 import {
   nodeTypeLabel,
@@ -2527,7 +2528,7 @@ export async function runConnectionStep(
     } else {
       try {
         const invokeStart = performance.now()
-        const apiResult = await executeHttpConnection({
+        const apiResult = await runtimeResilience.run([options?.instanceId, options?.chatbotId, options?.sessionId, connectionId || node.id].join(':'), built.method, () => executeHttpConnection({
           ...(useServerSecrets
             ? {
                 connectionId,
@@ -2543,7 +2544,7 @@ export async function runConnectionStep(
           headers: [...(httpCfg?.headers ?? []), ...built.headers],
           body: built.body,
           signal: abortSignal,
-        })
+        }), abortSignal)
         connectionInvokeMs = Math.round(performance.now() - invokeStart)
 
         let schemaErrors: string[] = []
