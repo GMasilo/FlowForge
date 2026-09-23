@@ -3,32 +3,9 @@ import { flowNodeTypes, variableTypes } from '@/features/designer/model/flowSche
 import type { PreviewStepRun } from '@/features/designer/preview/previewRuntime'
 import type { EntityKind, TemplateKind, VariableType } from '@/shared/types/database'
 
-const TEMPLATE_KIND_SET = new Set<string>([
-  'email',
-  'faq',
-  'cart',
-  'menu',
-  'message',
-  'hours',
-  'legal',
-  'receipt',
-  'document',
-  'agreement',
-  'sso',
-  'appointment',
-  'location',
-  'team',
-  'pricing',
-  'survey',
-  'announcement',
-  'sms',
-  'push',
-  'ticket',
-  'certificate',
-  'checklist',
-  'consent',
-  'webhook',
-])
+import { TEMPLATE_KINDS } from '@/features/templates/templateModel'
+
+const TEMPLATE_KIND_SET = new Set<string>(TEMPLATE_KINDS)
 const VARIABLE_TYPE_SET = new Set<string>(variableTypes)
 const ENTITY_KIND_SET = new Set<string>(['static', 'dynamic'])
 
