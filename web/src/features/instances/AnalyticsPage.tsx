@@ -1,3 +1,4 @@
+import { TablePagination, useTablePagination } from '@/shared/ui/table-pagination'
 import { AnalyticsIntelligencePanel } from '@/features/intelligence/AnalyticsIntelligencePanel'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -169,7 +170,7 @@ export function AnalyticsPage() {
     return {
       a,
       b,
-      rows: compareDropOff(a.dropOff, b.dropOff).slice(0, 14),
+      rows: compareDropOff(a.dropOff, b.dropOff),
     }
   }, [sessions.data, events.data, effectiveA, effectiveB, effectiveChatbotId, environment, rangeDays])
 
@@ -181,6 +182,11 @@ export function AnalyticsPage() {
       chatbotNames: nameMap,
     })
   }, [sessions.data, events.data, accessibleBots.data])
+
+  const paginationKey = JSON.stringify([instance.id, effectiveChatbotId, environment, range])
+  const versionPage = useTablePagination(stats.byVersion, paginationKey)
+  const chatbotPage = useTablePagination(stats.byChatbot, paginationKey)
+  const comparisonPage = useTablePagination(versionCompare?.rows ?? [], JSON.stringify([paginationKey, effectiveA, effectiveB]))
 
   const loading = sessions.isLoading || events.isLoading
 
@@ -395,7 +401,7 @@ export function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {stats.byVersion.map((row) => (
+                  {versionPage.rows.map((row) => (
                     <tr key={row.version} className="border-b border-[var(--color-border)]/40 last:border-0">
                       <td className="py-2 pr-3 font-mono text-xs font-medium text-[var(--color-ink)]">
                         {row.version}
@@ -407,6 +413,7 @@ export function AnalyticsPage() {
                   ))}
                 </tbody>
               </table>
+              <TablePagination label="Publish versions" {...versionPage} />
             </div>
           ) : (
             <EmptyHint>No version data in this range.</EmptyHint>
@@ -486,7 +493,7 @@ export function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {versionCompare.rows.map((row) => (
+                  {comparisonPage.rows.map((row) => (
                     <tr key={row.nodeKey} className="border-b border-[var(--color-border)]/40 last:border-0">
                       <td className="py-2 pr-3 font-mono text-xs text-[var(--color-ink)]">{row.nodeKey}</td>
                       <td className="py-2 pr-3 tabular-nums text-[var(--color-ink-muted)]">
@@ -515,6 +522,7 @@ export function AnalyticsPage() {
                   ))}
                 </tbody>
               </table>
+              <TablePagination label="Version comparison" {...comparisonPage} />
             </div>
           ) : (
             <EmptyHint>No overlapping step events for these versions.</EmptyHint>
@@ -546,7 +554,7 @@ export function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {stats.byChatbot.map((row) => (
+                  {chatbotPage.rows.map((row) => (
                     <tr key={row.chatbotId} className="border-b border-[var(--color-border)]/40 last:border-0">
                       <td className="py-2 pr-3 font-medium text-[var(--color-ink)]">{row.name}</td>
                       <td className="py-2 pr-3 tabular-nums text-[var(--color-ink-muted)]">{row.sessions}</td>
@@ -556,6 +564,7 @@ export function AnalyticsPage() {
                   ))}
                 </tbody>
               </table>
+              <TablePagination label="Chatbots" {...chatbotPage} />
             </div>
           ) : (
             <EmptyHint>No chatbot traffic in this range.</EmptyHint>

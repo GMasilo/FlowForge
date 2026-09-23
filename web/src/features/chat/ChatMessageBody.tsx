@@ -1,3 +1,4 @@
+import { ChatTableCard } from './ChatTableCard'
 import { useEffect, useRef, useState } from 'react'
 import { ChatMediaAttachments } from '@/features/chat/ChatMediaAttachments'
 import { ChatFormattedText } from '@/features/chat/ChatFormattedText'
@@ -116,6 +117,8 @@ export function ChatMessageBody({
           ) : (
             <ChatFormattedText key={`t-${i}`} text={seg.text} />
           )
+        ) : seg.kind === 'table' ? (
+          <ChatTableCard key={`table-${i}`} table={seg.table} />
         ) : seg.kind === 'document' ? (
           <DocumentDownloadChip key={`d-${i}-${seg.document.filename}`} document={seg.document} />
         ) : seg.kind === 'hours' ? (

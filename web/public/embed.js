@@ -31,7 +31,7 @@
   var SOURCE = 'flowforge.embed'
   var STYLE_ID = 'flowforge-embed-styles'
   /** Bump when shipping embed/chat UI fixes so host pages pick up a fresh iframe document. */
-  var EMBED_BUILD = '20260908-org-slug'
+  var EMBED_BUILD = '20260923-tables'
   var widgets = Object.create(null)
 
   function scriptBase() {
@@ -519,9 +519,66 @@
     }
   }
 
+  var tableDialog = null
+  function openTableOverlay(event, data) {
+    var frames = document.querySelectorAll('iframe[data-flowforge-iframe]')
+    var trusted = false
+    for (var i = 0; i < frames.length; i++) {
+      if (event.source === frames[i].contentWindow && event.origin === new URL(frames[i].src).origin) trusted = true
+    }
+    if (!trusted) return
+    var table = data.table
+    if (!table || !Array.isArray(table.columns) || table.columns.length > 100 || !table.columns.every(function (c) { return typeof c === 'string' }) || !Array.isArray(table.rows) || table.rows.length > 1000 || !table.rows.every(function (r) { return Array.isArray(r) && r.length === table.columns.length && r.every(function (c) { return typeof c === 'string' }) }) || JSON.stringify(table).length > 1000000) return
+    if (tableDialog) tableDialog.close()
+    var previousFocus = document.activeElement
+    var dialog = document.createElement('dialog')
+    tableDialog = dialog
+    dialog.setAttribute('aria-label', 'Expanded chatbot table')
+    dialog.style.cssText = 'position:fixed;inset:0;margin:auto;width:min(1100px,94vw);max-height:88vh;box-sizing:border-box;padding:24px;border:1px solid #cbd5e1;border-radius:18px;background:#fff;color:#172033;box-shadow:0 24px 90px #0008;z-index:2147483647;font:14px system-ui;'
+    var close = document.createElement('button')
+    close.textContent = 'Close table'
+    close.style.cssText = 'float:right;padding:10px 16px;border-radius:8px;background:#172033;color:#fff;border:0;cursor:pointer;margin-bottom:16px'
+    close.onclick = function () { dialog.close() }
+    dialog.appendChild(close)
+    var heading = document.createElement('h2')
+    heading.textContent = 'Table ? ' + table.rows.length + ' records'
+    heading.style.cssText = 'font:600 18px system-ui;margin:8px 0 20px'
+    dialog.appendChild(heading)
+    var scroll = document.createElement('div')
+    scroll.style.cssText = 'clear:both;overflow:auto;max-height:65vh'
+    var grid = document.createElement('table')
+    grid.style.cssText = 'width:100%;border-collapse:collapse;text-align:left;font:14px system-ui;color:#172033'
+    var head = document.createElement('thead')
+    var body = document.createElement('tbody')
+    function addRow(values, parent, header) {
+      var row = document.createElement('tr')
+      values.forEach(function (value) {
+        var cell = document.createElement(header ? 'th' : 'td')
+        cell.textContent = value
+        cell.style.cssText = 'padding:12px;border-bottom:1px solid #e2e8f0;white-space:pre-wrap;overflow-wrap:anywhere;max-width:320px;' + (header ? 'position:sticky;top:0;background:#f1f5f9;font-weight:600' : '')
+        if (header) cell.scope = 'col'
+        row.appendChild(cell)
+      })
+      parent.appendChild(row)
+    }
+    addRow(table.columns, head, true)
+    table.rows.forEach(function (row) { addRow(row, body, false) })
+    grid.appendChild(head); grid.appendChild(body); scroll.appendChild(grid); dialog.appendChild(scroll)
+    dialog.addEventListener('close', function () {
+      dialog.remove()
+      if (tableDialog === dialog) tableDialog = null
+      if (previousFocus && previousFocus.isConnected) previousFocus.focus()
+    })
+    document.body.appendChild(dialog)
+    dialog.showModal()
+    close.focus()
+    event.source.postMessage({ source: SOURCE, type: 'table-opened', requestId: data.requestId }, event.origin)
+  }
+
   window.addEventListener('message', function (event) {
     var data = event.data
     if (!data || data.source !== SOURCE) return
+    if (data.type === 'table-open') { openTableOverlay(event, data); return }
     if (data.type === 'branding') {
       var widget = data.slug ? widgets[data.slug] : null
       if (!widget) {

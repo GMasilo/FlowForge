@@ -1,5 +1,5 @@
 /** Preset skins for public chat / embed / preview. `default` keeps the current look. */
-export type ChatAppearanceTheme = 'default' | 'aurora' | 'sunset' | 'midnight'
+export type ChatAppearanceTheme = 'default' | 'aurora' | 'sunset' | 'midnight' | 'botanical' | 'candy' | 'ocean'
 
 export type ChatThemeColors = {
   headerColor: string
@@ -138,6 +138,54 @@ export const CHAT_APPEARANCE_THEMES: readonly ChatAppearanceThemeMeta[] = [
     },
     swatch: ['#0f172a', '#14b8a6', '#020617'],
   },
+  {
+    id: 'botanical', label: 'Botanical', description: 'Calm sage, warm paper and rich forest accents.',
+    colors: { headerColor: '#14532d', headerTextColor: '#ffffff', bubbleUserColor: '#166534',
+      bubbleBotColor: '#fffdf7', bubbleBotTextColor: '#18392b', pageBackground: '#f7f8ef',
+      pageBackground2: '#dce9d5', accentColor: '#166534' },
+    bubbleRadius: 'pill',
+    cssVars: {
+      '--ff-chat-header-gradient': 'linear-gradient(120deg, var(--ff-chat-header), var(--ff-chat-header-2))',
+      '--ff-chat-page-gradient': 'radial-gradient(ellipse at top right, var(--ff-chat-page-bg-2), transparent 70%), linear-gradient(160deg, var(--ff-chat-page-bg), var(--ff-chat-page-bg-2))',
+      '--ff-chat-bubble-shadow': '0 8px 24px -12px color-mix(in srgb, var(--ff-chat-accent) 30%, transparent)',
+      '--ff-chat-bot-border': 'color-mix(in srgb, var(--ff-chat-accent) 18%, transparent)',
+      '--ff-chat-composer-surface': '#fffdf7',
+      '--ff-chat-header-sheen': 'radial-gradient(ellipse at top right, #ffffff22, transparent 65%)',
+    },
+    swatch: ['#14532d', '#166534', '#f7f8ef'],
+  },
+  {
+    id: 'candy', label: 'Candy', description: 'Playful lavender, rounded surfaces and berry highlights.',
+    colors: { headerColor: '#6d28d9', headerTextColor: '#ffffff', bubbleUserColor: '#7e22ce',
+      bubbleBotColor: '#fffaff', bubbleBotTextColor: '#422060', pageBackground: '#faf5ff',
+      pageBackground2: '#fce7f3', accentColor: '#9333ea' },
+    bubbleRadius: 'pill',
+    cssVars: {
+      '--ff-chat-header-gradient': 'linear-gradient(120deg, var(--ff-chat-header), var(--ff-chat-header-2))',
+      '--ff-chat-page-gradient': 'radial-gradient(ellipse at top right, var(--ff-chat-page-bg-2), transparent 70%), linear-gradient(160deg, var(--ff-chat-page-bg), var(--ff-chat-page-bg-2))',
+      '--ff-chat-bubble-shadow': '0 8px 24px -12px color-mix(in srgb, var(--ff-chat-accent) 30%, transparent)',
+      '--ff-chat-bot-border': 'color-mix(in srgb, var(--ff-chat-accent) 18%, transparent)',
+      '--ff-chat-composer-surface': '#fffaff',
+      '--ff-chat-header-sheen': 'radial-gradient(ellipse at top right, #ffffff22, transparent 65%)',
+    },
+    swatch: ['#6d28d9', '#9333ea', '#faf5ff'],
+  },
+  {
+    id: 'ocean', label: 'Ocean', description: 'Deep blue glass with bright turquoise highlights.',
+    colors: { headerColor: '#0c2540', headerTextColor: '#ffffff', bubbleUserColor: '#38bdf8',
+      bubbleBotColor: '#15364c', bubbleBotTextColor: '#e0f2fe', pageBackground: '#071a2c',
+      pageBackground2: '#103b50', accentColor: '#38bdf8' },
+    bubbleRadius: 'pill',
+    cssVars: {
+      '--ff-chat-header-gradient': 'linear-gradient(120deg, var(--ff-chat-header), var(--ff-chat-header-2))',
+      '--ff-chat-page-gradient': 'radial-gradient(ellipse at top right, var(--ff-chat-page-bg-2), transparent 70%), linear-gradient(160deg, var(--ff-chat-page-bg), var(--ff-chat-page-bg-2))',
+      '--ff-chat-bubble-shadow': '0 8px 24px -12px color-mix(in srgb, var(--ff-chat-accent) 30%, transparent)',
+      '--ff-chat-bot-border': 'color-mix(in srgb, var(--ff-chat-accent) 18%, transparent)',
+      '--ff-chat-composer-surface': '#15364c',
+      '--ff-chat-header-sheen': 'radial-gradient(ellipse at top right, #ffffff22, transparent 65%)',
+    },
+    swatch: ['#0c2540', '#38bdf8', '#071a2c'],
+  },
 ] as const
 
 const THEME_BY_ID = Object.fromEntries(CHAT_APPEARANCE_THEMES.map((t) => [t.id, t])) as Record<
@@ -146,8 +194,8 @@ const THEME_BY_ID = Object.fromEntries(CHAT_APPEARANCE_THEMES.map((t) => [t.id, 
 >
 
 export function parseChatAppearanceTheme(value: unknown): ChatAppearanceTheme {
-  if (value === 'aurora' || value === 'sunset' || value === 'midnight' || value === 'default') {
-    return value
+  if (typeof value === 'string' && Object.prototype.hasOwnProperty.call(THEME_BY_ID, value)) {
+    return value as ChatAppearanceTheme
   }
   return 'default'
 }
@@ -157,5 +205,5 @@ export function chatAppearanceThemeMeta(id: ChatAppearanceTheme): ChatAppearance
 }
 
 export function chatAppearanceThemeClass(id: ChatAppearanceTheme): string {
-  return `ff-chat-theme-${id}`
+  return `ff-chat-skin ff-chat-theme-${id}`
 }

@@ -1,3 +1,4 @@
+import { decodeTable, type ChatTable } from '@/features/chat/tableEmbed'
 import {
   decodeDocumentEmbed,
   type FilledDocument,
@@ -220,6 +221,7 @@ export function formatMediaForText(value: unknown, embedMedia: boolean): string 
 }
 
 export type ChatContentSegment =
+  | { kind: 'table'; table: ChatTable }
   | { kind: 'text'; text: string }
   | { kind: 'file'; file: ChatbotMediaFile }
   | { kind: 'document'; document: FilledDocument }
@@ -231,7 +233,7 @@ export type ChatContentSegment =
   | { kind: 'social'; social: SocialEmbedPayload }
 
 const CHAT_EMBED_RE =
-  /<<ff:embed:([A-Za-z0-9+/=]+)>>|<<ff:hours:([A-Za-z0-9+/=]+)>>|<<ff:map:([A-Za-z0-9+/=]+)>>|<<ff:qr:([A-Za-z0-9+/=]+)>>|<<ff:whatsapp:([A-Za-z0-9+/=]+)>>|<<ff:socialshare:([A-Za-z0-9+/=]+)>>|<<ff:doc:([A-Za-z0-9+/=]+)>>|<<ff:file:([A-Za-z0-9+/=]+)>>|(https?:\/\/[^\s<>"]+\/file\/get\?[^\s<>"]+)|(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)(?:\?[^\s<>"]*)?)/gi
+  /<<ff:table:([A-Za-z0-9+/=]+)>>|<<ff:embed:([A-Za-z0-9+/=]+)>>|<<ff:hours:([A-Za-z0-9+/=]+)>>|<<ff:map:([A-Za-z0-9+/=]+)>>|<<ff:qr:([A-Za-z0-9+/=]+)>>|<<ff:whatsapp:([A-Za-z0-9+/=]+)>>|<<ff:socialshare:([A-Za-z0-9+/=]+)>>|<<ff:doc:([A-Za-z0-9+/=]+)>>|<<ff:file:([A-Za-z0-9+/=]+)>>|(https?:\/\/[^\s<>"]+\/file\/get\?[^\s<>"]+)|(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)(?:\?[^\s<>"]*)?)/gi
 
 export function parseChatSegments(text: string): ChatContentSegment[] {
   if (!text) return []
@@ -243,17 +245,20 @@ export function parseChatSegments(text: string): ChatContentSegment[] {
     if (match.index > last) {
       segments.push({ kind: 'text', text: text.slice(last, match.index) })
     }
-    const socialB64 = match[1]
-    const hoursB64 = match[2]
-    const mapB64 = match[3]
-    const qrB64 = match[4]
-    const whatsappB64 = match[5]
-    const socialshareB64 = match[6]
-    const docB64 = match[7]
-    const fileB64 = match[8]
-    const fileGetUrl = match[9]
-    const mediaUrl = match[10]
-    if (socialB64) {
+    const socialB64 = match[2]
+    const hoursB64 = match[3]
+    const mapB64 = match[4]
+    const qrB64 = match[5]
+    const whatsappB64 = match[6]
+    const socialshareB64 = match[7]
+    const docB64 = match[8]
+    const fileB64 = match[9]
+    const fileGetUrl = match[10]
+    const mediaUrl = match[11]
+    if (match[1]) {
+      const table = decodeTable(match[1])
+      segments.push(table ? { kind: 'table', table } : { kind: 'text', text: 'Table unavailable: invalid table data.' })
+    } else if (socialB64) {
       const social = decodeSocialEmbed(socialB64)
       if (social) segments.push({ kind: 'social', social })
       else segments.push({ kind: 'text', text: match[0] })
@@ -303,6 +308,7 @@ export function parseChatSegments(text: string): ChatContentSegment[] {
 export function stripFileEmbeds(text: string): string {
   return parseChatSegments(text)
     .map((seg) => {
+      if (seg.kind === 'table') return [seg.table.columns.join(' | '), ...seg.table.rows.map(row => row.join(' | '))].join('\n')
       if (seg.kind === 'text') return seg.text
       if (seg.kind === 'document') return seg.document.filename
       if (seg.kind === 'hours') return hoursEmbedPlainSummary(seg.hours)
@@ -414,4 +420,9 @@ export function resolveMediaAttachments(
   return readMediaFiles(config)
     .map((name) => byName.get(name))
     .filter((f): f is ChatbotMediaFile => !!f)
+}
+
+/** Tables occupy the full transcript width while their cells scroll internally. */
+export function chatTextHasTable(text: string | null | undefined): boolean {
+  return !!text && parseChatSegments(text).some(segment => segment.kind === 'table')
 }

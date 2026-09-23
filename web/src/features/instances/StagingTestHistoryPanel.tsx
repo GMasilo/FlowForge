@@ -1,3 +1,4 @@
+import { TablePagination, useTablePagination } from '@/shared/ui/table-pagination'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
@@ -49,6 +50,7 @@ export function StagingTestHistoryPanel({
     [sessions, events, chatbotId, rangeDays, sourceFilter],
   )
 
+  const pagination = useTablePagination(rows, JSON.stringify([instance.id, chatbotId, rangeDays, sourceFilter]))
   const completedCount = rows.filter((r) => r.shownStatus === 'completed').length
   const completionRate = rows.length ? Math.round((completedCount / rows.length) * 100) : 0
 
@@ -110,7 +112,7 @@ export function StagingTestHistoryPanel({
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, 100).map((row) => (
+              {pagination.rows.map((row) => (
                 <tr key={row.session.id} className="border-b border-[var(--color-border)]/40 last:border-0">
                   <td className="px-2 py-2.5 whitespace-nowrap text-[var(--color-ink-muted)]">
                     {format(new Date(row.session.created_at), 'MMM d, HH:mm')}
@@ -163,11 +165,8 @@ export function StagingTestHistoryPanel({
               ))}
             </tbody>
           </table>
-          {rows.length > 100 ? (
-            <p className="mt-2 text-xs text-[var(--color-ink-muted)]">
-              Showing latest 100 of {rows.length} staging tests. Narrow chatbot or date range to see more.
-            </p>
-          ) : null}
+          <TablePagination label="Staging history" {...pagination} />
+    
         </div>
       ) : (
         <p className="mt-3 text-sm text-[var(--color-ink-muted)]">

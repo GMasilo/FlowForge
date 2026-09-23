@@ -97,6 +97,7 @@ import { getPaymentStatus, instanceFileUrl, isFlowForgeApiConfigured, paymentRet
 import {
   catalogFromFilenames,
   chatTextHasSocialEmbed,
+  chatTextHasTable,
   chatTextHasMapEmbed,
   chatTextHasQrEmbed,
   collectMediaFilenamesFromNodes,
@@ -1343,6 +1344,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
                 className={cn(
                   'ff-chat-bubble-bot px-3.5 py-2.5 text-sm shadow-sm',
                   emphasisClass,
+                  chatTextHasTable(m.text) ? 'w-full min-w-0 max-w-full' :
                   chatTextHasSocialEmbed(m.text) || chatTextHasMapEmbed(m.text) || chatTextHasQrEmbed(m.text)
                     ? 'w-full max-w-xl sm:max-w-2xl'
                     : 'max-w-[85%]',

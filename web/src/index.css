@@ -605,3 +605,41 @@ html.ff-embed {
     transition: none !important;
   }
 }
+
+/* Shared polish for public chat, embeds and designer previews. */
+.ff-chat-skin [data-ff-chat-header] {
+  position: relative; isolation: isolate;
+  box-shadow: 0 8px 30px -20px var(--ff-chat-accent);
+}
+.ff-chat-skin [data-ff-chat-header]::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: var(--ff-chat-header-sheen); z-index: -1;
+}
+.ff-chat-skin :is(.ff-chat-bubble-bot, .ff-chat-bubble-user) {
+  box-shadow: var(--ff-chat-bubble-shadow);
+  border: 1px solid var(--ff-chat-bot-border); overflow-wrap: anywhere;
+}
+.ff-chat-skin button {
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+  touch-action: manipulation;
+}
+.ff-chat-skin button:not(:disabled):active { transform: scale(.97); }
+.ff-chat-skin :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--ff-chat-accent); outline-offset: 3px;
+}
+.ff-chat-skin :is(input:not([type=checkbox]):not([type=radio]), textarea, select) {
+  border-radius: .85rem;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+@media (hover: hover) {
+  .ff-chat-skin button:not(:disabled):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 5px 16px -8px var(--ff-chat-accent); filter: brightness(1.04);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-chat-skin *, .ff-chat-skin *::before, .ff-chat-skin *::after {
+    animation: none !important; transition: none !important; scroll-behavior: auto !important;
+  }
+  .ff-chat-skin button { transform: none !important; }
+}

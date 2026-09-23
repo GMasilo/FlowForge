@@ -1,3 +1,4 @@
+import { encodeTable } from '@/features/chat/tableEmbed'
 /**
  * FlowForge expression language for text/config fields.
  *
@@ -679,6 +680,7 @@ function embedValue(value: unknown, ctx?: ExprContext): unknown {
 
 function callFunction(name: string, args: unknown[], ctx?: ExprContext): unknown {
   const n = name.toLowerCase()
+  if (n === 'tabulate') return encodeTable(args[0])
   switch (n) {
     case 'parsejson':
     case 'json': {
@@ -1415,9 +1417,16 @@ function formatForText(value: unknown, ctx: ExprContext): string {
  * Also used for plain refs: `{{vars.name}}`.
  */
 export function interpolateTemplate(template: string, ctx: ExprContext): string {
+  template = template.replace(/\btabulate\(\s*\{\{([\s\S]*?)\}\}\s*\)/g, (_, expression: string) => {
+    try { return encodeTable(evaluateExpression(expression.trim(), ctx)) }
+    catch (error) { return `Table unavailable: ${error instanceof Error ? error.message : 'Invalid records'}` }
+  })
   return template.replace(/\{\{([\s\S]*?)\}\}/g, (_, raw: string) => {
     const result = tryEvaluateExpression(raw.trim(), ctx)
-    if (!result.ok) return `{{${raw}}}`
+    if (!result.ok) {
+      if (/^\s*tabulate\s*\(/i.test(raw)) return `Table unavailable: ${result.error}`
+      return `{{${raw}}}`
+    }
     return formatForText(result.value, ctx)
   })
 }

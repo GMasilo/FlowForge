@@ -31,6 +31,11 @@ export type FaqItem = {
 /** Full expression function reference for documentation. */
 export const EXPRESSION_FUNCTIONS: ExprFunctionDoc[] = [
   {
+    name: 'tabulate', signature: 'tabulate(records)',
+    description: 'Displays a flat object or array of flat objects as a chat table. Use tabulate({{vars.records}}) or tabulate({{vars.excel.records}}) in messages. Import Excel first; file URLs and binary files are not accepted. Up to 1,000 rows and 100 columns. Maximise opens a centred table; external host-page expansion requires the current FlowForge embed.js script. Raw iframes expand within their frame.',
+    examples: [{ expression: '{{tabulate(vars.records)}}', result: 'Interactive table with a Maximise control' }],
+  },
+  {
     name: 'parseJson',
     aliases: ['json'],
     signature: 'parseJson(value)',

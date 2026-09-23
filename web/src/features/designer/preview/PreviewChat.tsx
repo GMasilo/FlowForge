@@ -74,7 +74,7 @@ import {
 import { ChatBubbleMeta, messageCopyText } from '@/features/chat/ChatBubbleMeta'
 import { ChatMediaPlayerProvider } from '@/features/chat/ChatMediaPlayer'
 import { useChatbotMedia } from '@/features/designer/MediaLibraryPanel'
-import { mediaKeyFromFilename, chatTextHasSocialEmbed, chatTextHasMapEmbed, chatTextHasQrEmbed } from '@/features/designer/model/chatbotMedia'
+import { chatTextHasTable, mediaKeyFromFilename, chatTextHasSocialEmbed, chatTextHasMapEmbed, chatTextHasQrEmbed } from '@/features/designer/model/chatbotMedia'
 import { chatbotTemplatesQueryKey, fetchChatbotTemplates } from '@/features/templates/templateApi'
 import {
   chatbotTestScenariosQueryKey,
@@ -1009,6 +1009,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                       'px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
                       emphasisClass,
                       m.role === 'user' ? 'ff-chat-bubble-user' : 'ff-chat-bubble-bot',
+                      m.role !== 'user' && chatTextHasTable(m.text) ? 'w-full min-w-0 max-w-full' :
                       m.role !== 'user' && (chatTextHasSocialEmbed(m.text) || chatTextHasMapEmbed(m.text) || chatTextHasQrEmbed(m.text))
                         ? 'w-full max-w-xl sm:max-w-2xl'
                         : 'max-w-[88%]',

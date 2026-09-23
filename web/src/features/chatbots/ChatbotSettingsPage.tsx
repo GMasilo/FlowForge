@@ -15,6 +15,7 @@ import {
   FONT_PRESETS,
   STORY_MAX_COUNT,
   brandingToSettingsPatch,
+  safeChatBackgroundUrl,
   chatAppearanceThemeClass,
   chatMessageEntranceClass,
   chatRootStyle,
@@ -715,6 +716,7 @@ export function ChatbotSettingsPage() {
                       key={theme.id}
                       type="button"
                       disabled={!editable}
+                      aria-pressed={selected}
                       onClick={() =>
                         patchBranding({
                           appearanceTheme: theme.id,
@@ -744,6 +746,31 @@ export function ChatbotSettingsPage() {
                     </button>
                   )
                 })}
+              </div>
+            </div>
+
+            <Button type="button" variant="secondary" disabled={!editable}
+              onClick={() => patchBranding({ headerColor: null, headerTextColor: null, bubbleUserColor: null,
+                bubbleBotColor: null, bubbleBotTextColor: null, pageBackground: null, accentColor: null })}>
+              Use theme colours
+            </Button>
+
+            <div className="space-y-3 rounded-xl border border-[var(--color-border)] p-4">
+              <div>
+                <Label htmlFor="chat-background-image">Chat background image URL</Label>
+                <Input id="chat-background-image" type="url" placeholder="https://example.com/background.jpg"
+                  value={branding.backgroundImageUrl ?? ''} disabled={!editable}
+                  onChange={(e) => patchBranding({ backgroundImageUrl: e.target.value || null })} />
+                <p className="mt-1 text-xs text-[var(--color-ink-muted)]">Use a publicly accessible HTTPS image. A soft tint keeps messages readable. Clear the URL to remove it.</p>
+                {branding.backgroundImageUrl && !safeChatBackgroundUrl(branding.backgroundImageUrl) ? <p role="alert" className="mt-1 text-xs text-red-600">Enter a valid http:// or https:// image URL without a username or password. Invalid URLs will not be saved.</p> : null}
+              </div>
+              <div>
+                <Label htmlFor="chat-background-pattern">Background pattern</Label>
+                <Select id="chat-background-pattern" value={branding.backgroundPattern} disabled={!editable}
+                  onChange={(e) => patchBranding({ backgroundPattern: e.target.value as typeof branding.backgroundPattern })}>
+                  <option value="none">None</option><option value="dots">Soft dots</option>
+                  <option value="grid">Fine grid</option><option value="diagonal">Diagonal lines</option>
+                </Select>
               </div>
             </div>
 

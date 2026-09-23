@@ -120,6 +120,8 @@ export type ChatbotBranding = {
   bubbleUserColor: string | null
   bubbleBotColor: string | null
   bubbleBotTextColor: string | null
+  backgroundImageUrl: string | null
+  backgroundPattern: 'none' | 'dots' | 'grid' | 'diagonal'
   pageBackground: string | null
   accentColor: string | null
   logoUrl: string | null
@@ -174,6 +176,8 @@ const DEFAULTS: ChatbotBranding = {
   bubbleUserColor: null,
   bubbleBotColor: null,
   bubbleBotTextColor: null,
+  backgroundImageUrl: null,
+  backgroundPattern: 'none',
   pageBackground: null,
   accentColor: null,
   logoUrl: null,
@@ -227,7 +231,7 @@ function relativeLuminance(hex: string): number {
 }
 
 function contrastFg(bg: string): string {
-  return relativeLuminance(bg) > 0.55 ? '#042f2e' : '#ffffff'
+  return relativeLuminance(bg) > 0.179 ? '#000000' : '#ffffff'
 }
 
 function asColor(value: unknown): string | null {
@@ -238,6 +242,15 @@ function asTrimmed(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const t = value.trim()
   return t || null
+}
+
+/** Only absolute web image URLs; serialization also escapes CSS string delimiters. */
+export function safeChatBackgroundUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null
+  try {
+    const url = new URL(value.trim())
+    return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : null
+  } catch { return null }
 }
 
 function asBool(value: unknown, fallback: boolean): boolean {
@@ -340,6 +353,8 @@ export function parseChatbotBranding(settings: unknown): ChatbotBranding {
     bubbleUserColor: asColor(b.bubbleUserColor),
     bubbleBotColor: asColor(b.bubbleBotColor),
     bubbleBotTextColor: asColor(b.bubbleBotTextColor),
+    backgroundImageUrl: safeChatBackgroundUrl(b.backgroundImageUrl),
+    backgroundPattern: b.backgroundPattern === 'dots' || b.backgroundPattern === 'grid' || b.backgroundPattern === 'diagonal' ? b.backgroundPattern : 'none',
     pageBackground: asColor(b.pageBackground),
     accentColor: asColor(b.accentColor),
     logoUrl: asTrimmed(b.logoUrl),
@@ -381,6 +396,8 @@ export function brandingToSettingsPatch(branding: ChatbotBranding): { [key: stri
     showEyebrow: branding.showEyebrow,
     bubbleRadius: branding.bubbleRadius,
     stories: stories as unknown as Json,
+    backgroundPattern: branding.backgroundPattern,
+    backgroundImageUrl: safeChatBackgroundUrl(branding.backgroundImageUrl),
   }
   const optional: Array<keyof ChatbotBranding> = [
     'headerColor',
@@ -488,10 +505,10 @@ export type ChatBrandingCssVars = Record<string, string>
 export function chatBrandingCssVars(branding: ResolvedChatBranding): ChatBrandingCssVars {
   const theme = chatAppearanceThemeMeta(branding.appearanceTheme)
   const header = branding.headerColor ?? theme.colors.headerColor
-  const header2 = mix(header, 'white', branding.appearanceTheme === 'midnight' ? 0.08 : 0.22)
+  const header2 = mix(header, 'white', (branding.appearanceTheme === 'midnight' || branding.appearanceTheme === 'ocean') ? 0.08 : 0.22)
   const headerFg = branding.headerTextColor ?? theme.colors.headerTextColor
   const user = branding.bubbleUserColor ?? theme.colors.bubbleUserColor
-  const user2 = mix(user, 'white', branding.appearanceTheme === 'midnight' ? 0.12 : 0.18)
+  const user2 = mix(user, 'white', (branding.appearanceTheme === 'midnight' || branding.appearanceTheme === 'ocean') ? 0.12 : 0.18)
   const userFg = contrastFg(user)
   const bot = branding.bubbleBotColor ?? theme.colors.bubbleBotColor
   const botFg =
@@ -503,7 +520,7 @@ export function chatBrandingCssVars(branding: ResolvedChatBranding): ChatBrandin
       : theme.colors.bubbleBotTextColor)
   const page = branding.pageBackground ?? theme.colors.pageBackground
   const page2 = branding.pageBackground
-    ? mix(page, branding.appearanceTheme === 'midnight' ? 'black' : 'white', 0.35)
+    ? mix(page, (branding.appearanceTheme === 'midnight' || branding.appearanceTheme === 'ocean') ? 'black' : 'white', 0.35)
     : theme.colors.pageBackground2
   const accent = branding.accentColor ?? theme.colors.accentColor
   const radius =
@@ -523,10 +540,23 @@ export function chatBrandingCssVars(branding: ResolvedChatBranding): ChatBrandin
     '--ff-chat-accent': accent,
     '--ff-chat-accent-fg': relativeLuminance(accent) > 0.179 ? '#000000' : '#ffffff',
     '--ff-chat-accent-soft':
-      branding.appearanceTheme === 'midnight' ? mix(accent, 'black', 0.72) : mix(accent, 'white', 0.85),
+      (branding.appearanceTheme === 'midnight' || branding.appearanceTheme === 'ocean') ? mix(accent, 'black', 0.72) : mix(accent, 'white', 0.85),
     '--ff-chat-bubble-radius': radius,
     ...theme.cssVars,
   }
+  if (branding.headerColor) vars['--ff-chat-header-gradient'] = 'linear-gradient(120deg, var(--ff-chat-header), var(--ff-chat-header-2))'
+  if (branding.pageBackground) vars['--ff-chat-page-gradient'] = 'linear-gradient(160deg, var(--ff-chat-page-bg), var(--ff-chat-page-bg-2))'
+  const patterns = {
+    none: '',
+    dots: 'radial-gradient(circle, color-mix(in srgb, var(--ff-chat-accent) 16%, transparent) 1px, transparent 1.5px) 0 0 / 20px 20px',
+    grid: 'linear-gradient(color-mix(in srgb, var(--ff-chat-accent) 10%, transparent) 1px, transparent 1px) 0 0 / 28px 28px, linear-gradient(90deg, color-mix(in srgb, var(--ff-chat-accent) 10%, transparent) 1px, transparent 1px) 0 0 / 28px 28px',
+    diagonal: 'repeating-linear-gradient(135deg, transparent 0 14px, color-mix(in srgb, var(--ff-chat-accent) 8%, transparent) 14px 15px)',
+  }
+  const image = safeChatBackgroundUrl(branding.backgroundImageUrl)
+  const layers = [patterns[branding.backgroundPattern]]
+  if (image) layers.push(`linear-gradient(color-mix(in srgb, ${page} 72%, transparent), color-mix(in srgb, ${page} 72%, transparent)), url(${JSON.stringify(image)}) center / cover no-repeat`)
+  layers.push(vars['--ff-chat-page-gradient']!)
+  vars['--ff-chat-page-gradient'] = layers.filter(Boolean).join(', ')
   if (branding.resolvedFontFamily) {
     vars['--ff-chat-font'] = branding.resolvedFontFamily
   }
@@ -540,8 +570,8 @@ export function chatRootStyle(branding: ResolvedChatBranding): CSSProperties {
   style['--color-accent' as keyof CSSProperties] = vars['--ff-chat-accent'] as never
   style['--color-accent-2' as keyof CSSProperties] = vars['--ff-chat-header-2'] as never
   style['--color-accent-soft' as keyof CSSProperties] = vars['--ff-chat-accent-soft'] as never
-  style['--color-accent-fg' as keyof CSSProperties] = vars['--ff-chat-header-fg'] as never
-  if (branding.appearanceTheme === 'midnight') {
+  style['--color-accent-fg' as keyof CSSProperties] = vars['--ff-chat-accent-fg'] as never
+  if ((branding.appearanceTheme === 'midnight' || branding.appearanceTheme === 'ocean')) {
     style['--color-surface' as keyof CSSProperties] = '#0f172a' as never
     style['--color-surface-2' as keyof CSSProperties] = '#1e293b' as never
     style['--color-border' as keyof CSSProperties] = 'rgb(148 163 184 / 0.22)' as never
@@ -559,6 +589,14 @@ export function chatRootStyle(branding: ResolvedChatBranding): CSSProperties {
     style['--color-border' as keyof CSSProperties] = 'rgb(244 63 94 / 0.22)' as never
     style['--color-ink' as keyof CSSProperties] = '#881337' as never
     style['--color-ink-muted' as keyof CSSProperties] = '#9f1239' as never
+  }
+  if (branding.appearanceTheme === 'default' || branding.appearanceTheme === 'botanical' || branding.appearanceTheme === 'candy') {
+    const colors = chatAppearanceThemeMeta(branding.appearanceTheme).colors
+    Object.assign(style, {
+      '--color-surface': colors.bubbleBotColor, '--color-surface-2': colors.pageBackground,
+      '--color-ink': colors.bubbleBotTextColor, '--color-ink-muted': colors.bubbleBotTextColor,
+      '--color-border': 'color-mix(in srgb, var(--ff-chat-accent) 22%, transparent)',
+    })
   }
   if (branding.resolvedFontFamily) {
     style.fontFamily = `var(--ff-chat-font), var(--font-sans), system-ui, sans-serif`
