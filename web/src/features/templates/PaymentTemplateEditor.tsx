@@ -11,6 +11,7 @@ import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Select } from '@/shared/ui/select'
+import { paymentNotificationUrl } from '@/shared/lib/flowforgeApi'
 import type { PaymentTemplateContent } from './paymentTemplate'
 
 export function PaymentTemplateEditor({ content, onChange, readOnly, suggestions }: {
@@ -52,6 +53,16 @@ export function PaymentTemplateEditor({ content, onChange, readOnly, suggestions
     onError: (err: Error) => setError(err.message),
   })
   return <div className="space-y-4">
+    <aside aria-label="Payment setup guide" className="space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 text-sm text-[var(--color-ink)]">
+      <h3 className="font-semibold">Before accepting payments</h3>
+      <p>Select or create a connection for your provider. A Pay URL opens checkout; the connection lets FlowForge confirm that the payment succeeded. The conversation continues only after confirmation.</p>
+      <p>PayFast: enter your merchant details and use sandbox mode for testing. FlowForge supplies the notification URL when checkout starts. Stripe: add the webhook shown in the connection setup to your Stripe account and enter its signing secret. Use test keys before going live.</p>
+      <p>Custom providers must send a signed payment notification to this endpoint. The payment API must be deployed and reachable by your provider.</p>
+      <Label htmlFor="payment-template-notify-url">Payment notification URL</Label>
+      <Input id="payment-template-notify-url" readOnly value={paymentNotificationUrl()} placeholder="Configure the FlowForge API URL first" />
+      <p>Add template inputs above, then use expressions such as <code>{'{{inputs.amount}}'}</code> or <code>{'{{inputs.buyerEmail}}'}</code> in the checkout fields below. After selecting this template on a Payment question, bind each input to a value or flow variable.</p>
+      <p>Keep API keys and signing secrets in the connection fields. Template inputs are for checkout details and may be included in the published flow.</p>
+    </aside>
     <div><Label>Payment connection</Label><Select aria-label="Payment connection" disabled={readOnly || save.isPending || query.isPending} value={content.paymentConnectionId} onChange={e => { patch({ paymentConnectionId: e.target.value }); setEditing(null); setConfig(defaultPaymentConfig()) }}>
       <option value="">Select a payment connection</option>
       {content.paymentConnectionId && !selected ? <option value={content.paymentConnectionId}>Connection unavailable</option> : null}

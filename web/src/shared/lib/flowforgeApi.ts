@@ -1,9 +1,16 @@
 import { supabase } from '@/shared/lib/supabase'
+import { paymentAmountForCheckout } from '@/features/chat/paymentAmount'
 
 const API_BASE = (import.meta.env.VITE_FLOWFORGE_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
 
 export function paymentNotificationUrl(): string {
   return API_BASE ? `${API_BASE}/payment/notify` : ''
+}
+
+export function paymentReturnUrl(cancelled = false): string {
+  const url = new URL(`${import.meta.env.BASE_URL}payment/return`, window.location.origin)
+  if (cancelled) url.searchParams.set('cancelled', '1')
+  return url.toString()
 }
 
 export function isFlowForgeApiConfigured(): boolean {
@@ -458,7 +465,7 @@ export async function startPaymentIntent(payload: {
     ...(instanceId ? { instance_id: instanceId } : {}),
     ...(sessionId ? { session_id: sessionId } : {}),
     node_key: rest.nodeKey,
-    amount: rest.amount,
+    amount: paymentAmountForCheckout(rest.amount),
     currency: rest.currency,
     item_name: rest.itemName,
     buyer_email: rest.buyerEmail,

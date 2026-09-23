@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { PaymentReturnPage } from '@/features/chat/PaymentReturnPage'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { ThemeProvider } from '@/shared/theme/ThemeProvider'
@@ -70,6 +71,7 @@ export function App() {
         <AuthProvider>
           <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
             <Routes>
+              <Route path="/payment/return" element={<PaymentReturnPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />

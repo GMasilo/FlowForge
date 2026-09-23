@@ -1,16 +1,19 @@
+import { parseTemplateInputs, type TemplateInput } from './templateModel'
+
 export const PAYMENT_TEMPLATE_DEFAULTS = {
   paymentConnectionId: '', payUrl: '', paymentAmount: '', currencyCode: 'ZAR',
   paymentItemName: '', paymentBuyerEmail: '', paymentBuyerName: '',
   payButtonLabel: 'Pay now', paidButtonLabel: "I've paid",
 }
-export type PaymentTemplateContent = typeof PAYMENT_TEMPLATE_DEFAULTS
+export type PaymentTemplateContent = typeof PAYMENT_TEMPLATE_DEFAULTS & { inputs: TemplateInput[] }
 
 /** Explicit allowlist: credentials must never be stored or published in template content. */
 export function parsePaymentTemplateContent(raw: unknown): PaymentTemplateContent {
   const rec = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {}
-  return Object.fromEntries(Object.entries(PAYMENT_TEMPLATE_DEFAULTS).map(([key, fallback]) =>
+  const fields = Object.fromEntries(Object.entries(PAYMENT_TEMPLATE_DEFAULTS).map(([key, fallback]) =>
     [key, typeof rec[key] === 'string' ? rec[key] : fallback],
-  )) as PaymentTemplateContent
+  )) as typeof PAYMENT_TEMPLATE_DEFAULTS
+  return { ...fields, inputs: parseTemplateInputs(rec.inputs) }
 }
 
 export function resolvePaymentQuestionConfig(

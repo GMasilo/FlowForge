@@ -6,6 +6,7 @@ import { createInitialPreviewState, tickPreview, submitPreviewAnswer } from '@/f
 import { validateFlow } from '@/features/designer/validation/referenceValidator'
 import { parsePaymentConfig, toPaymentJson } from '@/features/connections/connectionConfig'
 import type { DesignerNode } from '@/features/designer/model/flowSchema'
+import { templateKeysUsedInStep } from './TemplateInputBindings'
 
 const content = { ...parsePaymentTemplateContent({}), paymentConnectionId: 'connection', paymentAmount: '{{vars.total}}', paymentItemName: 'Order', currencyCode: 'ZAR' }
 const row = { id: 'template', key: 'checkout', name: 'Checkout', kind: 'payment' as const, content }
@@ -47,5 +48,23 @@ describe('payment templates', () => {
     const config = parsePaymentConfig({ provider: 'stripe', secretKey: 'sk_test_example', webhookSecret: 'whsec_example' })
     expect(config.provider).toBe('stripe')
     expect(parsePaymentConfig(toPaymentJson(config))).toEqual(config)
+  })
+  test('payment inputs survive publication and are resolved in checkout fields', () => {
+    const inputContent = parsePaymentTemplateContent({ ...content,
+      inputs: [{ key: 'amount', label: 'Amount', type: 'number', required: true }, { key: 'buyerEmail', label: 'Buyer email', type: 'string', required: true }],
+      paymentAmount: '{{inputs.amount}}', paymentBuyerEmail: '{{inputs.buyerEmail}}',
+      paymentItemName: 'Order for {{inputs.buyerEmail}}', payButtonLabel: 'Pay {{inputs.amount}}',
+    })
+    const graph = buildPublishedGraph({ nodes: [node], edges: [], globals: [], publishVersion: 1, templates: [{ ...row, content: inputContent }] })
+    const inputTemplates = templatesExprMap(graph.templates ?? [])
+    const inputNode: DesignerNode = { ...node, config: { ...node.config, templateBindings: { checkout: { amount: '{{vars.total}}', buyerEmail: '{{vars.email}}' } } } }
+    let state = createInitialPreviewState([inputNode], [], { total: 75.5, email: 'buyer@example.com' }, [], inputTemplates)
+    for (let i = 0; i < 10 && state.phase.kind === 'typing'; i++) state = tickPreview(state, [inputNode], [])
+    expect(state.phase).toMatchObject({ kind: 'waiting_input', payment: { amount: '75.5', buyerEmail: 'buyer@example.com', itemName: 'Order for buyer@example.com', payLabel: 'Pay 75.5' } })
+    expect(templateKeysUsedInStep(node.config)).toContain('checkout')
+    const missing = validateFlow([node], [], { globalVariables: [], templateKeys: ['checkout'], templateContents: { checkout: inputContent } })
+    expect(missing.filter(issue => issue.code === 'unbound_template_input')).toHaveLength(2)
+    const bound = validateFlow([inputNode], [], { globalVariables: ['total', 'email'], templateKeys: ['checkout'], templateContents: { checkout: inputContent } })
+    expect(bound.some(issue => issue.code === 'unbound_template_input')).toBe(false)
   })
 })

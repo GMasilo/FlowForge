@@ -93,7 +93,7 @@ import {
   normalizeMaxFiles,
 } from '@/features/designer/model/conversationFiles'
 import { supabase } from '@/shared/lib/supabase'
-import { getPaymentStatus, instanceFileUrl, isFlowForgeApiConfigured, startPaymentIntent } from '@/shared/lib/flowforgeApi'
+import { getPaymentStatus, instanceFileUrl, isFlowForgeApiConfigured, paymentReturnUrl, startPaymentIntent } from '@/shared/lib/flowforgeApi'
 import {
   catalogFromFilenames,
   chatTextHasSocialEmbed,
@@ -1804,7 +1804,8 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
                       buyerEmail: waiting.payment!.buyerEmail,
                       buyerName: waiting.payment!.buyerName,
                       payUrl: waiting.payment!.url,
-                      returnUrl: window.location.href,
+                      returnUrl: paymentReturnUrl(),
+                          cancelUrl: paymentReturnUrl(true),
                     })
                     return {
                       reference: started.reference,

@@ -723,7 +723,7 @@ export function TemplatesPage() {
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search templatesΓÇª"
+                  placeholder="Search templates"
                   className="pl-9"
                 />
               </div>

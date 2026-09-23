@@ -137,6 +137,14 @@ if (!$created['ok'] || !is_array($created['data'] ?? null)) {
     Response::error($created['error'] ?? 'Could not create payment intent', 502);
 }
 
+if ($provider === 'stripe') {
+    // Do not reset status if a webhook has already confirmed this checkout.
+    $saved = SupabaseRest::restPatchAsService($config, 'payment_intents',
+        'reference=eq.' . rawurlencode($reference) . '&status=eq.pending',
+        ['payload' => ['stripe_checkout_session_id' => $stripeSession['id']]]);
+    if (!$saved['ok']) Response::error('Could not save Stripe checkout reference', 502);
+}
+
 Response::json([
     'ok' => true,
     'reference' => $reference,

@@ -319,6 +319,7 @@ function calledTemplateKeys(node: DesignerNode, strings: string[]): string[] {
   for (const key of [
     String(node.config.templateKey ?? '').trim(),
     String(node.config.shopTemplateKey ?? '').trim(),
+    String(node.config.answerType ?? '') === 'payment' ? String(node.config.paymentTemplateKey ?? '').trim() : '',
     otpActive ? String(node.config.otpTemplateKey ?? '').trim() : '',
   ]) {
     if (key) keys.add(key)

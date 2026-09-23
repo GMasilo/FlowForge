@@ -31,6 +31,7 @@ import {
 import {
   evaluateExpression,
   interpolateTemplate,
+  interpolateTemplateForKey,
   invokeExpressionFunction,
   looksLikeExpression,
   parseJsonValue,
@@ -1248,61 +1249,20 @@ export function tickPreview(
 
     if (answerType === 'payment') {
       const paymentConfig = resolvePaymentQuestionConfig(node.config, next.templates)
-      const paymentText = (value: unknown) => interpolate(String(value ?? ''), next.vars, next.stepOutputs, next.media, false, next.templates, qBindings).trim()
-      const url = interpolate(
-        String(paymentConfig.payUrl ?? ''),
-        next.vars,
-        next.stepOutputs,
-        next.media,
-        false,
-        next.templates,
-        qBindings,
-      ).trim()
-      const amount = interpolate(
-        String(paymentConfig.paymentAmount ?? ''),
-        next.vars,
-        next.stepOutputs,
-        next.media,
-        false,
-        next.templates,
-        qBindings,
-      ).trim()
-      const currency =
-        paymentText(paymentConfig.currencyCode).toUpperCase() || 'ZAR'
+      const paymentText = (value: unknown) => interpolateTemplateForKey(String(value ?? ''), {
+        vars: next.vars, steps: next.stepOutputs, media: next.media,
+        templates: next.templates, templateBindings: qBindings, embedMedia: false,
+      }, String(node.config.paymentTemplateKey ?? '').trim()).trim()
       payment = {
-        url,
-        amount,
-        currency,
+        url: paymentText(paymentConfig.payUrl),
+        amount: paymentText(paymentConfig.paymentAmount),
+        currency: paymentText(paymentConfig.currencyCode).toUpperCase() || 'ZAR',
         payLabel: paymentText(paymentConfig.payButtonLabel) || 'Pay now',
         paidLabel: paymentText(paymentConfig.paidButtonLabel) || "I've paid",
         connectionId: String(paymentConfig.paymentConnectionId ?? '').trim() || undefined,
-        itemName: interpolate(
-          String(paymentConfig.paymentItemName ?? ''),
-          next.vars,
-          next.stepOutputs,
-          next.media,
-          false,
-          next.templates,
-          qBindings,
-        ).trim() || undefined,
-        buyerEmail: interpolate(
-          String(paymentConfig.paymentBuyerEmail ?? ''),
-          next.vars,
-          next.stepOutputs,
-          next.media,
-          false,
-          next.templates,
-          qBindings,
-        ).trim() || undefined,
-        buyerName: interpolate(
-          String(paymentConfig.paymentBuyerName ?? ''),
-          next.vars,
-          next.stepOutputs,
-          next.media,
-          false,
-          next.templates,
-          qBindings,
-        ).trim() || undefined,
+        itemName: paymentText(paymentConfig.paymentItemName) || undefined,
+        buyerEmail: paymentText(paymentConfig.paymentBuyerEmail) || undefined,
+        buyerName: paymentText(paymentConfig.paymentBuyerName) || undefined,
         nodeKey: node.key,
         verify: !!String(paymentConfig.paymentConnectionId ?? '').trim(),
       }

@@ -143,14 +143,17 @@ export function PaymentAnswerField({
     }
   }
 
-  async function checkOnce(ref: string) {
+  async function checkOnce(ref: string, manual = false) {
     if (!onCheckPayment || checkingRef.current || submittedRef.current || !activeRef.current) return
     checkingRef.current = true
-    setChecking(true)
-    setError(null)
+    if (manual) {
+      setChecking(true)
+      setError(null)
+    }
     try {
       const result = await onCheckPayment(ref)
       if (!activeRef.current) return
+      setError(null)
       if (result.status === 'verified') {
         if (submittedRef.current) return
         submittedRef.current = true
@@ -202,7 +205,7 @@ export function PaymentAnswerField({
               variant="secondary"
               className="h-11 rounded-2xl"
               disabled={disabled || busy || checking}
-              onClick={() => void checkOnce(reference)}
+              onClick={() => void checkOnce(reference, true)}
             >
               {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {checking ? 'Checking payment...' : (payment.paidLabel || "I've paid")}

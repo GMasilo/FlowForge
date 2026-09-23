@@ -4313,7 +4313,7 @@ export function StepInspector({
               <FlowTemplatePicker kinds={['payment']} valueKey={String(node.config.paymentTemplateKey ?? '')}
                 label="Payment template" readOnly={readOnly}
                 hint="Set up the payment provider and checkout details in Templates, then reuse them here."
-                onSelectKey={(key) => patchConfig({ paymentTemplateKey: key || null })} />
+                onSelectKey={(key) => patchConfig({ paymentTemplateKey: key || null, templateBindings: ensureTemplateBinding(node.config.templateBindings, key) })} />
               {String(node.config.paymentTemplateKey ?? '').trim() ? (
                 <p className="text-xs text-[var(--color-ink-muted)]">Provider connection, amount, currency, buyer details, and buttons come from the selected template.</p>
               ) : <>

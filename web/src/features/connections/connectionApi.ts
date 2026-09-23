@@ -286,15 +286,12 @@ export async function addConnectionToChatbot(args: {
   connectionId: string
   addedBy: string
 }): Promise<void> {
-  const { error } = await supabase.from('chatbot_connections').insert({
+  const { error } = await supabase.from('chatbot_connections').upsert({
     chatbot_id: args.chatbotId,
     connection_id: args.connectionId,
     added_by: args.addedBy,
-  })
-  if (error) {
-    if (error.code === '23505') return
-    throw error
-  }
+  }, { onConflict: 'chatbot_id,connection_id', ignoreDuplicates: true })
+  if (error) throw error
 }
 
 export async function removeConnectionFromChatbot(args: {

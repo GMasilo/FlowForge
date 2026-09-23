@@ -13,6 +13,37 @@ final class Stripe
     private const API_BASE = 'https://api.stripe.com/v1';
     private const SIGNATURE_TOLERANCE_SECONDS = 300; // 5 minutes
 
+    /** Recover older intents from the hosted URL saved by our server, never from client input. */
+    public static function checkoutSessionId(array $intent): string
+    {
+        $id = (string) ($intent['payload']['stripe_checkout_session_id'] ?? '');
+        if (preg_match('/^cs_(test_|live_)?[A-Za-z0-9]+$/', $id)) return $id;
+        $url = parse_url((string) ($intent['checkout_url'] ?? ''));
+        if (!is_array($url) || ($url['host'] ?? '') !== 'checkout.stripe.com') return '';
+        return preg_match('#/c/pay/(cs_[A-Za-z0-9_]+)$#', $url['path'] ?? '', $match) ? $match[1] : '';
+    }
+
+    public static function retrieveCheckoutSession(string $secretKey, string $sessionId): array
+    {
+        if ($secretKey === '' || !preg_match('/^cs_[A-Za-z0-9_]+$/', $sessionId)) {
+            return ['ok' => false, 'error' => 'Stripe checkout verification is not configured'];
+        }
+        $response = HttpClient::request('GET', self::API_BASE . '/checkout/sessions/' . rawurlencode($sessionId),
+            ['Authorization' => 'Bearer ' . $secretKey], null, 15, 65536);
+        if (!$response['ok'] || !is_array($response['body'] ?? null)) {
+            return ['ok' => false, 'error' => 'Could not confirm payment with Stripe. Please try again.'];
+        }
+        return ['ok' => true, 'session' => $response['body']];
+    }
+
+    public static function sessionMatchesIntent(array $session, array $intent): bool
+    {
+        return ($session['id'] ?? '') === self::checkoutSessionId($intent)
+            && ($session['client_reference_id'] ?? '') === ($intent['reference'] ?? '')
+            && (int) ($session['amount_total'] ?? -1) === (int) round((float) ($intent['amount'] ?? 0) * 100)
+            && strtoupper((string) ($session['currency'] ?? '')) === strtoupper((string) ($intent['currency'] ?? ''));
+    }
+
     /**
      * Verify the `Stripe-Signature` header against the raw request body.
      * MUST be called with the raw, unparsed body — Stripe signs the exact bytes sent,

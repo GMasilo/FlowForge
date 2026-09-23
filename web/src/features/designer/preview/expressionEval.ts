@@ -1247,6 +1247,10 @@ const COPY_STRING_FIELDS = new Set([
   'note',
 ])
 
+export function interpolateTemplateForKey(raw: string, ctx: ExprContext, templateKey: string): string {
+  return interpolateTemplate(raw, templateKey ? ctxForTemplate(ctx, templateKey) : ctx)
+}
+
 function ctxForTemplate(ctx: ExprContext, templateKey: string): ExprContext {
   const bindings = ctx.templateBindings?.[templateKey] ?? parseTemplateBindingMap(undefined)
   const inputs: Record<string, unknown> = { ...(ctx.inputs ?? {}) }

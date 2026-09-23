@@ -103,7 +103,7 @@ import {
 import { ChatLogoGlyph } from '@/features/chatbots/chatbotLogoIcons'
 import { ChatStoriesRing } from '@/features/chat/ChatStoriesRing'
 import { useChatBubbleEntrance } from '@/features/chat/useChatBubbleEntrance'
-import { fetchUrlPreview, getPaymentStatus, isFlowForgeApiConfigured, startPaymentIntent } from '@/shared/lib/flowforgeApi'
+import { fetchUrlPreview, getPaymentStatus, isFlowForgeApiConfigured, paymentReturnUrl, startPaymentIntent } from '@/shared/lib/flowforgeApi'
 import { supabase } from '@/shared/lib/supabase'
 import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/lib/utils'
@@ -1553,7 +1553,8 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                           buyerEmail: waiting.payment!.buyerEmail,
                           buyerName: waiting.payment!.buyerName,
                           payUrl: waiting.payment!.url,
-                          returnUrl: window.location.href,
+                          returnUrl: paymentReturnUrl(),
+                          cancelUrl: paymentReturnUrl(true),
                         })
                         return {
                           reference: started.reference,

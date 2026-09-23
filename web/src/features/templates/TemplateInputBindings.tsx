@@ -23,7 +23,7 @@ export function ensureTemplateBinding(raw: unknown, templateKey: string): Templa
 
 export function templateKeysUsedInStep(config: Record<string, unknown>): string[] {
   const keys = new Set<string>()
-  for (const value of [config.templateKey, config.otpTemplateKey]) {
+  for (const value of [config.templateKey, config.otpTemplateKey, config.paymentTemplateKey]) {
     if (typeof value === 'string' && value.trim()) keys.add(value.trim())
   }
   for (const key of Object.keys(parseTemplateBindingMap(config.templateBindings))) {

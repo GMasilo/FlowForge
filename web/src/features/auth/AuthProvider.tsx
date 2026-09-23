@@ -10,6 +10,7 @@ import {
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/shared/lib/supabase'
 import type { Profile } from '@/shared/types/database'
+import { retryJwtClockSkew } from './retryJwtClockSkew'
 
 interface AuthContextValue {
   session: Session | null
@@ -31,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const claimInvites = useCallback(async () => {
-    const { error } = await supabase.rpc('claim_my_organisation_invites')
+    const { error } = await retryJwtClockSkew(() => supabase.rpc('claim_my_organisation_invites'))
     if (error && !/claim_my_organisation_invites/i.test(error.message)) {
       console.warn('claim_my_organisation_invites', error.message)
     }
@@ -39,29 +40,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = useCallback(async (userId: string) => {
     await claimInvites()
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
-    setProfile(data)
+    const { data } = await retryJwtClockSkew(() => supabase.from('profiles').select('*').eq('id', userId).maybeSingle())
     return data
   }, [claimInvites])
 
   useEffect(() => {
     let mounted = true
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!mounted) return
-      setSession(data.session)
-      if (data.session?.user) await loadProfile(data.session.user.id)
-      else setProfile(null)
-      if (mounted) setLoading(false)
-    })
+    let revision = 0
+    let pending: ReturnType<typeof setTimeout> | undefined
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+      if (!mounted) return
+      const current = ++revision
+      clearTimeout(pending)
       setSession(next)
-      if (next?.user) void loadProfile(next.user.id)
-      else setProfile(null)
+      if (!next?.user) {
+        setProfile(null)
+        setLoading(false)
+        return
+      }
+      // Leave the auth callback before requesting data: the SDK holds its session lock here.
+      pending = setTimeout(() => {
+        void loadProfile(next.user.id).then(data => {
+          if (mounted && current === revision) setProfile(data)
+        }).catch(() => {
+          if (mounted && current === revision) setProfile(null)
+        }).finally(() => {
+          if (mounted && current === revision) setLoading(false)
+        })
+      }, 0)
     })
 
     return () => {
       mounted = false
+      clearTimeout(pending)
       sub.subscription.unsubscribe()
     }
   }, [loadProfile])

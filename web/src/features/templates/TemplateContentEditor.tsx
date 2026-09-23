@@ -171,7 +171,11 @@ export function TemplateContentEditor({
       media={media}
     />
   )
-  if (kind === 'payment') return <PaymentTemplateEditor content={parsePaymentTemplateContent(content)} onChange={onChange} suggestions={suggestions} readOnly={readOnly} />
+  if (kind === 'payment') return <div className="space-y-6">
+    <TemplateInputsEditor inputs={templateInputsOf(content)} readOnly={readOnly}
+      onChange={(inputs) => onChange({ ...parsePaymentTemplateContent(content), inputs })} />
+    <PaymentTemplateEditor content={parsePaymentTemplateContent(content)} onChange={onChange} suggestions={suggestions} readOnly={readOnly} />
+  </div>
   if (!isCopyTemplateKind(kind)) return fields
   return (
     <div className="space-y-6">
