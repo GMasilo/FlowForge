@@ -1907,7 +1907,10 @@ export const DOC_SECTIONS: DocSection[] = [
     body: [
       {
         paragraphs: [
-          'Open Admin → Webhooks to notify external systems. Add a name, HTTPS URL, and one or more events: flow.published, conversation.completed, conversation.failed. Enable or disable subscriptions without deleting them. Conversation completed and failed payloads include the session’s variables. Recent deliveries lists the last 50 attempts across the organisation.',
+          'Open the chatbot Webhooks tab for notifications from one chatbot, or Admin > Webhooks for organisation-wide notifications. Owners and admins can configure subscriptions when the plan includes webhooks. Choose flow.published, conversation.completed, or conversation.failed.',
+          'Choose Slack, Jira Automation, or Custom service. Slack supports either a channel incoming webhook URL or a bot token with channel ID. Bot tokens use Authorization: Bearer automatically and need chat:write permission and channel access. Both modes support message templates. Jira needs an Automation incoming webhook URL, its secret token, and a rule action. Custom destinations support optional headers and a JSON body template. Leave the JSON template blank to send the full event.',
+          'Templates support {{event}} and {{chatbot_id}}. Conversation events also support saved variables such as {{name}}, {{variables.name}}, and {{session.id}}. Put placeholders inside quoted strings in JSON templates. A placeholder that fills an entire JSON value preserves numbers, booleans, and objects. Missing variables fail the delivery.',
+          'Save before using Send test. Choose a subscribed event and provide sample variables. The test sends a real notification even when the webhook is disabled; Jira rules may create issues. The test panel shows outgoing request details, response status, headers, body, and errors, with credentials masked and responses limited to 64 KB. Slack API errors are reported even when HTTP status is 200. Recent deliveries shows the last 50 attempts and refreshes every 15 seconds. HTTP acceptance does not guarantee that a downstream Jira rule completed.',
         ],
         image: {
           src: 'docs/webhooks.png',

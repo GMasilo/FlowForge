@@ -774,3 +774,9 @@ export async function executeIntegrationAction(payload: {
 
 export type { ConnectionApiContext }
 export { postJsonPublic }
+
+export async function testWebhook(payload: { webhookId: string; event: string; variables: Record<string, unknown> }) {
+  return postJson<{ ok: boolean; status_code: number | null; error: string | null; logged: boolean; diagnostics?: Record<string, unknown> }>('/webhooks/test', {
+    webhook_id: payload.webhookId, event: payload.event, variables: payload.variables,
+  })
+}

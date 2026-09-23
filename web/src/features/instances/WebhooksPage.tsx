@@ -15,6 +15,9 @@ import { Label } from '@/shared/ui/label'
 import { FieldError } from '@/shared/ui/field-error'
 import { PAGE_HELP } from '@/shared/help/pageHelp'
 import { PageHeader } from '@/shared/ui/page-header'
+import { defaultWebhookDestination, readWebhookDestination, saveWebhookDestination } from './webhookDestination'
+import { WebhookDestinationFields } from './WebhookDestinationFields'
+import { WebhookTestPanel } from './WebhookTestPanel'
 import { Badge } from '@/shared/ui/badge'
 
 const EVENT_OPTIONS = [
@@ -23,35 +26,41 @@ const EVENT_OPTIONS = [
   'conversation.failed',
 ] as const
 
-export function WebhooksPage() {
+export function WebhooksPage({ chatbotId }: { chatbotId?: string }) {
   const { instance, role } = useRequiredInstance()
   const webhooksEnabled = instanceFeatureEnabled(instance, 'webhooks')
   const { user } = useAuth()
   const qc = useQueryClient()
   const isAdmin = canAdmin(role)
   const [open, setOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [events, setEvents] = useState<string[]>(['flow.published'])
+  const [destination, setDestination] = useState(defaultWebhookDestination)
+  const [testHook, setTestHook] = useState<InstanceWebhook | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const hooks = useQuery({
-    queryKey: ['instance-webhooks', instance.id],
+    queryKey: ['instance-webhooks', instance.id, chatbotId ?? 'organisation'],
     enabled: isAdmin && webhooksEnabled,
     queryFn: async () => {
-      const { data, error: qError } = await supabase
+      let query = supabase
         .from('instance_webhooks')
         .select('*')
         .eq('instance_id', instance.id)
         .order('created_at', { ascending: false })
+      query = chatbotId ? query.eq('chatbot_id', chatbotId) : query.is('chatbot_id', null)
+      const { data, error: qError } = await query
       if (qError) throw qError
       return data as InstanceWebhook[]
     },
   })
 
   const deliveries = useQuery({
-    queryKey: ['webhook-deliveries', instance.id],
-    enabled: isAdmin && !!hooks.data?.length,
+    queryKey: ['webhook-deliveries', instance.id, chatbotId, hooks.data?.map((h) => h.id)],
+    enabled: isAdmin && webhooksEnabled && !!hooks.data?.length,
+    refetchInterval: 15000,
     queryFn: async () => {
       const ids = (hooks.data ?? []).map((h) => h.id)
       if (!ids.length) return [] as Array<WebhookDelivery & { webhook_name?: string }>
@@ -72,24 +81,34 @@ export function WebhooksPage() {
 
   const create = useMutation({
     mutationFn: async () => {
-      if (!name.trim() || !url.trim()) throw new Error('Name and URL are required')
+      const targetUrl = destination.destination === 'slack' && destination.slackMode === 'bot' ? 'https://slack.com/api/chat.postMessage' : url.trim()
+      if (!name.trim() || !targetUrl) throw new Error('Name and URL are required')
+      if (!['https:', 'http:'].includes(new URL(targetUrl).protocol)) throw new Error('Use an HTTP or HTTPS URL')
       if (!events.length) throw new Error('Select at least one event')
-      const { error: insertError } = await supabase.from('instance_webhooks').insert({
+      const destinationValues = saveWebhookDestination(destination, targetUrl)
+      const values = {
+        ...destinationValues,
         instance_id: instance.id,
+        chatbot_id: chatbotId ?? null,
         name: name.trim(),
-        url: url.trim(),
+        url: targetUrl,
         events,
         created_by: user!.id,
-      })
+      }
+      const { error: insertError } = editingId
+        ? await supabase.from('instance_webhooks').update({ ...destinationValues, name: values.name, url: values.url, events: values.events, updated_at: new Date().toISOString() }).eq('id', editingId).eq('instance_id', instance.id)
+        : await supabase.from('instance_webhooks').insert(values)
       if (insertError) throw insertError
     },
     onSuccess: async () => {
+      setTestHook(null)
+      setEditingId(null)
       setName('')
       setUrl('')
       setEvents(['flow.published'])
       setOpen(false)
       setError(null)
-      await qc.invalidateQueries({ queryKey: ['instance-webhooks', instance.id] })
+      await qc.invalidateQueries({ queryKey: ['instance-webhooks', instance.id, chatbotId ?? 'organisation'] })
     },
     onError: (err: Error) => setError(err.message),
   })
@@ -103,7 +122,7 @@ export function WebhooksPage() {
       if (updateError) throw updateError
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['instance-webhooks', instance.id] })
+      await qc.invalidateQueries({ queryKey: ['instance-webhooks', instance.id, chatbotId ?? 'organisation'] })
     },
   })
 
@@ -113,7 +132,7 @@ export function WebhooksPage() {
       if (delError) throw delError
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['instance-webhooks', instance.id] })
+      await qc.invalidateQueries({ queryKey: ['instance-webhooks', instance.id, chatbotId ?? 'organisation'] })
     },
   })
 
@@ -138,16 +157,18 @@ export function WebhooksPage() {
     <div className="space-y-6">
       <PageHeader
         title="Webhooks"
-        description={`Notify external systems when things happen in ${instance.name}. Conversation completed and failed payloads include the session’s variables.`}
+        description={`Notify external systems when events occur in ${chatbotId ? "this chatbot" : instance.name}. Conversation completed and failed payloads include session variables.`}
         help={PAGE_HELP.webhooks}
         actions={
-          <Button onClick={() => setOpen((v) => !v)}>
+          <Button onClick={() => { setEditingId(null); setDestination(defaultWebhookDestination()); setName(''); setUrl(''); setEvents(['flow.published']); setError(null); setOpen(true) }}>
             <Plus className="h-4 w-4" />
             Add webhook
           </Button>
         }
       />
 
+      <p className="text-sm text-[var(--color-ink-muted)]">Enter your receiving endpoint URL. FlowForge sends signed JSON POST requests when selected events occur. {chatbotId ? 'These subscriptions apply only to this chatbot; organisation subscriptions also continue to receive events.' : 'These subscriptions apply to all chatbots in the organisation.'}</p>
+      {hooks.error || deliveries.error || toggleEnabled.error || remove.error ? <FieldError>{(hooks.error || deliveries.error || toggleEnabled.error || remove.error)?.message}</FieldError> : null}
       {open ? (
         <Card>
           <form className="space-y-3" onSubmit={onSubmit}>
@@ -160,12 +181,15 @@ export function WebhooksPage() {
               <Input
                 id="hook-url"
                 type="url"
-                value={url}
+                autoComplete="off"
+                value={destination.destination === 'slack' && destination.slackMode === 'bot' ? 'https://slack.com/api/chat.postMessage' : url}
+                readOnly={destination.destination === 'slack' && destination.slackMode === 'bot'}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://example.com/hooks/flowforge"
                 required
               />
             </div>
+            <WebhookDestinationFields value={destination} onChange={setDestination} />
             <div>
               <Label>Events</Label>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -190,11 +214,14 @@ export function WebhooksPage() {
             </div>
             {error ? <FieldError>{error}</FieldError> : null}
             <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? 'Saving…' : 'Create webhook'}
+              {create.isPending ? 'Saving...' : editingId ? 'Save webhook' : 'Create webhook'}
             </Button>
+            <Button type="button" variant="ghost" disabled={create.isPending} onClick={() => setOpen(false)}>Cancel</Button>
           </form>
         </Card>
       ) : null}
+
+      {testHook ? <WebhookTestPanel key={testHook.id} hook={testHook} onClose={() => setTestHook(null)} /> : null}
 
       {hooks.isLoading ? (
         <p className="text-sm text-[var(--color-ink-muted)]">Loading…</p>
@@ -205,9 +232,15 @@ export function WebhooksPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-semibold text-[var(--color-ink)]">{hook.name}</h2>
+                  <Badge>{hook.destination === 'slack' ? 'Slack' : hook.destination === 'jira' ? 'Jira' : 'Custom'}</Badge>
                   <Badge>{hook.enabled ? 'Enabled' : 'Disabled'}</Badge>
                 </div>
-                <p className="mt-1 truncate font-mono text-xs text-[var(--color-ink-muted)]">{hook.url}</p>
+                <p className="mt-1 truncate font-mono text-xs text-[var(--color-ink-muted)]">{(() => { try { return new URL(hook.url).host } catch { return 'Invalid URL' } })()}</p>
+                {(!hook.destination || hook.destination === 'custom') ? <details className="mt-2 text-xs text-[var(--color-ink-muted)]">
+                  <summary className="cursor-pointer">Signing secret and verification</summary>
+                  <p className="mt-2">Verify X-FlowForge-Signature against sha256= followed by the HMAC-SHA256 hex digest of the raw request body using this secret. Keep the secret private.</p>
+                  <code className="mt-1 block break-all select-all">{hook.secret}</code>
+                </details> : null}
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {hook.events.map((ev) => (
                     <span
@@ -220,14 +253,17 @@ export function WebhooksPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" onClick={() => setTestHook(hook)}>Send test</Button>
+                <Button size="sm" variant="secondary" onClick={() => { setEditingId(hook.id); setDestination(readWebhookDestination(hook)); setName(hook.name); setUrl(hook.url); setEvents(hook.events); setError(null); setOpen(true) }}>Edit</Button>
                 <Button
                   size="sm"
                   variant="secondary"
+                  disabled={toggleEnabled.isPending}
                   onClick={() => toggleEnabled.mutate({ id: hook.id, enabled: !hook.enabled })}
                 >
                   {hook.enabled ? 'Disable' : 'Enable'}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => remove.mutate(hook.id)}>
+                <Button size="sm" variant="ghost" disabled={remove.isPending} onClick={() => remove.mutate(hook.id)}>
                   <Trash2 className="h-4 w-4" />
                   Delete
                 </Button>
@@ -245,7 +281,7 @@ export function WebhooksPage() {
         <div className="border-b border-[var(--color-border)]/60 px-4 py-3">
           <h2 className="text-sm font-semibold text-[var(--color-ink)]">Recent deliveries</h2>
           <p className="text-[11px] text-[var(--color-ink-muted)]">
-            Last 50 attempts across this organisation’s webhooks
+            Last 50 attempts for these webhooks. Updates every 15 seconds.
           </p>
         </div>
         {deliveries.isLoading ? (

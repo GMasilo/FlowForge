@@ -9,6 +9,7 @@ import {
 import { buildQuestionAnswerTypePatch } from '@/features/designer/model/questionAnswerTypePatch'
 import type { ConnectionValidationInfo } from '@/features/connections/connectionValidation'
 import { validateFlow, type ValidationIssue } from '@/features/designer/validation/referenceValidator'
+import { cleanQuestionConfig, cleanQuestionNodes } from '@/features/designer/model/questionConfigCleanup'
 import {
   canDeleteNode as nodeIsDeletable,
   edgesMoveInSequence,
@@ -247,6 +248,9 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   canRedo: false,
 
   setFlow: ({ flowId, nodes, edges, globalVariables }) => {
+    const cleaned = cleanQuestionNodes(nodes)
+    const cleanedKeys = cleaned.filter((node, index) => node !== nodes[index]).map(node => node.key)
+    nodes = cleaned
     const { connectionsById, mediaKeys, templateKeys } = get()
     resetHistory()
     set({
@@ -254,8 +258,8 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       nodes,
       edges,
       globalVariables,
-      dirty: false,
-      dirtyNodeKeys: [],
+      dirty: cleanedKeys.length > 0,
+      dirtyNodeKeys: cleanedKeys,
       deletedNodeKeys: [],
       selectedNodeId: nodes[0]?.id ?? null,
       issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
@@ -414,6 +418,10 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
     const state = get()
     const current = state.nodes.find((n) => n.id === id)
     if (!current) return
+    if (current.type === 'question' && patch.config) {
+      const changedType = String(patch.config.answerType ?? 'text') !== String(current.config.answerType ?? 'text')
+      patch = { ...patch, config: cleanQuestionConfig(patch.config, changedType, current.config) }
+    }
     if (isPeerLocked(state.peerLocks, current.key)) return
     if (patch.key && patch.key !== current.key && isPeerLocked(state.peerLocks, patch.key)) return
     const next = state.nodes.map((n) => (n.id === id ? { ...n, ...patch, config: patch.config ?? n.config } : n))
@@ -770,6 +778,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   },
 
   setNodesAndEdges: (nextNodes, nextEdges) => {
+    nextNodes = cleanQuestionNodes(nextNodes)
     const { nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, selectedNodeId, dirtyNodeKeys, deletedNodeKeys } =
       get()
     const nextIds = new Set(nextNodes.map((n) => n.id))

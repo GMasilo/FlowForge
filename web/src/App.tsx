@@ -39,6 +39,7 @@ import { AgentConsolePage } from '@/features/instances/AgentConsolePage'
 import { MarketplacePage } from '@/features/marketplace/MarketplacePage'
 import { ChatbotsPage } from '@/features/chatbots/ChatbotsPage'
 import { ChatbotSettingsPage } from '@/features/chatbots/ChatbotSettingsPage'
+import { ChatbotWebhooksPage } from '@/features/chatbots/ChatbotWebhooksPage'
 import { ChatbotDataPage } from '@/features/chatbots/ChatbotDataPage'
 import { ChatbotTestPage } from '@/features/chatbots/ChatbotTestPage'
 import { TemplatesPage } from '@/features/templates/TemplatesPage'
@@ -133,6 +134,7 @@ export function App() {
                       <Route path="chatbots/:chatbotId" element={<ChatbotSettingsPage />} />
                       <Route path="chatbots/:chatbotId/design" element={<DesignerPage />} />
                       <Route path="chatbots/:chatbotId/templates" element={<TemplatesPage />} />
+                      <Route path="chatbots/:chatbotId/webhooks" element={<ChatbotWebhooksPage />} />
                       <Route path="chatbots/:chatbotId/data" element={<ChatbotDataPage />} />
                       <Route path="chatbots/:chatbotId/test" element={<ChatbotTestPage />} />
                     </Route>

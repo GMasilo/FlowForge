@@ -1,3 +1,4 @@
+import { validateEntityJoins, type EntityJoin } from '@/features/entities/entityJoins'
 import {
   extractTemplateRefs,
   getStepOutputVariables,
@@ -808,6 +809,16 @@ export function validateFlow(
     }
 
     if (node.type === 'entity') {
+      if (['list', 'get'].includes(String(node.config.operation ?? 'list'))) {
+        const joins = (node.config.joins ?? []) as EntityJoin[]
+        try {
+          validateEntityJoins(joins)
+          if (ctx.installedEntityIds && joins.some(join => !ctx.installedEntityIds!.includes(join.entityId))) throw new Error('A joined entity is not installed on this chatbot.')
+          if (node.config.columnMode === 'selected' && (!Array.isArray(node.config.selectedColumns) || !node.config.selectedColumns.length)) throw new Error('Choose at least one output column.')
+        } catch (error) {
+          issues.push({ severity: 'error', nodeId: node.id, field: 'joins', code: 'invalid_entity_query', message: error instanceof Error ? error.message : 'Invalid entity query.' })
+        }
+      }
       const entityId = typeof node.config.entityId === 'string' ? node.config.entityId.trim() : ''
       if (!entityId) {
         issues.push({

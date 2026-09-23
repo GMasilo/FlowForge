@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useRef, useState } from 'react'
-import { Database, Download, LayoutTemplate, Radio, Settings2, Workflow } from 'lucide-react'
+import { Database, Download, LayoutTemplate, Radio, Settings2, Webhook, Workflow } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { downloadJson } from '@/shared/lib/downloadJson'
 import {
@@ -22,6 +22,7 @@ const tabs = [
   { end: false, suffix: '/test', label: 'Test', icon: Radio },
   { end: false, suffix: '/templates', label: 'Templates', icon: LayoutTemplate },
   { end: false, suffix: '/data', label: 'Data', icon: Database },
+  { end: false, suffix: '/webhooks', label: 'Webhooks', icon: Webhook },
 ] as const
 
 export function ChatbotSubNav({

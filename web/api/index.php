@@ -25,6 +25,7 @@ $map = [
     '/email/invite-resend' => __DIR__ . '/email/invite-resend.php',
     '/auth/check' => __DIR__ . '/auth/check.php',
     '/url/preview' => __DIR__ . '/url/preview.php',
+    '/webhooks/test' => __DIR__ . '/webhooks/test.php',
     '/webhooks/dispatch' => __DIR__ . '/webhooks/dispatch.php',
     '/webhooks/emit_session' => __DIR__ . '/webhooks/emit_session.php',
     '/alerts/run' => __DIR__ . '/alerts/run.php',

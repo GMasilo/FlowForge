@@ -145,7 +145,8 @@ export function DesignerPage() {
   const [previewRuns, setPreviewRuns] = useState<PreviewStepRun[]>([])
   const [scenarioResult, setScenarioResult] = useState<ScenarioResult | null>(null)
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
-  const [hydrated, setHydrated] = useState(false)
+  const [hydratedFor, setHydratedFor] = useState<string | null>(null)
+  const hydrated = !!chatbotId && hydratedFor === chatbotId
   const [canvasFullscreen, setCanvasFullscreen] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const now = useRelativeClock()
@@ -250,6 +251,16 @@ export function DesignerPage() {
     queryFn: () => fetchChatbotTemplates(chatbotId!),
   })
 
+  const startupResources = [
+    { label: 'Chatbot', query: chatbot }, { label: 'Flow and variables', query: flowBundle },
+    { label: 'Connections', query: connections }, { label: 'Entities', query: installedEntities },
+    { label: 'Integrations', query: installedIntegrations }, { label: 'Media', query: mediaQuery },
+    { label: 'Templates', query: templatesQuery },
+  ]
+  const startupQueries = startupResources.map(resource => resource.query)
+  const startupError = startupQueries.find(query => query.isError)?.error
+  const prerequisitesReady = startupQueries.every(query => query.isSuccess && (hydrated || !query.isFetching))
+
   useEffect(() => {
     if (!connections.data) return
     useDesignerStore.getState().setConnections(buildConnectionsMap(connections.data))
@@ -306,13 +317,13 @@ export function DesignerPage() {
   }, [templatesQuery.data, templatesQuery.isFetched, setTemplateKeys])
 
   useEffect(() => {
-    setHydrated(false)
+    setHydratedFor(null)
     rehydrateFromServerRef.current = false
     autoBoundConnectionsRef.current = null
   }, [chatbotId])
 
   useEffect(() => {
-    if (!flowBundle.data) return
+    if (!flowBundle.data || !prerequisitesReady) return
     const incomingId = flowBundle.data.flow.id
     const sameFlow = useDesignerStore.getState().flowId === incomingId
     // Autosave/publish refetch the bundle; don't replace the in-memory graph or
@@ -378,8 +389,8 @@ export function DesignerPage() {
     }
     setLastSavedAt(new Date(flowBundle.data.flow.updated_at))
     setDraftUpdatedAt(flowBundle.data.flow.updated_at)
-    setHydrated(true)
-  }, [flowBundle.data, setFlow, hydrated, connections.data, chatbotId])
+    setHydratedFor(chatbotId ?? null)
+  }, [flowBundle.data, setFlow, hydrated, connections.data, chatbotId, prerequisitesReady])
 
   useEffect(() => {
     if (!hydrated) return
@@ -970,7 +981,7 @@ export function DesignerPage() {
     />
   )
 
-  const designerReady = !flowBundle.isLoading && !chatbot.isLoading
+  const designerReady = prerequisitesReady && hydrated && flowId === flowBundle.data?.flow.id
 
   useLayoutEffect(() => {
     const el = toolbarRef.current
@@ -982,8 +993,27 @@ export function DesignerPage() {
     return () => ro.disconnect()
   }, [designerReady])
 
+  if (startupError) {
+    return <div role="alert" className="space-y-3 rounded-xl border border-[var(--color-border)] p-5">
+      <p className="font-semibold">Designer setup could not finish</p>
+      {startupResources.filter(resource => resource.query.isError).map(resource => <p key={resource.label} className="text-sm">
+        {resource.label}: {resource.query.error?.message || 'Could not load this resource.'}
+      </p>)}
+      <Button onClick={() => { void Promise.all(startupQueries.filter(query => query.isError).map(query => query.refetch())) }}>Retry loading</Button>
+    </div>
+  }
   if (!designerReady) {
-    return <p className="text-sm text-[var(--color-ink-muted)]">Loading designer…</p>
+    return <div role="status" aria-live="polite" aria-busy="true" className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] p-6">
+      <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+      <div>
+        <p className="font-semibold">Preparing designer</p>
+        <p className="text-sm text-[var(--color-ink-muted)]">
+          {!flowBundle.isSuccess || !chatbot.isSuccess ? 'Loading chatbot and flow...'
+            : !prerequisitesReady ? 'Loading templates, connections, media and other flow resources...'
+              : 'Removing unused response settings and validating the flow...'}
+        </p>
+      </div>
+    </div>
   }
 
   return (

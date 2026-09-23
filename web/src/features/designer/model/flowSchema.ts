@@ -1564,6 +1564,9 @@ export const entityFiltersSchema = z.object({
 })
 
 export const entityConfigSchema = z.object({
+  joins: z.array(z.object({ entityId: z.string(), alias: z.string(), localColumn: z.string(), foreignColumn: z.string(), kind: z.enum(['left', 'inner']) })).default([]),
+  columnMode: z.enum(['all', 'selected']).default('all'),
+  selectedColumns: z.array(z.string()).default([]),
   entityId: z.string().default(''),
   operation: z.enum(['list', 'get', 'create', 'update', 'delete']).default('list'),
   /** Template / expression resolving to a record UUID (get/update/delete). */

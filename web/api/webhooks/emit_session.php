@@ -6,8 +6,8 @@ declare(strict_types=1);
  * Authenticated by session_id (must exist and not be active).
  */
 require_once dirname(__DIR__) . '/bootstrap.php';
+require_once dirname(__DIR__) . '/lib/WebhookDelivery.php';
 
-use FlowForge\Api\HttpClient;
 use FlowForge\Api\RateLimiter;
 use FlowForge\Api\Response;
 use FlowForge\Api\Security;
@@ -40,9 +40,10 @@ if ($status === 'active' || $status === '') {
 $instanceId = (string) ($session['instance_id'] ?? '');
 $event = $status === 'completed' ? 'conversation.completed' : 'conversation.failed';
 
-$hooksRpc = SupabaseRest::rpcAsService($config, 'list_webhooks_for_event', [
+$hooksRpc = SupabaseRest::rpcAsService($config, 'list_scoped_webhooks_for_event', [
     'p_instance_id' => $instanceId,
     'p_event' => $event,
+    'p_chatbot_id' => $session['chatbot_id'] ?? null,
 ]);
 if (!$hooksRpc['ok']) {
     Response::json(['ok' => false, 'error' => $hooksRpc['error'] ?? 'Failed to list webhooks'], 502);
@@ -61,51 +62,9 @@ $payload = [
     'session' => $session,
     'emitted_at' => gmdate('c'),
 ];
-$bodyJson = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-if ($bodyJson === false) {
-    Response::error('Failed to encode payload', 500);
-}
-
 $results = [];
 foreach ($hooks as $hook) {
-    if (!is_array($hook)) {
-        continue;
-    }
-    $url = (string) ($hook['url'] ?? '');
-    $secret = (string) ($hook['secret'] ?? '');
-    $hookId = (string) ($hook['id'] ?? '');
-    if ($url === '' || $hookId === '') {
-        continue;
-    }
-
-    $sig = hash_hmac('sha256', $bodyJson, $secret);
-    $resp = HttpClient::request(
-        'POST',
-        $url,
-        [
-            'Content-Type' => 'application/json',
-            'X-FlowForge-Signature' => 'sha256=' . $sig,
-            'X-FlowForge-Event' => $event,
-        ],
-        $bodyJson,
-        15,
-        65536,
-    );
-
-    SupabaseRest::rpcAsService($config, 'record_webhook_delivery', [
-        'p_webhook_id' => $hookId,
-        'p_event' => $event,
-        'p_payload' => $payload,
-        'p_status_code' => $resp['status'] ?? null,
-        'p_ok' => (bool) ($resp['ok'] ?? false),
-        'p_error' => $resp['error'] ?? null,
-    ]);
-
-    $results[] = [
-        'webhook_id' => $hookId,
-        'ok' => (bool) ($resp['ok'] ?? false),
-        'status' => $resp['status'] ?? null,
-    ];
+    if (!is_array($hook)) continue;
+    $results[] = \FlowForge\Api\WebhookDelivery::send($config, $hook, $event, $payload);
 }
-
 Response::json(['ok' => true, 'event' => $event, 'deliveries' => $results]);

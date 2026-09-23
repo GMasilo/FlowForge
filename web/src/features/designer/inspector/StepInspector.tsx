@@ -77,6 +77,7 @@ import {
 import { parsePublishedGraph } from '@/features/designer/utils/flowPublish'
 import { connectionInfoFromRow } from '@/features/connections/connectionValidation'
 import { EntityQueryBuilder } from '@/features/designer/inspector/EntityQueryBuilder'
+import { EntityJoinFields } from './EntityJoinFields'
 import { useDesignerStore } from '@/features/designer/store/designerStore'
 import {
   confirmNodeDeletionMessage,
@@ -131,7 +132,6 @@ import {
   uploadDesignerMedia,
 } from '@/shared/lib/flowforgeApi'
 import { useChatbotMedia } from '@/features/designer/MediaLibraryPanel'
-import { buildQuestionAnswerTypePatch } from '@/features/designer/model/questionAnswerTypePatch'
 import {
   applyAnswerTypeSuggestion,
   shouldAutoApplyAnswerType,
@@ -3996,7 +3996,7 @@ export function StepInspector({
             <Select
               disabled={readOnly}
               value={String(node.config.answerType ?? 'text')}
-              onChange={(e) => patchConfig(buildQuestionAnswerTypePatch(node.config, e.target.value))}
+              onChange={(e) => patchConfig({ answerType: e.target.value })}
             >
               {answerSuggestions.length ? (
                 <optgroup label="Suggested">
@@ -5313,7 +5313,7 @@ export function StepInspector({
               onChange={(e) => {
                 const nextId = e.target.value
                 const nextEntity = (entitiesQuery.data ?? []).find((ent) => ent.id === nextId)
-                const patch: Record<string, unknown> = { entityId: nextId }
+                const patch: Record<string, unknown> = { entityId: nextId, joins: [], selectedColumns: [], columnMode: 'all' }
                 if (nextEntity && !entityAllowsOperation(nextEntity, entityOp)) {
                   const fallback = ENTITY_OPERATIONS.find(
                     (op) =>
@@ -5393,6 +5393,7 @@ export function StepInspector({
               }
             />
           ) : null}
+          {(entityOp === 'list' || entityOp === 'get') ? <EntityJoinFields config={node.config} entities={entitiesQuery.data ?? []} onChange={patchConfig} readOnly={readOnly} /> : null}
           {entityOpMeta.needsFields && selectedEntity ? (
             <div className="space-y-2">
               <Label>Field values</Label>

@@ -209,6 +209,14 @@ export function remapEntityIds(
 
   return nodes.map((node) => {
     if (node.type !== 'entity') return node
+    if (Array.isArray(node.config.joins)) {
+      node = { ...node, config: { ...node.config, joins: node.config.joins.map(raw => {
+        const join = raw as Record<string, unknown>
+        const id = String(join.entityId ?? '').trim()
+        const key = exportKeyById.get(id)
+        return { ...join, entityId: (key ? byKey.get(key) : undefined) ?? byId.get(id) ?? byKey.get(id) ?? id }
+      }) } }
+    }
     const rawId = String(node.config.entityId ?? '').trim()
     if (!rawId) return node
 

@@ -4,7 +4,6 @@ import { Database, Download, FileSpreadsheet, Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import {
   createDynamicRecord,
-  createEntity,
   createStaticRecord,
   deleteAttribute,
   deleteDynamicRecord,
@@ -14,7 +13,6 @@ import {
   entityVisibilityLabel,
   fetchInstalledEntities,
   installEntityOnChatbot,
-  keyFromName,
   listEntityLinks,
   listEntityShares,
   listInstallableEntities,
@@ -38,6 +36,9 @@ import {
   type EntityExcelParseResult,
 } from '@/features/entities/entityExcel'
 import { importEntityFromExcel } from '@/features/entities/entityExcelImport'
+import { ENTITY_TEMPLATES } from './entityTemplates'
+import { EntityTemplateIcon } from './EntityTemplateIcon'
+import { createEntityFromTemplate } from './createEntityFromTemplate'
 import { ENTITY_PRIMARY_KEY, ensurePrimaryKeyColumn, isEntityPrimaryKey } from '@/features/entities/entityPrimaryKey'
 import { coalesceEntityFilters, queryEntityRecords } from '@/features/entities/entityQuery'
 import { EntityQueryBuilder } from '@/features/designer/inspector/EntityQueryBuilder'
@@ -82,6 +83,12 @@ export function EntitiesPanel({ chatbotId }: { chatbotId: string }) {
   const [sectionOpen, setSectionOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newKind, setNewKind] = useState<EntityKind>('dynamic')
+  const [newTemplateKey, setNewTemplateKey] = useState('blank')
+  const [templateSearch, setTemplateSearch] = useState('')
+  const visibleTemplates = ENTITY_TEMPLATES.filter(template =>
+    `${template.name} ${template.description} ${template.fields.map(field => field.label).join(' ')}`.toLowerCase().includes(templateSearch.trim().toLowerCase()),
+  ).sort((a, b) => a.key === 'blank' ? -1 : b.key === 'blank' ? 1 : a.name.localeCompare(b.name))
+  const newTemplate = ENTITY_TEMPLATES.find(template => template.key === newTemplateKey)!
 
   const entities = useQuery({
     queryKey: ['chatbot-entities', chatbotId],
@@ -111,16 +118,18 @@ export function EntitiesPanel({ chatbotId }: { chatbotId: string }) {
     mutationFn: async () => {
       const name = newName.trim()
       if (!name) throw new Error('Name is required')
-      return createEntity({
+      return createEntityFromTemplate({
         chatbotId,
         name,
-        key: keyFromName(name),
+        templateKey: newTemplateKey,
         kind: newKind,
       })
     },
     onSuccess: async (row) => {
       setCreating(false)
       setNewName('')
+      setNewTemplateKey('blank')
+      setNewKind('dynamic')
       setError(null)
       await refreshEntities()
       setSelectedId(row.id)
@@ -262,22 +271,47 @@ export function EntitiesPanel({ chatbotId }: { chatbotId: string }) {
       {error ? <FieldError>{error}</FieldError> : null}
 
       {creating ? (
-        <div className="grid gap-3 rounded-xl border border-teal-200/70 bg-teal-50/40 p-3 sm:grid-cols-[1fr_160px_auto]">
+        <div className="space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+          <div>
+            <h4 className="font-semibold">Start from a template</h4>
+            <p className="text-sm text-[var(--color-ink-muted)]">Choose a starting schema or start blank. You can edit the fields after creating the entity.</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" role="group" aria-label="Entity templates">
+            <div className="sm:col-span-2 lg:col-span-3">
+              <Input type="search" aria-label="Search entity templates" placeholder="Search templates or fields..." value={templateSearch} onChange={event => setTemplateSearch(event.target.value)} />
+              <p className="mt-1 text-xs text-[var(--color-ink-muted)]">{visibleTemplates.length} {visibleTemplates.length === 1 ? 'template' : 'templates'} · Selected: {newTemplate.name}</p>
+            </div>
+            {!visibleTemplates.length ? <p className="text-sm text-[var(--color-ink-muted)]">No templates match your search.</p> : null}
+            {visibleTemplates.map(template => <button key={template.key} type="button" disabled={create.isPending}
+              aria-pressed={newTemplateKey === template.key}
+              className={cn('rounded-xl border p-3 text-left disabled:opacity-50', newTemplateKey === template.key ? 'border-[var(--color-accent)] bg-[var(--color-surface-2)]' : 'border-[var(--color-border)]')}
+              onClick={() => { setNewTemplateKey(template.key); setNewKind(template.kind); setNewName(template.key === 'blank' ? '' : template.name); setError(null) }}>
+              <span className="mb-2 flex items-center gap-2 font-semibold"><EntityTemplateIcon templateKey={template.key} />{template.name}</span>
+              <span className="block text-xs text-[var(--color-ink-muted)]">{template.description}</span>
+            </button>)}
+          </div>
+          <div className="text-sm">
+            <p className="font-medium">Fields included</p>
+            <p className="text-[var(--color-ink-muted)]">ID (automatic, unique){newTemplate.fields.map(field => ` · ${field.label} (${field.value_type}${field.required ? ', required' : ''}${field.is_unique ? ', unique' : ''})`).join('')}</p>
+            <p className="mt-1 text-xs text-[var(--color-ink-muted)]">Creates an empty entity with these fields. No sample records are added.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[1fr_220px_auto]">
           <div>
             <Label>Name</Label>
-            <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Customer" />
+            <Input aria-label="New entity name" disabled={create.isPending} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Customer" />
           </div>
           <div>
             <Label>Kind</Label>
-            <Select value={newKind} onChange={(e) => setNewKind(e.target.value as EntityKind)}>
+            <Select aria-label="New entity kind" disabled={create.isPending} value={newKind} onChange={(e) => setNewKind(e.target.value as EntityKind)}>
               <option value="dynamic">Dynamic (store user data)</option>
               <option value="static">Static (design-time catalog)</option>
             </Select>
           </div>
           <div className="flex items-end">
-            <Button disabled={create.isPending} onClick={() => create.mutate()}>
+            <Button disabled={create.isPending || !newName.trim()} onClick={() => create.mutate()}>
               {create.isPending ? 'Creating…' : 'Create'}
             </Button>
+          </div>
           </div>
         </div>
       ) : null}

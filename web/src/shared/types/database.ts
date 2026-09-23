@@ -2221,6 +2221,9 @@ export type Database = {
       }
       instance_webhooks: {
         Row: {
+          destination: 'custom' | 'slack' | 'jira'
+          destination_config: Json
+          chatbot_id: string | null
           created_at: string
           created_by: string | null
           enabled: boolean
@@ -2233,6 +2236,9 @@ export type Database = {
           url: string
         }
         Insert: {
+          destination?: 'custom' | 'slack' | 'jira'
+          destination_config?: Json
+          chatbot_id?: string | null
           created_at?: string
           created_by?: string | null
           enabled?: boolean
@@ -2245,6 +2251,9 @@ export type Database = {
           url: string
         }
         Update: {
+          destination?: 'custom' | 'slack' | 'jira'
+          destination_config?: Json
+          chatbot_id?: string | null
           created_at?: string
           created_by?: string | null
           enabled?: boolean

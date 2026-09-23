@@ -3196,7 +3196,7 @@ export async function runEntityStep(
         sessionId,
         chatbotId,
         entityId,
-        operation,
+        operation: operation === 'get' ? 'list' : operation,
         values: rpcValues,
         recordId: recordId || undefined,
       })
@@ -3227,21 +3227,11 @@ export async function runEntityStep(
           return { id: String(rid ?? ''), values: rest }
         })
         let filtered = queryEntityRecords(normalized, filters, resolveEntityValue)
-        if (operation === 'get') {
-          if (recordId) filtered = filtered.filter((r) => r.id === recordId)
-          const one = result.record
-            ? (() => {
-                const rec = result.record as Record<string, unknown>
-                return { id: String(rec.id ?? ''), ...rec }
-              })()
-            : filtered[0]
-              ? { id: filtered[0].id, ...filtered[0].values }
-              : null
-          outputs = { record: one, found: !!one }
-        } else {
-          const list = filtered.map((r) => ({ id: r.id, ...r.values }))
-          outputs = { records: list, count: list.length }
-        }
+        if (operation === 'get' && recordId) filtered = filtered.filter(row => row.id === recordId)
+        const { entityQueryOutput } = await import('@/features/entities/entityQueryOutput')
+        const queried = await entityQueryOutput({ records: filtered.map(row => ({ id: row.id, ...row.values })) }, { ...node.config, operation: 'list' }, chatbotId, sessionId)
+        const list = queried.records as Record<string, unknown>[]
+        outputs = operation === 'get' ? { record: list[0] ?? null, found: list.length > 0 } : { records: list, count: list.length }
       } else if (operation === 'create' || operation === 'update') {
         const rec = (result.record ?? {}) as Record<string, unknown>
         outputs = { record: rec, id: result.id ?? rec.id }
@@ -3326,14 +3316,11 @@ export async function runEntityStep(
       if (operation === 'list' || operation === 'get') {
         let rows = await listEntityRecords(entity)
         rows = queryEntityRecords(rows, filters, resolveEntityValue)
-        if (operation === 'get') {
-          if (recordId) rows = rows.filter((r) => r.id === recordId)
-          const one = rows[0] ?? null
-          outputs = { record: one ? toRecordPayload(one) : null, found: !!one }
-        } else {
-          const list = rows.map(toRecordPayload)
-          outputs = { records: list, count: list.length }
-        }
+        if (operation === 'get' && recordId) rows = rows.filter(row => row.id === recordId)
+        const { entityQueryOutput } = await import('@/features/entities/entityQueryOutput')
+        const queried = await entityQueryOutput({ records: rows.map(toRecordPayload) }, { ...node.config, operation: 'list' }, chatbotId)
+        const list = queried.records as Record<string, unknown>[]
+        outputs = operation === 'get' ? { record: list[0] ?? null, found: list.length > 0 } : { records: list, count: list.length }
       } else if (operation === 'create') {
         const created = await createDynamicRecord(entityId, resolvedFields)
         const values =
