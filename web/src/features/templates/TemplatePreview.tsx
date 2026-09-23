@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { Bell, Smartphone } from 'lucide-react'
+import { parsePaymentTemplateContent } from './paymentTemplate'
 import { ChatFormattedText } from '@/features/chat/ChatFormattedText'
 import { ConfirmAnswerField } from '@/features/chat/ConfirmAnswerField'
 import { LikertAnswerField } from '@/features/chat/LikertAnswerField'
@@ -711,6 +712,15 @@ function KindPreviewBody({
     )
   }
 
+  if (kind === 'payment') {
+    const payment = parsePaymentTemplateContent(content)
+    return <div className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-[var(--color-ink)]">
+      <p className="font-medium">{payment.paymentItemName || 'Payment'}</p>
+      <p className="text-lg">{payment.currencyCode} {payment.paymentAmount || '0.00'}</p>
+      <button type="button" disabled className="rounded-lg bg-[var(--color-ink)] px-4 py-2 text-sm text-[var(--color-surface)]">{payment.payButtonLabel || 'Pay now'}</button>
+      <p className="text-xs text-[var(--color-ink-muted)]">{payment.paymentConnectionId ? 'Provider confirmation required' : 'Select or create a payment connection'}</p>
+    </div>
+  }
   if (kind === 'cart') {
     return (
       <div className={cn('pointer-events-none', compact && 'origin-top scale-[0.92]')}>

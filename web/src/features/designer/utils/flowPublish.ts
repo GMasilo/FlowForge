@@ -1,6 +1,7 @@
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
 import type { FlowGlobalExport } from '@/features/designer/utils/flowTransfer'
 import { isTemplateKind } from '@/features/templates/templateModel'
+import { parsePaymentTemplateContent } from '@/features/templates/paymentTemplate'
 import type { Json, TemplateKind } from '@/shared/types/database'
 
 export const PUBLISHED_GRAPH_KIND = 'flowforge.publishedGraph' as const
@@ -43,7 +44,9 @@ export function buildPublishedGraph(args: {
     globals: args.globals,
     nodes: args.nodes,
     edges: args.edges,
-    templates: args.templates ?? [],
+    templates: (args.templates ?? []).map(template => template.kind === 'payment'
+      ? { ...template, content: parsePaymentTemplateContent(template.content) }
+      : template),
   }
 }
 

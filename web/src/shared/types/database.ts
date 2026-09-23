@@ -4472,6 +4472,7 @@ export type Database = {
         | "custom"
       integration_status: "disconnected" | "connected" | "error"
       template_kind:
+        | "payment"
         | "email"
         | "faq"
         | "cart"

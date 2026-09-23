@@ -19,6 +19,7 @@ import {
 } from '@/features/designer/model/conversationFiles'
 import { countryDisplayLabel, normalizeCountryValue } from '@/shared/lib/countries'
 import { maskedCreditCardNumber, validateCreditCardDetails } from './creditCard'
+import { resolvePaymentQuestionConfig } from '@/features/templates/paymentTemplate'
 import { mediaKeyFromFilename } from '@/features/designer/model/chatbotMedia'
 import {
   buildShopCart,
@@ -142,6 +143,7 @@ export function validateQuestionAnswer(
   answer: string | string[] | Record<string, unknown> | Record<string, unknown>[],
   options?: { choices?: string[]; templates?: Record<string, unknown> },
 ): AnswerValidationResult {
+  config = resolvePaymentQuestionConfig(config, options?.templates)
   const answerType = String(config.answerType ?? 'text')
   const required = isAnswerRequired(config as Record<string, unknown>)
 

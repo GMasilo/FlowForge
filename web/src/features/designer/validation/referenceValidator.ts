@@ -7,6 +7,7 @@ import {
   type DesignerNode,
 } from '@/features/designer/model/flowSchema'
 import type { ConnectionValidationInfo } from '@/features/connections/connectionValidation'
+import { resolvePaymentQuestionConfig } from '@/features/templates/paymentTemplate'
 import { isTemplateKindAllowedForAnswerType, templateContentLooksLikeCart } from '@/features/templates/templateKindCompatibility'
 import { parseTemplateBindingMap, parseTemplateInputs } from '@/features/templates/templateModel'
 import {
@@ -660,7 +661,12 @@ export function validateFlow(
 
     if (node.type === 'question') {
       if (String(node.config.answerType ?? '') === 'payment') {
-        const connectionId = String(node.config.paymentConnectionId ?? '').trim()
+        const paymentConfig = resolvePaymentQuestionConfig(node.config, ctx.templateContents)
+        const templateKey = String(node.config.paymentTemplateKey ?? '').trim()
+        if (templateKey && ctx.templateKeys && !ctx.templateKeys.includes(templateKey)) {
+          issues.push({ severity: 'error', nodeId: node.id, field: 'paymentTemplateKey', code: 'unknown_payment_template', message: `Payment template "${templateKey}" was not found.` })
+        }
+        const connectionId = String(paymentConfig.paymentConnectionId ?? '').trim()
         const connection = ctx.connectionsById?.[connectionId]
         if (!connectionId || (ctx.connectionsById && (!connection || connection.kind !== 'payment'))) {
           issues.push({

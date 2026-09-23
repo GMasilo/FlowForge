@@ -29,7 +29,7 @@ export type HttpConnectionConfig = {
 
 export type EmailEncryption = 'none' | 'starttls' | 'ssl'
 
-export type PaymentProvider = 'payfast' | 'custom'
+export type PaymentProvider = 'payfast' | 'stripe' | 'custom'
 
 export type PaymentConnectionConfig = {
   provider: PaymentProvider
@@ -38,6 +38,8 @@ export type PaymentConnectionConfig = {
   passphrase: string
   sandbox: boolean
   sharedSecret: string
+  secretKey: string
+  webhookSecret: string
 }
 
 export type DatabaseProvider = 'postgres' | 'mysql' | 'mssql' | 'sqlite'
@@ -144,6 +146,8 @@ export const defaultPaymentConfig = (): PaymentConnectionConfig => ({
   passphrase: '',
   sandbox: true,
   sharedSecret: '',
+  secretKey: '',
+  webhookSecret: '',
 })
 
 export const defaultDatabasePort = (provider: DatabaseProvider): number => {
@@ -244,7 +248,7 @@ export function parsePaymentConfig(raw: Json | null | undefined): PaymentConnect
   const base = defaultPaymentConfig()
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base
   const obj = raw as Record<string, unknown>
-  const provider = obj.provider === 'custom' ? 'custom' : 'payfast'
+  const provider = obj.provider === 'stripe' ? 'stripe' : obj.provider === 'custom' ? 'custom' : 'payfast'
   return {
     provider,
     merchantId: String(obj.merchantId ?? ''),
@@ -252,6 +256,8 @@ export function parsePaymentConfig(raw: Json | null | undefined): PaymentConnect
     passphrase: String(obj.passphrase ?? ''),
     sandbox: obj.sandbox === true,
     sharedSecret: String(obj.sharedSecret ?? ''),
+    secretKey: String(obj.secretKey ?? ''),
+    webhookSecret: String(obj.webhookSecret ?? ''),
   }
 }
 
@@ -323,6 +329,8 @@ export function toPaymentJson(config: PaymentConnectionConfig): Json {
     passphrase: config.passphrase,
     sandbox: config.sandbox === true,
     sharedSecret: config.sharedSecret,
+    secretKey: config.secretKey,
+    webhookSecret: config.webhookSecret,
   }
 }
 
@@ -373,6 +381,7 @@ export function summarizeConnection(kind: ConnectionKind, config: Json): string[
 
   if (kind === 'payment') {
     const c = parsePaymentConfig(config)
+    if (c.provider === 'stripe') return ['Provider: Stripe', c.secretKey ? 'Secret key: set' : 'Secret key: missing', c.webhookSecret ? 'Webhook secret: set' : 'Webhook secret: missing']
     if (c.provider === 'custom') {
       return [
         'Provider: Custom notify',
@@ -469,6 +478,7 @@ export const PAYMENT_PROVIDER_OPTIONS: Array<{ value: PaymentProvider; label: st
     label: 'Custom notify',
     hint: 'Your gateway POSTs to FlowForge /payment/notify with a shared secret or HMAC',
   },
+  { value: 'stripe', label: 'Stripe', hint: 'Stripe Checkout with signed webhook confirmation' },
 ]
 
 export const DATABASE_PROVIDER_OPTIONS: Array<{

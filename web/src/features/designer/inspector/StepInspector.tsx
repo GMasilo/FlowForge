@@ -4292,7 +4292,7 @@ export function StepInspector({
               }
             />
           ) : null}
-          {String(node.config.answerType) === 'currency' || String(node.config.answerType) === 'payment' ? (
+          {String(node.config.answerType) === 'currency' || (String(node.config.answerType) === 'payment' && !node.config.paymentTemplateKey) ? (
             <div>
               <Label>Currency</Label>
               <Select
@@ -4310,6 +4310,13 @@ export function StepInspector({
           ) : null}
           {String(node.config.answerType) === 'payment' ? (
             <div className="space-y-3">
+              <FlowTemplatePicker kinds={['payment']} valueKey={String(node.config.paymentTemplateKey ?? '')}
+                label="Payment template" readOnly={readOnly}
+                hint="Set up the payment provider and checkout details in Templates, then reuse them here."
+                onSelectKey={(key) => patchConfig({ paymentTemplateKey: key || null })} />
+              {String(node.config.paymentTemplateKey ?? '').trim() ? (
+                <p className="text-xs text-[var(--color-ink-muted)]">Provider connection, amount, currency, buyer details, and buttons come from the selected template.</p>
+              ) : <>
               <div>
                 <Label>Payment connection</Label>
                 <Select
@@ -4413,6 +4420,7 @@ export function StepInspector({
                   {'{ status: "verified", reference, amount, currency }'}.
                 </p>
               </div>
+              </>}
             </div>
           ) : null}
           {String(node.config.answerType) === 'otp' ? (

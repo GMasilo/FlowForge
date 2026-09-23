@@ -2,6 +2,10 @@ import { supabase } from '@/shared/lib/supabase'
 
 const API_BASE = (import.meta.env.VITE_FLOWFORGE_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
 
+export function paymentNotificationUrl(): string {
+  return API_BASE ? `${API_BASE}/payment/notify` : ''
+}
+
 export function isFlowForgeApiConfigured(): boolean {
   return API_BASE.length > 0
 }

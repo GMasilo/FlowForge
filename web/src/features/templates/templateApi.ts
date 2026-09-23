@@ -1,4 +1,5 @@
 import { supabase } from '@/shared/lib/supabase'
+import { parsePaymentTemplateContent } from './paymentTemplate'
 import type { ChatbotTemplate, Json } from '@/shared/types/database'
 import {
   isTemplateKind,
@@ -68,7 +69,7 @@ export function publishedTemplatesFromRows(rows: ChatbotTemplate[]) {
     key: row.key,
     name: row.name,
     kind: row.kind,
-    content: row.content,
+    content: row.kind === 'payment' ? parsePaymentTemplateContent(row.content) : row.content,
   }))
 }
 

@@ -66,6 +66,8 @@ import {
 SOCIAL_SHARE_PLATFORM_META, defaultSocialSharePlatforms, } from '@/features/templates/templateModel'
 import { DocumentPageEditor, ensurePageBlocks } from '@/features/templates/DocumentPageEditor'
 import { StoreCatalogEditor } from '@/features/templates/StoreCatalogEditor'
+import { PaymentTemplateEditor } from './PaymentTemplateEditor'
+import { parsePaymentTemplateContent } from './paymentTemplate'
 import { TemplateInputsEditor } from '@/features/templates/TemplateInputsEditor'
 import type { ChatbotMediaFile } from '@/features/designer/model/chatbotMedia'
 import { Button } from '@/shared/ui/button'
@@ -169,6 +171,7 @@ export function TemplateContentEditor({
       media={media}
     />
   )
+  if (kind === 'payment') return <PaymentTemplateEditor content={parsePaymentTemplateContent(content)} onChange={onChange} suggestions={suggestions} readOnly={readOnly} />
   if (!isCopyTemplateKind(kind)) return fields
   return (
     <div className="space-y-6">

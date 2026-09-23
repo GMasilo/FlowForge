@@ -1,3 +1,4 @@
+import { resolvePaymentQuestionConfig } from '@/features/templates/paymentTemplate'
 import {
   nodeTypeLabel,
   chatAnimationFromConfig,
@@ -1246,8 +1247,10 @@ export function tickPreview(
     let captchaChallenge = next.captchaChallenge ?? null
 
     if (answerType === 'payment') {
+      const paymentConfig = resolvePaymentQuestionConfig(node.config, next.templates)
+      const paymentText = (value: unknown) => interpolate(String(value ?? ''), next.vars, next.stepOutputs, next.media, false, next.templates, qBindings).trim()
       const url = interpolate(
-        String(node.config.payUrl ?? ''),
+        String(paymentConfig.payUrl ?? ''),
         next.vars,
         next.stepOutputs,
         next.media,
@@ -1256,7 +1259,7 @@ export function tickPreview(
         qBindings,
       ).trim()
       const amount = interpolate(
-        String(node.config.paymentAmount ?? ''),
+        String(paymentConfig.paymentAmount ?? ''),
         next.vars,
         next.stepOutputs,
         next.media,
@@ -1265,16 +1268,16 @@ export function tickPreview(
         qBindings,
       ).trim()
       const currency =
-        String(node.config.currencyCode ?? 'ZAR').trim().toUpperCase() || 'ZAR'
+        paymentText(paymentConfig.currencyCode).toUpperCase() || 'ZAR'
       payment = {
         url,
         amount,
         currency,
-        payLabel: String(node.config.payButtonLabel ?? '').trim() || 'Pay now',
-        paidLabel: String(node.config.paidButtonLabel ?? '').trim() || "I've paid",
-        connectionId: String(node.config.paymentConnectionId ?? '').trim() || undefined,
+        payLabel: paymentText(paymentConfig.payButtonLabel) || 'Pay now',
+        paidLabel: paymentText(paymentConfig.paidButtonLabel) || "I've paid",
+        connectionId: String(paymentConfig.paymentConnectionId ?? '').trim() || undefined,
         itemName: interpolate(
-          String(node.config.paymentItemName ?? ''),
+          String(paymentConfig.paymentItemName ?? ''),
           next.vars,
           next.stepOutputs,
           next.media,
@@ -1283,7 +1286,7 @@ export function tickPreview(
           qBindings,
         ).trim() || undefined,
         buyerEmail: interpolate(
-          String(node.config.paymentBuyerEmail ?? ''),
+          String(paymentConfig.paymentBuyerEmail ?? ''),
           next.vars,
           next.stepOutputs,
           next.media,
@@ -1292,7 +1295,7 @@ export function tickPreview(
           qBindings,
         ).trim() || undefined,
         buyerName: interpolate(
-          String(node.config.paymentBuyerName ?? ''),
+          String(paymentConfig.paymentBuyerName ?? ''),
           next.vars,
           next.stepOutputs,
           next.media,
@@ -1301,7 +1304,7 @@ export function tickPreview(
           qBindings,
         ).trim() || undefined,
         nodeKey: node.key,
-        verify: !!String(node.config.paymentConnectionId ?? '').trim(),
+        verify: !!String(paymentConfig.paymentConnectionId ?? '').trim(),
       }
     }
 

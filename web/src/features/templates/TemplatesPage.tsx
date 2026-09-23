@@ -101,6 +101,7 @@ const KIND_ICONS: Record<TemplateKind, typeof Mail> = {
   email: Mail,
   faq: CircleHelp,
   cart: ShoppingCart,
+  payment: DollarSign,
   menu: LayoutList,
   message: MessageSquare,
   hours: Clock3,

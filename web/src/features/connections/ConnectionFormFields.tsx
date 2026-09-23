@@ -1,4 +1,5 @@
 import { Plus, Trash2 } from 'lucide-react'
+import { paymentNotificationUrl } from '@/shared/lib/flowforgeApi'
 import {
   EMAIL_ENCRYPTION_OPTIONS,
   HTTP_AUTH_OPTIONS,
@@ -399,6 +400,7 @@ export function PaymentConnectionFields({ value, onChange, disabled }: PaymentFi
       <div>
         <Label>Provider</Label>
         <Select
+          aria-label="Payment provider"
           value={value.provider}
           disabled={disabled}
           onChange={(e) => patch({ provider: e.target.value as PaymentConnectionConfig['provider'] })}
@@ -414,7 +416,14 @@ export function PaymentConnectionFields({ value, onChange, disabled }: PaymentFi
         </p>
       </div>
 
-      {value.provider === 'payfast' ? (
+      {value.provider === 'stripe' ? (
+        <div className="space-y-3">
+          <div><Label>Stripe secret key</Label><Input type="password" autoComplete="new-password" disabled={disabled} value={value.secretKey} onChange={(e) => patch({ secretKey: e.target.value })} placeholder="sk_test_... or sk_live_..." /></div>
+          <div><Label>Webhook signing secret</Label><Input type="password" autoComplete="new-password" disabled={disabled} value={value.webhookSecret} onChange={(e) => patch({ webhookSecret: e.target.value })} placeholder="whsec_..." /></div>
+          <div><Label>Webhook URL</Label><Input aria-label="Webhook URL" readOnly value={paymentNotificationUrl()} placeholder="Configure the FlowForge API URL first" /></div>
+          <p className="text-xs text-[var(--color-ink-muted)]">Use test keys for testing. Add this URL in Stripe for checkout.session.completed, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed, and checkout.session.expired. Paste its signing secret above.</p>
+        </div>
+      ) : value.provider === 'payfast' ? (
         <>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>

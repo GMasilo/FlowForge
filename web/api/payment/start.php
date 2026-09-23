@@ -7,7 +7,7 @@ declare(strict_types=1);
  */
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/lib/PayFast.php';
-require_once dirname(__DIR__) . '/lib/Stripe.php';
+require_once __DIR__ . '/Stripe.php';
 
 use FlowForge\Api\PayFast;
 use FlowForge\Api\Response;

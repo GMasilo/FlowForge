@@ -508,6 +508,7 @@ export const questionConfigSchema = z.object({
   paidButtonLabel: z.string().optional(),
   /** Payment connection (PayFast / custom notify) used to confirm the charge on the server. */
   paymentConnectionId: z.string().optional(),
+  paymentTemplateKey: z.string().optional(),
   paymentItemName: z.string().optional(),
   paymentBuyerEmail: z.string().optional(),
   paymentBuyerName: z.string().optional(),

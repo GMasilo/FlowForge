@@ -140,6 +140,7 @@ export function buildQuestionAnswerTypePatch(
   if (answerType !== 'email') patch.allowedEmailDomains = null
   if (answerType !== 'currency' && answerType !== 'payment') patch.currencyCode = null
   if (answerType !== 'payment') {
+    patch.paymentTemplateKey = null
     patch.payUrl = null
     patch.paymentAmount = null
     patch.payButtonLabel = null

@@ -1,9 +1,12 @@
 import { parseDocumentBlocks } from '@/features/templates/documentLayout'
+import { parsePaymentTemplateContent, type PaymentTemplateContent } from './paymentTemplate'
+export type { PaymentTemplateContent } from './paymentTemplate'
 
 export const TEMPLATE_KINDS = [
   'email',
   'faq',
   'cart',
+  'payment',
   'menu',
   'message',
   'hours',
@@ -594,6 +597,7 @@ export type WebhookContent = {
 // certificate and checklist use DocumentContent
 
 export type TemplateContent =
+  | PaymentTemplateContent
   | EmailContent
   | FaqContent
   | CartContent
@@ -632,6 +636,10 @@ export const TEMPLATE_KIND_META: Record<
     tags: readonly string[]
   }
 > = {
+  payment: {
+    label: 'Payment', hint: 'Verified checkout with PayFast, Stripe, or a custom payment connection',
+    insertField: 'text', category: 'commerce', tags: ['payment', 'checkout', 'payfast', 'stripe'],
+  },
   email: {
     label: 'HTML email',
     hint: 'Subject + HTML body for Email steps and OTP messages',
@@ -1093,6 +1101,7 @@ function defaultStoreProducts(categoryId: string): StoreProduct[] {
 
 export function emptyTemplateContent(kind: TemplateKind): TemplateContent {
   switch (kind) {
+    case 'payment': return parsePaymentTemplateContent({})
     case 'email':
       return { subject: '', html: '', inputs: [] }
     case 'faq':
@@ -1443,6 +1452,7 @@ export function emptyWebhookContent(): WebhookContent {
 
 export function starterTemplateContent(kind: TemplateKind): TemplateContent {
   switch (kind) {
+    case 'payment': return parsePaymentTemplateContent({ paymentAmount: '{{vars.cart.total}}', currencyCode: 'ZAR', paymentItemName: 'Order payment' })
     case 'email':
       return {
         inputs: [
@@ -1950,6 +1960,7 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
 export function parseTemplateContent(kind: TemplateKind, raw: unknown): TemplateContent {
   const c = asRecord(raw)
   switch (kind) {
+    case 'payment': return parsePaymentTemplateContent(c)
     case 'email':
       return { subject: str(c.subject), html: str(c.html), inputs: parseTemplateInputs(c.inputs) }
     case 'faq': {
@@ -2501,6 +2512,10 @@ export function formatTemplateMoney(amount: number, currency: string): string {
 
 export function renderTemplateText(kind: TemplateKind, content: TemplateContent): string {
   switch (kind) {
+    case 'payment': {
+      const c = content as PaymentTemplateContent
+      return [c.paymentItemName, `${c.currencyCode} ${c.paymentAmount}`.trim()].filter(Boolean).join('\n')
+    }
     case 'email': {
       const c = content as EmailContent
       const plain = c.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()

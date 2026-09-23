@@ -7,7 +7,7 @@ declare(strict_types=1);
  */
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/lib/PayFast.php';
-require_once dirname(__DIR__) . '/lib/Stripe.php';
+require_once __DIR__ . '/Stripe.php';
 
 use FlowForge\Api\PayFast;
 use FlowForge\Api\RateLimiter;
@@ -56,14 +56,6 @@ function flowforge_handle_stripe_notify(array $config, string $signatureHeader):
     }
     $intent = $intentRpc['data'];
 
-    if ((string) ($intent['status'] ?? '') === 'verified') {
-        // Idempotent success for retries — still attempt stock decrement (RPC is idempotent).
-        SupabaseRest::rpcAsService($config, 'decrement_store_stock_for_payment_reference', [
-            'p_reference' => $reference,
-        ]);
-        Response::json(['ok' => true, 'status' => 'verified', 'reference' => $reference]);
-    }
-
     $connectionId = (string) ($intent['connection_id'] ?? '');
     $secretRpc = SupabaseRest::rpcAsService($config, 'connection_config_for_payment', [
         'p_connection_id' => $connectionId,
@@ -72,6 +64,9 @@ function flowforge_handle_stripe_notify(array $config, string $signatureHeader):
         Response::error('Payment connection not found', 403);
     }
     $connection = $secretRpc['data'];
+    if (($intent['provider'] ?? '') !== 'stripe' || ($connection['provider'] ?? '') !== 'stripe') {
+        Response::error('Payment provider mismatch', 403);
+    }
     $webhookSecret = trim((string) ($connection['webhookSecret'] ?? ''));
 
     // Verify AFTER loading the connection but BEFORE trusting anything in $event beyond the
@@ -81,17 +76,25 @@ function flowforge_handle_stripe_notify(array $config, string $signatureHeader):
         Response::error($check['error'] ?? 'Stripe signature verification failed', 403);
     }
 
+    if ((string) ($intent['status'] ?? '') === 'verified') {
+        // Idempotent success for retries — still attempt stock decrement (RPC is idempotent).
+        SupabaseRest::rpcAsService($config, 'decrement_store_stock_for_payment_reference', [
+            'p_reference' => $reference,
+        ]);
+        Response::json(['ok' => true, 'status' => 'verified', 'reference' => $reference]);
+    }
+
     $providerPaymentId = (string) ($object['payment_intent'] ?? $object['id'] ?? '');
 
-    $succeeded = in_array($eventType, ['checkout.session.completed', 'payment_intent.succeeded'], true);
-    if ($eventType === 'checkout.session.completed') {
+    $succeeded = in_array($eventType, ['checkout.session.completed', 'checkout.session.async_payment_succeeded'], true);
+    if ($succeeded) {
         // Async payment methods (e.g. bank transfers) can complete the session before the
         // money has actually arrived — only treat it as paid once Stripe confirms that too.
         $succeeded = (string) ($object['payment_status'] ?? '') === 'paid';
     }
 
     if (!$succeeded) {
-        if (in_array($eventType, ['payment_intent.payment_failed', 'checkout.session.expired'], true)) {
+        if (in_array($eventType, ['checkout.session.async_payment_failed', 'checkout.session.expired'], true)) {
             SupabaseRest::rpcAsService($config, 'update_payment_intent_status', [
                 'p_reference' => $reference,
                 'p_status' => $eventType === 'checkout.session.expired' ? 'cancelled' : 'failed',
@@ -101,6 +104,11 @@ function flowforge_handle_stripe_notify(array $config, string $signatureHeader):
         }
         // Anything else (e.g. checkout.session.async_payment_processing) — ack and wait.
         Response::json(['ok' => true, 'ignored' => true, 'type' => $eventType]);
+    }
+
+    if ((int) ($object['amount_total'] ?? -1) !== (int) round((float) ($intent['amount'] ?? 0) * 100)
+        || strtoupper((string) ($object['currency'] ?? '')) !== strtoupper((string) ($intent['currency'] ?? ''))) {
+        Response::error('Payment amount or currency mismatch', 400);
     }
 
     SupabaseRest::rpcAsService($config, 'update_payment_intent_status', [
