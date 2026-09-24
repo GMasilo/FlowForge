@@ -1,0 +1,144 @@
+{
+  "format": "FlowForge Atlas setup reference (not a flow import)",
+  "instructions": "Create these through the Connections and Webhooks screens, fill real credentials there, install them on Atlas, then select their generated IDs on the listed steps. Never paste secrets into the flow JSON.",
+  "connections": [
+    {
+      "name": "Atlas Tracking API",
+      "kind": "http",
+      "step": "live_http",
+      "config": {
+        "baseUrl": "https://api.example.invalid",
+        "authType": "bearer",
+        "bearerToken": "",
+        "defaultMethod": "GET",
+        "defaultPath": "/tracking/{tracking_id}",
+        "timeoutMs": 15000
+      },
+      "expectedResponse": {
+        "tracking": "ATLAS-001",
+        "state": "ready"
+      },
+      "setup": "Set your base URL and server-side bearer token. Adapt the step path and expected response to your API."
+    },
+    {
+      "name": "Atlas Identity API",
+      "kind": "http",
+      "step": "identity_live",
+      "config": {
+        "baseUrl": "https://identity.example.invalid",
+        "authType": "none",
+        "defaultMethod": "POST",
+        "defaultPath": "/login",
+        "timeoutMs": 15000
+      },
+      "expectedResponse": {
+        "user": {
+          "id": "user-123",
+          "name": "Atlas Explorer"
+        },
+        "token": "TOKEN_FROM_YOUR_BACKEND"
+      },
+      "setup": "Configure your actual authentication endpoint and request fields; set user.id, token and user response paths on the sign-in step. The example is not an authentication implementation."
+    },
+    {
+      "name": "Atlas Email",
+      "kind": "email",
+      "step": "live_email",
+      "config": {
+        "smtpHost": "smtp.example.invalid",
+        "smtpPort": 587,
+        "encryption": "starttls",
+        "username": "",
+        "password": "",
+        "fromEmail": "",
+        "fromName": "Atlas Experiences"
+      },
+      "setup": "Configure a verified sender and SMTP credentials. Replace visitor.email with an actual collected recipient before testing delivery."
+    },
+    {
+      "name": "Atlas Reporting DB",
+      "kind": "database",
+      "step": "live_database",
+      "config": {
+        "provider": "postgres",
+        "host": "db.example.invalid",
+        "port": 5432,
+        "database": "",
+        "username": "",
+        "password": "",
+        "sslMode": "require"
+      },
+      "setup": "Use your reporting database. Adapt the sample products query and the product_code input parameter to its actual schema. This does not query the chatbot entity database automatically."
+    },
+    {
+      "name": "Atlas Stripe Sandbox",
+      "kind": "payment",
+      "template": "atlas_payment",
+      "config": {
+        "provider": "stripe",
+        "sandbox": true,
+        "secretKey": "",
+        "webhookSecret": ""
+      },
+      "setup": "Enter test credentials on the payment connection. Select this connection on atlas_payment; configure the callback URL shown in the app."
+    },
+    {
+      "name": "Atlas PayFast Sandbox",
+      "kind": "payment",
+      "template": "atlas_payment",
+      "config": {
+        "provider": "payfast",
+        "sandbox": true,
+        "merchantId": "",
+        "merchantKey": "",
+        "passphrase": ""
+      },
+      "setup": "Alternative to Stripe. Enter sandbox credentials on the payment connection and select it on atlas_payment. Use the callback displayed by the app."
+    }
+  ],
+  "webhooks": [
+    {
+      "name": "Atlas Slack updates",
+      "destination": "slack",
+      "url": "https://slack.com/api/chat.postMessage",
+      "destination_config": {
+        "slackMode": "bot",
+        "token": "",
+        "channel": "",
+        "message": "Atlas event: {{event}}"
+      },
+      "setup": "Create at chatbot level, select supported event(s), enter bot token without Bearer prefix and channel ID. FlowForge generates Authorization: Bearer. Test manually only after choosing the correct destination."
+    },
+    {
+      "name": "Atlas Jira issue",
+      "destination": "jira",
+      "url": "https://YOUR-SITE.atlassian.net/rest/api/3/issue",
+      "destination_config": {
+        "jiraMode": "api",
+        "jiraAction": "create",
+        "email": "",
+        "token": "",
+        "bodyTemplate": "{\n  \"fields\": {\n    \"project\": {\n      \"key\": \"REPLACE_PROJECT\"\n    },\n    \"summary\": \"Atlas event: {{event}}\",\n    \"issuetype\": {\n      \"name\": \"Task\"\n    }\n  }\n}"
+      },
+      "setup": "Use your Atlassian account email and API token. FlowForge generates Authorization: Basic from email:token. Choose event(s) deliberately: each successful create delivery makes a real issue."
+    },
+    {
+      "name": "Atlas custom CRM",
+      "destination": "custom",
+      "url": "https://crm.example.invalid/events",
+      "destination_config": {
+        "headers": {
+          "Authorization": "Bearer REPLACE_IN_UI"
+        },
+        "bodyTemplate": "{\"source\":\"atlas\",\"event\":\"{{event}}\""
+      },
+      "setup": "Replace endpoint and credentials in the UI; adapt the payload to your CRM."
+    }
+  ],
+  "other_setup": {
+    "live_integration": "Install a real integration; choose provider, action and field mappings on this node.",
+    "live_handoff": "Create/select a support queue and assign available agents.",
+    "live_transfer": "Create/select another chatbot and review variable mappings.",
+    "atlas_sso": "Configure an identity provider before using this optional template. No credentials are included."
+  }
+}

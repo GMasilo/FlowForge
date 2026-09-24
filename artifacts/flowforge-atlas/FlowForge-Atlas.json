@@ -937,7 +937,6 @@
         "onRun": "",
         "templateBindings": {
           "atlas_document": {
-            "name": "{{vars.booking_contact.name}}",
             "service": "{{vars.booking_service}}"
           }
         }
@@ -4518,7 +4517,7 @@
       "type": "message",
       "label": "Gallery Social",
       "config": {
-        "text": "{{embed(templates.atlas_social_share)}}",
+        "text": "{{templates.atlas_social_share.text}}",
         "runAfter": {
           "succeeded": true,
           "failed": false,
@@ -7563,8 +7562,8 @@
         "title": "Atlas demo visit",
         "description": "Fictional event. Adjust dates before adding.",
         "location": "Atlas demo venue",
-        "start": "2027-01-15T10:00:00+02:00",
-        "end": "2027-01-15T11:00:00+02:00",
+        "start": "2027-01-15T08:00:00Z",
+        "end": "2027-01-15T09:00:00Z",
         "timezone": "Africa/Johannesburg",
         "buttonLabel": "Add to Google Calendar",
         "inputs": []

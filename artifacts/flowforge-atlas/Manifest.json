@@ -1,0 +1,11 @@
+{
+  "chatbot": "FlowForge Atlas - Capability Showcase",
+  "nodes": 167,
+  "edges": 183,
+  "entities": 8,
+  "templates": 31,
+  "stepTypes": 19,
+  "responseTypes": 46,
+  "demoMode": true,
+  "validation": "16 automated showcase/table checks passed; no live integration calls or database import performed."
+}

@@ -550,6 +550,9 @@ function resolveAfterStep(
         },
         loopStack: [...next.loopStack.slice(0, -1), { ...frame, index: nextIndex }],
         currentId: frame.bodyStartId,
+        // A finite loop advanced its index: visiting its body again is expected.
+        // Keep cycle detection active within each iteration.
+        autoAdvanceSeenIds: [],
         phase: { kind: 'typing' },
       }
     }
