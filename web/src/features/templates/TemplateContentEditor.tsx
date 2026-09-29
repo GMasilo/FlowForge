@@ -647,6 +647,36 @@ function TemplateKindFields({
             Add field
           </Button>
         </div>
+        <div>
+          <Label>Body</Label>
+          <TemplateField
+            disabled={readOnly}
+            multiline
+            value={c.body}
+            suggestions={suggestions}
+            onChange={(body) => onChange({ ...c, body })}
+          />
+        </div>
+        <div>
+          <Label>Footer</Label>
+          <TemplateField
+            disabled={readOnly}
+            value={c.footer}
+            suggestions={suggestions}
+            onChange={(footer) => onChange({ ...c, footer })}
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-[var(--color-ink)]">
+          <input
+            type="checkbox"
+            disabled={readOnly}
+            checked={c.includeCart}
+            onChange={(e) => onChange({ ...c, includeCart: e.target.checked })}
+          />
+          Include shop cart line items when a cart variable is set
+        </label>
+          </>
+        )}
         <div className="space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
           <Label>Data table (multiple rows)</Label>
           <p className="text-[11px] text-[var(--color-ink-muted)]">
@@ -705,36 +735,6 @@ function TemplateKindFields({
             Add column
           </Button>
         </div>
-        <div>
-          <Label>Body</Label>
-          <TemplateField
-            disabled={readOnly}
-            multiline
-            value={c.body}
-            suggestions={suggestions}
-            onChange={(body) => onChange({ ...c, body })}
-          />
-        </div>
-        <div>
-          <Label>Footer</Label>
-          <TemplateField
-            disabled={readOnly}
-            value={c.footer}
-            suggestions={suggestions}
-            onChange={(footer) => onChange({ ...c, footer })}
-          />
-        </div>
-        <label className="flex items-center gap-2 text-sm text-[var(--color-ink)]">
-          <input
-            type="checkbox"
-            disabled={readOnly}
-            checked={c.includeCart}
-            onChange={(e) => onChange({ ...c, includeCart: e.target.checked })}
-          />
-          Include shop cart line items when a cart variable is set
-        </label>
-          </>
-        )}
         <p className="text-[11px] text-[var(--color-ink-muted)]">
           Insert {'{{templates.key.file}}'} on a Message or End step. Visitors get a download chip; the file is built
           from this conversation’s answers (including signatures) when they click it.
