@@ -8,7 +8,7 @@ export const PAGE_HELP = {
   adminChatbots:
     'Inventory view for soft-deleting chatbots. Design and publish stay on the Chatbots home. Move to recycle bin disables public chat until restored.',
   users:
-    'Invite by email and assign roles: Admin, Editor, Agent (Inbox only), or Viewer. Pending invites until accepted. Agents land on Inbox after sign-in.',
+    'Invite by email or bulk-import from Excel/CSV (Template + Import Excel). Roles: Admin, Editor, Agent (Inbox only), or Viewer. Pending invites until accepted; Resend invite or copy signup link as needed. Agents land on Inbox after sign-in.',
   recycleBin:
     'Soft-deleted chatbots appear here. Restore to bring them back, or delete forever to remove flows and files permanently.',
   organisation:
@@ -36,7 +36,7 @@ export const PAGE_HELP = {
   agentConsole:
     'Configure queues (skills, SLAs, auto-assign) and agent profiles (max concurrent). Handoff steps target these queues.',
   analytics:
-    'Session volume, completion, drop-off by step/version, shop products, transfers, and optional experiments.',
+    'Session volume, completion vs abandon/fail, drop-off by step and publish version, activity by hour, shop products, chatbot transfers, server funnel/cohorts when available, and optional experiments. Use environment and date filters; Analytics intelligence surfaces bottlenecks and version regressions on loaded data.',
   marketplace:
     'Publish flow packs from a chatbot or install approved packs. Connection and integration IDs are stripped — rebind after install.',
   organisations:
@@ -111,6 +111,10 @@ export const SECTION_HELP = {
     'Validation and config issues before publish — missing variables, broken references, and template binding gaps. Click a row to jump to the step.',
   publicChat:
     'Enable a shareable production URL (/o/{org}/c/{slug}) and embed. Slugs are unique per organisation. Staging tests use the unique link on the Test tab — not this page.',
+  usersImport:
+    'Download the Excel template, fill email (required) plus optional display_name, role, job_title, phone, department, and notes. Import validates the whole file first. Roles: admin, editor, viewer, or agent. Owner cannot be imported. Existing members and pending invites are skipped on re-import.',
+  templatesLibrary:
+    'Reusable copy and rich cards: email, FAQ, catalogs, WhatsApp CTA (wa.me), Social share (per-network URLs), calendar invites, waitlist, QR, maps, receipts, and downloadable files. Insert with {{templates.key.text}} (or .html / .file). Publishing snapshots templates into the live graph.',
   chatAppearance:
     'Choose a chat theme (Default, Aurora, Sunset, Midnight), then tune colours, logo, font, typing, and 24-hour Stories. Empty colour fields use the theme (or organisation branding on Default).',
 } as const
