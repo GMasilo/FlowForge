@@ -27,6 +27,18 @@ export async function importEntityFromExcel(input: {
   if (!input.columns.length) throw new Error('Spreadsheet has no columns')
 
   const columns = ensurePrimaryKeyColumn(input.columns)
+  // Validate every row before creating any database objects, so type errors never
+  // leave a partially imported entity behind.
+  const seenIds = new Set<string>()
+  for (const [index, row] of input.rows.entries()) {
+    for (const col of columns) {
+      try { cellToEntityValue(row[col.key] ?? '', col.value_type) }
+      catch (e) { throw new Error(`Row ${index + 1}, ${col.key}: ${e instanceof Error ? e.message : 'Invalid value'}`) }
+    }
+    const id = String(row[ENTITY_PRIMARY_KEY] ?? '').trim()
+    if (id && seenIds.has(id)) throw new Error(`Row ${index + 1}: duplicate record ID "${id}"`)
+    if (id) seenIds.add(id)
+  }
   const entity = await createEntity({
     chatbotId: input.chatbotId,
     name,

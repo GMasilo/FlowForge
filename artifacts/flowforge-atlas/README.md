@@ -69,7 +69,7 @@ Create the required connections through the app, install them on Atlas, then sel
 
 Store real credentials in connection/webhook settings, never in the imported flow. Replace `visitor.email`, provider placeholders and sample URLs before testing live actions. Turn demoMode off only after configuring every live branch you intend to exercise. Keep provider sandbox/test mode on until your own acceptance checks are complete.
 
-Slack and Jira blueprints belong under **Chatbot Webhooks**. They are not automatically created, subscribed or sent by this pack. Choose events supported by the current UI and inspect each test's full result. Slack bot mode uses Bearer auth; Jira uses the email/API-token Basic auth fields. The host event button in the flow does not itself trigger these webhooks.
+Slack and Jira blueprints belong under **Chatbot Webhooks**. They are not automatically created, subscribed or sent by this pack. Choose events supported by the curr2ent UI and inspect each test's full result. Slack bot mode uses Bearer auth; Jira uses the email/API-token Basic auth fields. The host event button in the flow does not itself trigger these webhooks.
 
 ## Data and template notes
 

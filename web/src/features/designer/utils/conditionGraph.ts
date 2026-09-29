@@ -206,11 +206,17 @@ export function edgesInsertBranchStep(args: {
  * Nodes on this container's branch spines that can emit a Then edge for *this* IF/switch/loop.
  * Nested containers are skipped; we resume after each nested container's own After roots.
  */
+type ContinueAnalysis = {
+  memo: Map<string, Set<string>>
+}
+
 function collectBranchSpine(
   conditionId: string,
   edges: DesignerEdge[],
   nodesById: Map<string, DesignerNode>,
   continueRoots: Set<string>,
+  ancestors: ReadonlySet<string> = new Set([conditionId]),
+  analysis?: ContinueAnalysis,
 ): Set<string> {
   const outgoing = outgoingMap(edges)
   const handles = containerBranchHandles(nodesById.get(conditionId))
@@ -224,13 +230,13 @@ function collectBranchSpine(
     const seen = new Set<string>()
     while (q.length) {
       const id = q.shift()!
-      if (seen.has(id) || continueRoots.has(id)) continue
+      if (seen.has(id) || continueRoots.has(id) || ancestors.has(id)) continue
       seen.add(id)
       const node = nodesById.get(id)
 
       if (node && isContainerNodeType(node.type)) {
         // Nested IF/loop/switch stays on this branch; its After can Then into *this* container
-        const nestedContinues = findContinueRootIds(id, edges, nodesById)
+        const nestedContinues = findContinueRootIds(id, edges, nodesById, ancestors, analysis)
         for (const c of nestedContinues) {
           spine.add(c)
           for (const e of outgoing.get(c) ?? []) {
@@ -265,7 +271,20 @@ export function findContinueRootIds(
   conditionId: string,
   edges: DesignerEdge[],
   nodesOrMap?: DesignerNode[] | Map<string, DesignerNode>,
+  ancestors: ReadonlySet<string> = new Set(),
+  analysis?: ContinueAnalysis,
 ): Set<string> {
+  // A branch can return to an ancestor container. That is a graph back-edge,
+  // not another nesting level. Keep this path-local so sibling branches remain independent.
+  if (ancestors.has(conditionId)) return new Set()
+  // A fresh cache belongs to this root traversal only: ancestor back-edges
+  // are cut before lookup, and reconverging branches reuse completed analysis.
+  const context = analysis ?? { memo: new Map<string, Set<string>>() }
+  const memoKey = conditionId
+  const cached = context.memo.get(memoKey)
+  if (cached) return new Set(cached)
+  const path = new Set(ancestors)
+  path.add(conditionId)
   const nodesById =
     nodesOrMap instanceof Map ? nodesOrMap : new Map((nodesOrMap ?? []).map((n) => [n.id, n]))
 
@@ -298,7 +317,7 @@ export function findContinueRootIds(
 
   if (!nodesById.size) return roots
 
-  const spine = collectBranchSpine(conditionId, edges, nodesById, roots)
+  const spine = collectBranchSpine(conditionId, edges, nodesById, roots, path, context)
   for (const e of edges) {
     if (e.label !== 'Then') continue
     if (spine.has(e.source)) {
@@ -306,6 +325,7 @@ export function findContinueRootIds(
     }
   }
 
+  context.memo.set(memoKey, new Set(roots))
   return roots
 }
 

@@ -99,7 +99,7 @@ export const CHAT_APPEARANCE_THEMES: readonly ChatAppearanceThemeMeta[] = [
     bubbleRadius: 'square',
     cssVars: {
       '--ff-chat-header-gradient':
-        'linear-gradient(135deg, #fb923c 0%, #f43f5e 55%, #db2777 100%)',
+        'linear-gradient(135deg, #c2410c 0%, #be123c 55%, #9d174d 100%)',
       '--ff-chat-page-gradient':
         'linear-gradient(155deg, #fff7ed 0%, #ffedd5 40%, #ffe4e6 100%)',
       '--ff-chat-bubble-shadow': '0 12px 30px -16px rgb(244 63 94 / 0.4)',

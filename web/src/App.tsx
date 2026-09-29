@@ -1,3 +1,4 @@
+import { ChatbotOperationsPage } from '@/features/operations/ChatbotOperationsPage'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { PaymentReturnPage } from '@/features/chat/PaymentReturnPage'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -134,7 +135,8 @@ export function App() {
                       <Route path="chatbots/:chatbotId" element={<ChatbotSettingsPage />} />
                       <Route path="chatbots/:chatbotId/design" element={<DesignerPage />} />
                       <Route path="chatbots/:chatbotId/templates" element={<TemplatesPage />} />
-                      <Route path="chatbots/:chatbotId/webhooks" element={<ChatbotWebhooksPage />} />
+                      <Route path="chatbots/:chatbotId/operations" element={<ChatbotOperationsPage />} />
+                    <Route path="chatbots/:chatbotId/webhooks" element={<ChatbotWebhooksPage />} />
                       <Route path="chatbots/:chatbotId/data" element={<ChatbotDataPage />} />
                       <Route path="chatbots/:chatbotId/test" element={<ChatbotTestPage />} />
                     </Route>

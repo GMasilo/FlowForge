@@ -1,3 +1,5 @@
+import { fetchFlowModules } from '@/features/operations/subflowApi'
+import { expandSubflows } from '@/features/operations/subflows'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns'
@@ -140,8 +142,11 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     chatbotId: string
     name: string
   } | null>(null)
-  const nodes = graphOverride?.nodes ?? storeNodes
-  const edges = graphOverride?.edges ?? storeEdges
+  const hasSubflows = storeNodes.some(n => n.config.operation === 'subflow')
+  const modulesQuery = useQuery({ queryKey: ['flow-modules', instanceId], enabled: open && hasSubflows && !!instanceId, queryFn: () => fetchFlowModules(instanceId!) })
+  const expandedPreview = useMemo(() => { try { return { ...expandSubflows(storeNodes, storeEdges, modulesQuery.data ?? []), error: '' } } catch (e) { return { nodes: storeNodes, edges: storeEdges, error: e instanceof Error ? e.message : 'Subflow expansion failed' } } }, [storeNodes, storeEdges, modulesQuery.data])
+  const nodes = graphOverride?.nodes ?? expandedPreview.nodes
+  const edges = graphOverride?.edges ?? expandedPreview.edges
   const activeChatbotId = graphOverride?.chatbotId ?? chatbotId ?? ''
   const connectionCtx = useMemo(
     () => ({
@@ -262,6 +267,9 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
   const [scenarioId, setScenarioId] = useState('')
 
   const [state, setState] = useState<PreviewEngineState | null>(null)
+  const [debugPaused, setDebugPaused] = useState(false)
+  const [debugStepRequested, setDebugStepRequested] = useState(false)
+  const [debugRunning, setDebugRunning] = useState(false)
   const [draft, setDraft] = useState('')
   const [selectedChoices, setSelectedChoices] = useState<string[]>([])
   const [sessionKey, setSessionKey] = useState(0)
@@ -274,7 +282,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
   const shouldAnimateBubble = useChatBubbleEntrance(state?.messages)
   const typewriterCps = TYPEWRITER_CPS[branding.typewriterSpeed]
 
-  const ready = !!globals.data
+  const ready = !!globals.data && (!hasSubflows || !!modulesQuery.data) && !expandedPreview.error
   const selectedScenario = scenarios.find((s) => s.id === scenarioId) ?? null
 
   function mergedGlobals(): Record<string, unknown> {
@@ -290,7 +298,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     setGraphOverride(null)
     setSessionKey((k) => k + 1)
     onScenarioResult?.(null)
-    setState(createInitialPreviewState(storeNodes, storeEdges, mergedGlobals(), mediaCatalog, templatesMap, chatbotId))
+    setState(createInitialPreviewState(expandedPreview.nodes, expandedPreview.edges, mergedGlobals(), mediaCatalog, templatesMap, chatbotId))
     setDraft('')
     setSelectedChoices([])
     otpSentForWait.current = null
@@ -298,9 +306,10 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
 
   useEffect(() => {
     if (!ready || !open) return
+    setDebugStepRequested(false)
     setGraphOverride(null)
     onScenarioResult?.(null)
-    setState(createInitialPreviewState(storeNodes, storeEdges, mergedGlobals(), mediaCatalog, templatesMap, chatbotId))
+    setState(createInitialPreviewState(expandedPreview.nodes, expandedPreview.edges, mergedGlobals(), mediaCatalog, templatesMap, chatbotId))
     setDraft('')
     setSelectedChoices([])
     otpSentForWait.current = null
@@ -336,6 +345,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
 
   useEffect(() => {
     if (!open || !state || state.phase.kind !== 'typing' || !state.currentId) return
+    if (debugPaused && !debugStepRequested) return
     const node = nodes.find((n) => n.id === state.currentId)
     const delaySeconds = node ? readDelaySeconds(node.config) : 0
     // Cosmetics when delay is 0; otherwise honor configured delay before the step runs
@@ -354,6 +364,8 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
       const timer = window.setTimeout(() => {
         if (connectionBusy.current) return
         started = true
+        setDebugStepRequested(false)
+        setDebugRunning(true)
         connectionBusy.current = true
         const run =
           node.type === 'transfer'
@@ -404,6 +416,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
           })
           .finally(() => {
             connectionBusy.current = false
+            setDebugRunning(false)
           })
       }, waitMs)
       return () => {
@@ -417,6 +430,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
     const wallStart = performance.now()
     const wallStartedAt = new Date().toISOString()
     const timer = window.setTimeout(() => {
+      setDebugStepRequested(false)
       setState((prev) => {
         if (!prev) return prev
         const beforeCount = prev.runs.length
@@ -437,7 +451,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
       })
     }, waitMs)
     return () => window.clearTimeout(timer)
-  }, [open, state, nodes, edges, connectionsById, connectionCtx])
+  }, [open, state, nodes, edges, connectionsById, connectionCtx, debugPaused, debugStepRequested])
 
   useEffect(() => {
     if (!open || !state) return
@@ -889,14 +903,14 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
               className="relative flex items-center justify-between gap-3"
               style={{ color: 'var(--ff-chat-header-fg)' }}
             >
-              <div className="flex min-w-0 items-center gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
                 <ChatStoriesRing
                   stories={branding.resolvedStories}
                   chatbotId={activeChatbotId || chatbotId || 'preview'}
                   size="md"
                   viewerMode="absolute"
                 >
-                  <span className="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-white/20 shadow-inner ring-1 ring-white/30 backdrop-blur">
+                  <span className="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--ff-chat-header-control-bg)] shadow-inner ring-1 ring-[var(--ff-chat-header-border)] backdrop-blur">
                     {branding.resolvedLogoUrl ? (
                       <img src={branding.resolvedLogoUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
@@ -912,7 +926,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                   ) : null}
                   <h2
                     className={cn(
-                      'truncate text-base font-semibold leading-tight',
+                      'line-clamp-2 break-words text-sm font-semibold leading-snug',
                       branding.resolvedFontFamily
                         ? undefined
                         : 'font-[family-name:var(--font-display)]',
@@ -922,27 +936,10 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                   </h2>
                 </div>
               </div>
-              <div className="flex items-center gap-0.5">
-                {scenarios.length ? (
-                  <select
-                    value={scenarioId}
-                    onChange={(e) => setScenarioId(e.target.value)}
-                    aria-label="Test scenario"
-                    className="mr-1 max-w-[9.5rem] rounded-lg border-0 bg-white/20 px-2 py-1 text-[11px] font-semibold text-white outline-none ring-1 ring-white/30"
-                  >
-                    <option value="" className="text-slate-800">
-                      Live globals
-                    </option>
-                    {scenarios.map((s) => (
-                      <option key={s.id} value={s.id} className="text-slate-800">
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
+              <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
-                  className="rounded-xl p-2 text-white/85 transition hover:bg-white/15 hover:text-white"
+                  className="ff-chat-header-control rounded-xl p-2 transition"
                   onClick={() => restart()}
                   aria-label="Restart conversation"
                 >
@@ -950,7 +947,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </button>
                 <button
                   type="button"
-                  className="rounded-xl p-2 text-white/85 transition hover:bg-white/15 hover:text-white"
+                  className="ff-chat-header-control rounded-xl p-2 transition"
                   onClick={() => onOpenChange(false)}
                   aria-label="Minimize"
                 >
@@ -958,7 +955,7 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </button>
                 <button
                   type="button"
-                  className="rounded-xl p-2 text-white/85 transition hover:bg-white/15 hover:text-white"
+                  className="ff-chat-header-control rounded-xl p-2 transition"
                   onClick={() => onOpenChange(false)}
                   aria-label="Close"
                 >
@@ -966,8 +963,29 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
                 </button>
               </div>
             </div>
+                {scenarios.length ? (
+                  <label className="relative mt-3 flex min-w-0 items-center gap-2 text-xs" style={{ color: 'var(--ff-chat-header-fg)' }}>
+                    <span className="shrink-0 opacity-80">Scenario</span>
+                  <select
+                    value={scenarioId}
+                    onChange={(e) => setScenarioId(e.target.value)}
+                    aria-label="Test scenario"
+                    className="ff-chat-header-control min-w-0 flex-1 rounded-lg px-2 py-1.5 text-xs font-medium"
+                  >
+                    <option value="" className="bg-[var(--color-surface)] text-[var(--color-ink)]">
+                      Live globals
+                    </option>
+                    {scenarios.map((s) => (
+                      <option key={s.id} value={s.id} className="bg-[var(--color-surface)] text-[var(--color-ink)]">
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  </label>
+                ) : null}
           </div>
 
+          {expandedPreview.error || modulesQuery.error ? <p role="alert" className="p-3 text-sm">{modulesQuery.error?.message || expandedPreview.error}</p> : null}
           <div
             ref={scrollerRef}
             className="ff-hide-scrollbar relative flex-1 space-y-3.5 overflow-y-auto px-3.5 py-4"
@@ -1837,10 +1855,24 @@ export function PreviewChat({ open, onOpenChange, onRunsChange, onScenarioResult
 
           {!waiting && !waitingSuggestion && !waitingButton && state?.phase.kind !== 'finished' && state?.phase.kind !== 'waiting_input' ? (
             <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)]/80 px-4 py-2.5 text-center text-[11px] text-[var(--color-ink-muted)]">
-              Flow is running…
+              {debugPaused && !debugRunning ? 'Paused before the next step' : 'Flow is running…'}
             </div>
           ) : null}
 
+          <details className="border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-xs">
+            <summary className="cursor-pointer font-medium">Step-by-step debugger</summary>
+            <div className="mt-2 space-y-2">
+              <p>Next: {nodes.find(node => node.id === state?.currentId)?.key ?? 'End'} · {state?.phase.kind.replace(/_/g, ' ')}</p>
+              <p className="text-[var(--color-ink-muted)]">Pause before automated steps. An action already in progress will finish. Connection steps can call live services.</p>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="secondary" onClick={() => { setDebugStepRequested(false); setDebugPaused(value => !value) }}>{debugPaused ? 'Continue' : 'Pause'}</Button>
+                <Button type="button" size="sm" disabled={!debugPaused || debugStepRequested || debugRunning || state?.phase.kind !== 'typing'} onClick={() => setDebugStepRequested(true)}>Run next step</Button>
+              </div>
+              {state?.phase.kind === 'waiting_input' && <p>Answer the question in the chat to continue.</p>}
+              <details><summary className="cursor-pointer">Variables and step outputs</summary><pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify({ variables: state?.vars, outputs: state?.stepOutputs }, null, 2)}</pre></details>
+              <details><summary className="cursor-pointer">Last completed step</summary><pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(state?.runs.at(-1) ?? 'No steps completed yet', null, 2)}</pre></details>
+            </div>
+          </details>
           {varEntries.length ? (
             <details className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/90 px-4 py-2 text-xs">
               <summary className="cursor-pointer font-medium text-[var(--color-ink-muted)]">Variables ({varEntries.length})</summary>

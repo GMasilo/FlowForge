@@ -1,0 +1,22 @@
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRequiredInstance } from '@/features/instances/InstanceContext'
+import { useDesignerStore } from '@/features/designer/store/designerStore'
+import { fetchFlowModules } from './subflowApi'
+import { operationsDb } from './operationsApi'
+import { Button } from '@/shared/ui/button'
+import { Input } from '@/shared/ui/input'
+import { Card } from '@/shared/ui/card'
+export function SubflowsPanel({editable}:{editable:boolean}){
+ const {instance}=useRequiredInstance();const qc=useQueryClient();const nodes=useDesignerStore(s=>s.nodes),edges=useDesignerStore(s=>s.edges),selected=useDesignerStore(s=>s.selectedNodeId)
+ const [name,setName]=useState(''),[inputs,setInputs]=useState(''),[outputs,setOutputs]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false)
+ const modules=useQuery({queryKey:['flow-modules',instance.id],queryFn:()=>fetchFlowModules(instance.id)})
+ async function save(id?:string,revision?:number){setBusy(true);setError('');try{const existing=modules.data?.find(m=>m.id===id);if((!existing&&!name.trim())||!nodes.length)throw new Error('Enter a name and build a flow first');const names=(text:string)=>text.split(/[\s,]+/).filter(Boolean);if([...names(inputs),...names(outputs)].some(k=>!/^\w+$/.test(k)))throw new Error('Use simple variable names');const row={instance_id:instance.id,name:existing?.name??name.trim(),inputs:existing?.inputs??names(inputs),outputs:existing?.outputs??names(outputs),graph:{nodes,edges}};const result=id?await operationsDb.from('flow_modules').update(row).eq('id',id).eq('revision',revision).select('id'):await operationsDb.from('flow_modules').insert(row).select('id');if(result.error)throw result.error;if(!result.data?.length)throw new Error('Subflow changed elsewhere; refresh before updating');await qc.invalidateQueries({queryKey:['flow-modules',instance.id]})}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
+ const call=nodes.find(n=>n.id===selected&&n.config.operation==='subflow');const module=modules.data?.find(m=>m.id===call?.config.subflowId)
+ return <Card className="p-4"><details><summary className="cursor-pointer font-semibold">Reusable subflows</summary><div className="space-y-3 pt-3"><p className="text-sm">Save a dedicated flow as a shared process. Insert it after the selected step. Published flows keep their snapshot; republish consumers to adopt central updates. Inputs and outputs are local to each call.</p>
+ {error||modules.error?<p role="alert">{error||modules.error?.message}</p>:null}
+ {editable?<><Input aria-label="Subflow name" placeholder="Shared process name" value={name} onChange={e=>setName(e.target.value)}/><Input aria-label="Subflow inputs" placeholder="Input variable names, comma separated" value={inputs} onChange={e=>setInputs(e.target.value)}/><Input aria-label="Subflow outputs" placeholder="Output variable names, comma separated" value={outputs} onChange={e=>setOutputs(e.target.value)}/><Button disabled={busy} onClick={()=>void save()}>Save current flow as a subflow</Button></>:null}
+ <ul className="space-y-2">{modules.data?.map(m=><li key={m.id} className="flex flex-wrap items-center gap-2 text-sm">{m.name} · revision {m.revision}{editable?<><Button size="sm" variant="secondary" onClick={()=>useDesignerStore.getState().addNode('operation',selected,{label:m.name,config:{operation:'subflow',subflowId:m.id,subflowInputs:Object.fromEntries(m.inputs.map(k=>[k,`{{vars.${k}}}`])),subflowOutputs:Object.fromEntries(m.outputs.map(k=>[k,k]))}})}>Insert call</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(window.confirm(`Replace shared process "${m.name}" with the current flow? Consumers adopt it when next published.`))void save(m.id,m.revision)}}>Update from current flow</Button></>:null}</li>)}</ul>
+ {call&&module?<div className="space-y-2 border-t pt-3"><h3 className="font-medium">Selected call: {module.name}</h3>{(['inputs','outputs'] as const).map(kind=>module[kind].map(key=>{const field=kind==='inputs'?'subflowInputs':'subflowOutputs';const map=(call.config[field]??{}) as Record<string,string>;return <label className="block text-sm" key={kind+key}>{kind==='inputs'?'Input value':'Save output'}: {key}<Input disabled={!editable} value={map[key]??''} onChange={e=>useDesignerStore.getState().updateNode(call.id,{config:{...call.config,[field]:{...map,[key]:e.target.value}}})}/></label>}))}</div>:null}
+ </div></details></Card>
+}

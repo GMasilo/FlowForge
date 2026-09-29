@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { brandingToSettingsPatch, chatBrandingCssVars, parseChatbotBranding, resolveChatBranding, safeChatBackgroundUrl, CHAT_APPEARANCE_THEMES } from './chatbotBranding'
+import { brandingToSettingsPatch, chatRootStyle, chatBrandingCssVars, parseChatbotBranding, resolveChatBranding, safeChatBackgroundUrl, CHAT_APPEARANCE_THEMES } from './chatbotBranding'
 
 describe('chat appearance', () => {
+  it('uses contrasting automatic text for light and dark custom headers', () => {
+    for (const theme of CHAT_APPEARANCE_THEMES) {
+      for (const [headerColor, expected] of [['#ffffff', '#000000'], ['#000000', '#ffffff']]) {
+        const resolved = resolveChatBranding({ settings: { branding: { appearanceTheme: theme.id, headerColor } } })
+        expect(chatBrandingCssVars(resolved)['--ff-chat-header-fg']).toBe(expected)
+      }
+    }
+  })
+  it('keeps explicit header text colours and isolates native controls from the app theme', () => {
+    for (const theme of CHAT_APPEARANCE_THEMES) {
+      const resolved = resolveChatBranding({ settings: { branding: { appearanceTheme: theme.id, headerColor: '#ffffff', headerTextColor: '#123456' } } })
+      expect(chatBrandingCssVars(resolved)['--ff-chat-header-fg']).toBe('#123456')
+      expect(chatRootStyle(resolved).color).toBe('var(--color-ink)')
+      expect(chatRootStyle(resolved).colorScheme).toBe(['midnight', 'ocean'].includes(theme.id) ? 'dark' : 'light')
+    }
+  })
   it('round trips every theme and background selection', () => {
     for (const theme of CHAT_APPEARANCE_THEMES) {
       const original = parseChatbotBranding({ branding: { appearanceTheme: theme.id, backgroundPattern: 'grid', backgroundImageUrl: 'https://example.com/photo.jpg' } })

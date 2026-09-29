@@ -84,6 +84,10 @@ import {
 
 export type ExprContext = {
   vars: Record<string, unknown>
+  /** Sample previews must not read cookies or mutate visitor state. */
+  previewOnly?: boolean
+  /** Parse and check function names without resolving data or executing functions. */
+  syntaxOnly?: boolean
   steps: Record<string, unknown>
   media?: Record<string, unknown>
   templates?: Record<string, unknown>
@@ -678,8 +682,14 @@ function embedValue(value: unknown, ctx?: ExprContext): unknown {
   throw new Error(`embed: expected a ${SOCIAL_EMBED_PROVIDERS_HINT} URL, media file, or template`)
 }
 
+/** Runtime function names, including supported aliases, used by static validation. */
+export const EXPRESSION_FUNCTION_NAMES = new Set(['tabulate', 'parsejson', 'json', 'stringify', 'tojson', 'string', 'tostring', 'coalesce', 'default', 'if', 'empty', 'isblank', 'length', 'len', 'concat', 'contains', 'includes', 'startswith', 'endswith', 'tolower', 'lowercase', 'toupper', 'uppercase', 'trim', 'replace', 'split', 'join', 'slice', 'padstart', 'padend', 'capitalize', 'titlecase', 'title', 'slugify', 'slug', 'first', 'last', 'at', 'nth', 'reverse', 'unique', 'keys', 'values', 'int', 'integer', 'float', 'number', 'decimal', 'bool', 'boolean', 'equals', 'equal', 'add', 'sub', 'subtract', 'mul', 'multiply', 'div', 'divide', 'mod', 'modulo', 'round', 'floor', 'ceil', 'abs', 'min', 'max', 'clamp', 'utcnow', 'now', 'prettify', 'prettyfy', 'preetyfy', 'prettytime', 'prettydate', 'formatdate', 'dateformat', 'dateadd', 'adddate', 'datediff', 'diffdate', 'not', 'and', 'or', 'null', 'setvar', 'renderfile', 'render_file', 'file', 'embed', 'embedmedia', 'embed_media', 'cookie', 'getcookie', 'setcookie', 'clearcookie', 'deletecookie', 'removecookie'])
+
 function callFunction(name: string, args: unknown[], ctx?: ExprContext): unknown {
   const n = name.toLowerCase()
+  if (!EXPRESSION_FUNCTION_NAMES.has(n)) throw new Error(`Unknown function "${name}". Choose a function from the available functions list.`)
+  if (ctx?.syntaxOnly) return undefined
+  if (ctx?.previewOnly && ['cookie', 'setcookie', 'clearcookie', 'setvar'].includes(n)) return undefined
   if (n === 'tabulate') return encodeTable(args[0])
   switch (n) {
     case 'parsejson':
@@ -954,7 +964,7 @@ function callFunction(name: string, args: unknown[], ctx?: ExprContext): unknown
       return clearChatCookie(key, cookieChatbotId(ctx))
     }
     default:
-      throw new Error(`Unknown function "${name}"`)
+      throw new Error(`Unknown function "${name}". Choose a function from the available functions list.`)
   }
 }
 
@@ -1138,6 +1148,7 @@ class Parser {
     }
     if (t.kind === 'brace') {
       this.take()
+      if (!t.value.trim()) throw new Error('Empty expression inside {{ }}')
       // Nested {{ expr }} — evaluate as its own expression (usually a path)
       return evaluateExpression(t.value, this.ctx)
     }
@@ -1171,6 +1182,7 @@ class Parser {
 }
 
 function resolvePath(parts: string[], ctx: ExprContext): unknown {
+  if (ctx.syntaxOnly) return undefined
   if (parts.length < 2) return undefined
   const [kind, name, ...rest] = parts
   if (kind === 'inputs') {
@@ -1259,8 +1271,8 @@ function ctxForTemplate(ctx: ExprContext, templateKey: string): ExprContext {
   const bindCtx: ExprContext = { ...ctx, inputs }
   for (const [key, raw] of Object.entries(bindings)) {
     const trimmed = raw.trim()
-    if (!trimmed) continue
-    inputs[key] = resolveExpressionValue(trimmed, bindCtx)
+    // An explicitly supplied blank is also an override, not a fallback.
+    inputs[key] = trimmed ? resolveExpressionValue(trimmed, bindCtx) : ''
   }
   return { ...ctx, inputs }
 }
@@ -1304,6 +1316,8 @@ function filledReceiptText(tpl: Record<string, unknown>, ctx: ExprContext, templ
 export function looksLikeExpression(source: string): boolean {
   const t = source.trim()
   if (!t) return false
+  // Resource IDs are literal values, even when they start with a digit and contain minus signs.
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) return false
   if (/^\{\{[\s\S]*\}\}$/.test(t)) return true
   if (/^[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(t)) return true
   if (/^(vars|steps|media|templates|inputs)\./.test(t)) return true
@@ -1417,18 +1431,43 @@ function formatForText(value: unknown, ctx: ExprContext): string {
  * Also used for plain refs: `{{vars.name}}`.
  */
 export function interpolateTemplate(template: string, ctx: ExprContext): string {
-  template = template.replace(/\btabulate\(\s*\{\{([\s\S]*?)\}\}\s*\)/g, (_, expression: string) => {
-    try { return encodeTable(evaluateExpression(expression.trim(), ctx)) }
-    catch (error) { return `Table unavailable: ${error instanceof Error ? error.message : 'Invalid records'}` }
-  })
-  return template.replace(/\{\{([\s\S]*?)\}\}/g, (_, raw: string) => {
-    const result = tryEvaluateExpression(raw.trim(), ctx)
-    if (!result.ok) {
-      if (/^\s*tabulate\s*\(/i.test(raw)) return `Table unavailable: ${result.error}`
-      return `{{${raw}}}`
+  template = template.replace(/\btabulate\(\s*\{\{([\s\S]*?)\}\}\s*\)/g, (_, expression: string) =>
+    ctx.syntaxOnly ? String(evaluateExpression(expression.trim(), ctx) ?? '') : encodeTable(evaluateExpression(expression.trim(), ctx)),
+  )
+  let output = ''
+  let cursor = 0
+  while (cursor < template.length) {
+    const start = template.indexOf('{{', cursor)
+    const strayClose = template.indexOf('}}', cursor)
+    if (strayClose >= 0 && (start < 0 || strayClose < start)) throw new Error('Unexpected }} in expression')
+    if (start < 0) return output + template.slice(cursor)
+    output += template.slice(cursor, start)
+    let depth = 1
+    let quote = ''
+    let end = start + 2
+    for (; end < template.length; end++) {
+      const char = template[end]!
+      if (quote) {
+        if (char === '\\') end++
+        else if (char === quote) quote = ''
+        continue
+      }
+      if (char === '"' || char === "'") { quote = char; continue }
+      const pair = template.slice(end, end + 2)
+      if (pair === '{{') { depth++; end++; continue }
+      if (pair === '}}') {
+        depth--
+        if (!depth) break
+        end++
+      }
     }
-    return formatForText(result.value, ctx)
-  })
+    if (depth) throw new Error('Unclosed {{ expression')
+    const source = template.slice(start + 2, end).trim()
+    if (!source) throw new Error('Empty expression inside {{ }}')
+    output += formatForText(evaluateExpression(source, ctx), ctx)
+    cursor = end + 2
+  }
+  return output
 }
 
 /**
@@ -1439,8 +1478,13 @@ export function resolveExpressionValue(raw: string, ctx: ExprContext): unknown {
   if (!trimmed) return ''
 
   if (looksLikeExpression(trimmed)) {
-    const result = tryEvaluateExpression(trimmed, ctx)
-    if (result.ok) return result.value
+    // Mixed text is interpolated; a sole expression must never fall back to literal text.
+    if (trimmed.startsWith('{{')) {
+      let tokens: ReturnType<typeof tokenize>
+      try { tokens = tokenize(trimmed) } catch { return interpolateTemplate(raw, ctx) }
+      if (tokens.length !== 2 || tokens[0]?.kind !== 'brace') return interpolateTemplate(raw, ctx)
+    }
+    return evaluateExpression(trimmed, ctx)
   }
 
   // Sole {{expr}} already covered by looksLikeExpression; keep literal helpers for non-expr text
@@ -1510,5 +1554,17 @@ export function parseJsonValue(left: unknown): { ok: true; value: unknown } | { 
       value: null,
       error: e instanceof Error ? e.message : 'Invalid JSON',
     }
+  }
+}
+
+/** Validate author-entered expressions without requiring runtime variables or causing side effects. */
+export function validateExpressionText(source: string): string | null {
+  const ctx: ExprContext = { vars: {}, steps: {}, syntaxOnly: true }
+  try {
+    if (source.includes('{{') || source.includes('}}')) interpolateTemplate(source, ctx)
+    else if (looksLikeExpression(source)) evaluateExpression(source, ctx)
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
   }
 }

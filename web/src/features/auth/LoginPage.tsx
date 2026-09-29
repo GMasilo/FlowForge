@@ -1,3 +1,4 @@
+import { PublicHeader } from '@/features/docs/PublicShell'
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -62,6 +63,9 @@ export function LoginPage() {
   }
 
   return (
+    <div className="flex min-h-screen flex-col">
+      <PublicHeader showSignIn={false} />
+      <main className="grid flex-1 items-center">
     <AuthLayout
       title="Welcome back"
       subtitle="Design conversational flows for your organisations"
@@ -76,6 +80,8 @@ export function LoginPage() {
             <Link className="hover:text-[var(--color-accent)]" to="/docs">
               Docs
             </Link>
+            <span className="text-[var(--color-border)]">·</span>
+            <a className="hover:text-[var(--color-accent)]" href={`${import.meta.env.BASE_URL}about.html`}>About FlowForge</a>
             <span className="text-[var(--color-border)]">·</span>
             <Link className="hover:text-[var(--color-accent)]" to="/faq">
               FAQ
@@ -139,5 +145,7 @@ export function LoginPage() {
         </Button>
       </form>
     </AuthLayout>
+      </main>
+    </div>
   )
 }

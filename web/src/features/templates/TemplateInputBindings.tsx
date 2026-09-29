@@ -83,7 +83,7 @@ export function TemplateInputBindings({
           <div>
             <h3 className="text-sm font-semibold">Template inputs · {block.name}</h3>
             <p className="text-xs text-[var(--color-ink-muted)]">
-              Bind {'{{vars.*}}'} or type a value. File inputs accept a signature or media expression.
+              Bind {'{{vars.*}}'} or type a value. Step inputs take precedence over template inputs, including explicitly cleared values. File inputs accept a signature or media expression.
             </p>
           </div>
           {block.inputs.map((input) => (

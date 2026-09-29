@@ -643,3 +643,46 @@ html.ff-embed {
   }
   .ff-chat-skin button { transform: none !important; }
 }
+
+/* Header chrome has its own foreground; it must not inherit page/button colours. */
+.ff-chat-skin [data-ff-chat-header] {
+  color: var(--ff-chat-header-fg);
+  border-bottom-color: var(--ff-chat-header-border) !important;
+}
+.ff-chat-skin [data-ff-chat-header] :is(h1, h2, h3) { color: inherit; }
+.ff-chat-skin [data-ff-chat-header] .ff-chat-header-control {
+  color: var(--ff-chat-header-fg);
+  background: var(--ff-chat-header-control-bg);
+  border: 1px solid var(--ff-chat-header-border);
+  box-shadow: none;
+}
+.ff-chat-skin [data-ff-chat-header] .ff-chat-header-control:hover:not(:disabled) {
+  color: var(--ff-chat-header-fg);
+  background: var(--ff-chat-header-control-hover);
+}
+.ff-chat-skin [data-ff-chat-header] :is(button, select, a):focus-visible {
+  outline-color: var(--ff-chat-header-fg);
+}
+.ff-chat-skin [data-ff-chat-header] select option {
+  color: var(--color-ink);
+  background: var(--color-surface);
+}
+
+/* Answer controls must not inherit the surrounding application's text colour. */
+.ff-chat-skin :is(input, textarea) {
+  color: var(--color-ink);
+  caret-color: var(--color-ink);
+  min-width: 0;
+}
+.ff-chat-skin :is(input, textarea)::placeholder {
+  color: var(--color-ink-muted);
+  opacity: .75;
+}
+.ff-chat-skin :is(input, textarea):focus-visible {
+  outline: none;
+  border-color: var(--ff-chat-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ff-chat-accent) 22%, transparent);
+}
+@media (forced-colors: active) {
+  .ff-chat-skin :is(input, textarea):focus-visible { outline: 2px solid Highlight; }
+}

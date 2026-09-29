@@ -977,6 +977,34 @@ export const EXPRESSION_FUNCTIONS: ExprFunctionDoc[] = [
 
 export const DOC_SECTIONS: DocSection[] = [
   {
+    id: 'operations', title: 'Release controls and operations',
+    summary: 'Review releases, reuse processes, resume chats, protect sensitive answers and help your support team.',
+    body: [
+      {heading:'Release reviews and comparison', paragraphs:[
+        'Design → Release comparison lists added, removed and changed steps against production or staging, including expanded subflows. Moving a step on the canvas does not count as a release change. Review globals and templates separately.',
+        'An administrator can enable release approval in the chatbot Operations tab. Request approval in Design, then another administrator reviews the snapshot in Operations. Approval applies to that exact release and is consumed once. Staging promotion and rollback have their own request-approval buttons. Publishing changed content requires a new approval.'
+      ]},
+      {heading:'Shared subflows and automated tests', paragraphs:[
+        'Build a dedicated flow and save it under Reusable subflows with named inputs and outputs. Insert a call, map its inputs to expressions and its outputs to caller variables. Updates are shared centrally, but published consumers retain their snapshot until republished. Custom on-run scripts, restart and transfer are not supported inside subflows.',
+        'Test scenarios accept integration mocks keyed by step key, for example {"lookup":{"value":{"name":"Alex"}}}. Mocks allow HTTP, email, database, entity and integration paths to run without sending real requests. Payments and other unsupported interactive actions still require manual testing.'
+      ]},
+      {heading:'Session continuity and privacy', paragraphs:[
+        'Operations offers optional resume expiry of up to 168 hours. Progress is saved at questions and buttons for the current browser tab; reopening a closed tab is not guaranteed. A revision check prevents reusing an already accepted input. A crash during an external action cannot safely resume that action and may require a fresh conversation.',
+        'Password, card, OTP, sign-in, transfer and other sensitive journeys are excluded from checkpoints. Mark a question sensitive or list sensitive variable names to mask newly recorded conversation answers, outputs and echoed values. Historical data is unchanged. These controls do not redact data deliberately sent to external integrations.',
+        'A configured consent message appears before a new conversation starts. Retention, exports and deletion remain available in organisation Compliance. Resume expiry blocks access; session retention determines when stored records are removed.'
+      ]},
+      {heading:'Connections, relationships and support', paragraphs:[
+        'Map installed connections to separate staging and production connections in Operations. Both targets must have the same connection kind and belong to this organisation. Public and staging sessions use the mapped credentials; designer preview uses its selected connection. Secret changes are audited without recording their values.',
+        'Operations lists recent integration failures. Webhook history allows one guarded replay of a definitely rejected request after you fix its connection. Timeouts and uncertain responses cannot be replayed automatically because the destination may already have processed them.',
+        'Entity field rules support numeric limits, maximum text length and references to unique fields in other organisation entities. Rules apply on new writes; review existing records before adding them. Referenced values cannot be changed or deleted while in use.',
+        'Conversation details provide a recorded-event summary and shared saved replies. Choosing a reply fills the draft; sending remains a separate action. Step translations use the _locale variable with language and original-text fallbacks. Content checks flag missing labels and changed translation placeholders; keyboard, theme contrast and screen-reader testing still need manual review.'
+      ]},
+      {heading:'Installation', paragraphs:[
+        'The operations database migration and updated PHP API must be deployed before database-backed controls are available. Until installation, existing public chats remain usable and new setup pages report that installation is required.'
+      ]}
+    ]
+  },
+  {
     id: 'getting-started',
     title: 'Getting started',
     summary: 'Create an account, join an organisation, and ship your first chatbot flow.',
@@ -1424,6 +1452,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         bullets: [
           'Preview runs the flow in an in-app chat widget with typing delays, optional skips, timeouts, and live variables. Pick a test scenario (Data tab) to seed fixture globals; when the run finishes, the Run panel shows pass/fail for expected variables and step keys.',
+          'Test scenarios offer flow-based dropdowns for expected variables, succeeding steps, scripted answers and mocked connections. Starting globals can use their configured defaults. In Design these suggestions follow the current unsaved draft; on Data they use the saved flow. Add only the assertions relevant to your scenario, fill in answer/mock placeholders and set your own expected result values. Existing entries are preserved. Design → Check before publishing runs saved scenarios against your current draft and lists validation issues. Add ordered answers as [{"step":"ask_name","value":"Alex"}] and expected variable values in Test scenarios. Simple button answers use the button value. Results show passed, failed or incomplete, with links to steps and counts of steps exercised. Changed drafts or fixtures require another run. Checks are advisory; payments, external actions, browser state, On run scripts and interactive verification require manual preview. No live services are called by automatic tests.',
           'Connection steps (HTTP, email, entity, integration, transfer, sign-in) execute against your configured backends during preview when available.',
           'Preview and published chat hide scrollbars on the message list, shop catalog, image-choice gallery, and similar panels so the widget stays uncluttered. Those areas still scroll.',
           'Publish stores the current graph so runtime consumers can use a stable version of the flow. When Staging is enabled for the organisation, you can publish to staging, open a staging public link, then promote to production.',

@@ -1,7 +1,8 @@
+import { interpolateTemplate, resolveExpressionValue } from '@/features/designer/preview/expressionEval'
 import type { ReactNode } from 'react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { fillDocumentSnapshot, type FilledDocument, type FilledDocumentBlock } from '@/features/templates/documentFill'
-import { a4SizeMm, cssFontFamily } from '@/features/templates/documentLayout'
+import { a4SizeMm, cssFontFamily, documentPageCount } from '@/features/templates/documentLayout'
 import { ensurePageBlocks } from '@/features/templates/DocumentPageEditor'
 import {
   templateInputsOf,
@@ -37,10 +38,8 @@ function previewEvaluators(content: DocumentContent) {
     templateInputsOf(content).map((input) => [input.key, sampleInputValue(input)]),
   )
 
-  const evalText = (source: string) =>
-    String(source ?? '')
-      .replace(/\{\{\s*inputs\.([A-Za-z0-9_]+)\s*\}\}/g, (_, key: string) => samples[key] ?? `«${key}»`)
-      .replace(/\{\{[^}]+\}\}/g, '…')
+  const ctx = { vars: {}, steps: {}, inputs: samples, previewOnly: true }
+  const evalText = (source: string) => interpolateTemplate(String(source ?? ''), ctx)
 
   const evalValue = (source: string): unknown => {
     const m = /^\{\{\s*inputs\.([A-Za-z0-9_]+)\s*\}\}$/.exec(String(source ?? '').trim())
@@ -49,7 +48,7 @@ function previewEvaluators(content: DocumentContent) {
       if (/signature|image|file/i.test(key)) return null
       return samples[key] ?? null
     }
-    return evalText(source)
+    return resolveExpressionValue(source, ctx)
   }
 
   return { evalText, evalValue }
@@ -202,8 +201,17 @@ function PageBlockPreview({ block, compact }: { block: FilledDocumentBlock; comp
 }
 
 function PageDocumentPreview({ doc, compact }: { doc: FilledDocument; compact?: boolean }) {
-  const blocks = doc.blocks.filter((b) => !b.page || b.page <= 1)
+  const [requestedPage, setRequestedPage] = useState(1)
+  const pageCount = documentPageCount(doc.blocks)
+  const page = Math.min(requestedPage, pageCount)
+  const blocks = doc.blocks.filter((b) => (b.page || 1) === page)
   return (
+    <div className="space-y-2">
+    {pageCount > 1 && <label className="flex justify-center gap-2 text-sm">Preview page
+      <select aria-label="Preview page" value={page} onChange={event => setRequestedPage(Number(event.target.value))}>
+        {Array.from({ length: pageCount }, (_, index) => <option key={index} value={index + 1}>{index + 1} of {pageCount}</option>)}
+      </select>
+    </label>}
     <PaperShell orientation={doc.orientation} compact={compact} formatLabel={doc.format.toUpperCase()}>
       <div className="relative h-full w-full bg-white" style={{ containerType: 'size' }}>
         {blocks.map((block) => (
@@ -227,6 +235,8 @@ function PageDocumentPreview({ doc, compact }: { doc: FilledDocument; compact?: 
         ) : null}
       </div>
     </PaperShell>
+    {doc.table && <div className="space-y-2"><p className="text-xs text-[var(--color-ink-muted)]">Table preview (first rows). The PDF appends the full table after the designed pages and adds pages as needed.</p><FlowDocumentPreview compact={compact} doc={{ ...doc, layout: 'flow', title: 'Table details', intro: '', body: '', fields: [], blocks: [], cart: null }} /></div>}
+    </div>
   )
 }
 
@@ -242,14 +252,21 @@ export function DocumentOutputPreview({
   content: DocumentContent
   compact?: boolean
 }) {
-  const filled = useMemo(() => {
-    const withBlocks =
-      content.layout === 'page'
-        ? { ...content, blocks: ensurePageBlocks(content) }
-        : content
-    const { evalText, evalValue } = previewEvaluators(withBlocks)
-    return fillDocumentSnapshot(withBlocks, evalText, evalValue, {})
+  const result = useMemo(() => {
+    try {
+      const withBlocks =
+        content.layout === 'page'
+          ? { ...content, blocks: ensurePageBlocks(content) }
+          : content
+      const { evalText, evalValue } = previewEvaluators(withBlocks)
+      return { filled: fillDocumentSnapshot(withBlocks, evalText, evalValue, {}), error: null }
+    } catch (error) {
+      return { filled: null, error: error instanceof Error ? error.message : String(error) }
+    }
   }, [content])
+
+  if (!result.filled) return <p role="alert" className="text-sm text-red-500">Document expression error: {result.error}</p>
+  const filled = result.filled
 
   return (
     <div className="space-y-2">

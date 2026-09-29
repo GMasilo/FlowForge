@@ -1,3 +1,4 @@
+import { validateExpressionText } from '@/features/designer/preview/expressionEval'
 import { validateEntityJoins, type EntityJoin } from '@/features/entities/entityJoins'
 import {
   extractTemplateRefs,
@@ -118,20 +119,6 @@ function guaranteedPredecessors(
     for (const p of incoming.get(cur) ?? []) stack.push(p)
   }
 
-  // Nodes reachable from some root without going through nodeId
-  const reachableFromRoots = new Set<string>()
-  for (const root of roots) {
-    const q = [root.id]
-    const seen = new Set<string>()
-    while (q.length) {
-      const cur = q.shift()!
-      if (seen.has(cur) || cur === nodeId) continue
-      seen.add(cur)
-      reachableFromRoots.add(cur)
-      for (const next of outgoing.get(cur) ?? []) q.push(next.target)
-    }
-  }
-
   // A predecessor is guaranteed if it is an ancestor AND not bypassable:
   // every path to nodeId goes through it. We compute this via:
   // remove candidate, check if nodeId still reachable from roots.
@@ -141,18 +128,9 @@ function guaranteedPredecessors(
     if (!stillReachable) guaranteed.add(candidate)
   }
 
-  // Also treat direct linear chain approximations: all ancestors that are
-  // always visited — for linear flows (no alternate paths), all ancestors qualify.
-  if (guaranteed.size === 0 && ancestors.size > 0) {
-    // If only one root path dominates (no branching into node), include all ancestors
-    // when in-degree of every ancestor along the unique path is 1 from root.
-    const onlyOneRootPath = roots.length === 1 && !hasAlternatePath(roots[0].id, nodeId, outgoing)
-    if (onlyOneRootPath) {
-      for (const a of ancestors) guaranteed.add(a)
-    }
-  }
-
-  void reachableFromRoots
+  // The remove-and-reach test already identifies every dominator, including
+  // linear chains. Enumerating simple paths as a fallback is exponential for
+  // branching flows, especially when validating the entry node or dead ends.
   return guaranteed
 }
 
@@ -172,30 +150,6 @@ function isReachableAvoiding(
     for (const next of outgoing.get(cur) ?? []) q.push(next.target)
   }
   return false
-}
-
-function hasAlternatePath(
-  rootId: string,
-  targetId: string,
-  outgoing: Map<string, Array<{ target: string; handle: string | null }>>,
-): boolean {
-  // Count distinct simple paths (bounded) — if >1, branching exists.
-  let paths = 0
-  function dfs(cur: string, visited: Set<string>) {
-    if (paths > 1) return
-    if (cur === targetId) {
-      paths += 1
-      return
-    }
-    for (const next of outgoing.get(cur) ?? []) {
-      if (visited.has(next.target)) continue
-      const nextVisited = new Set(visited)
-      nextVisited.add(next.target)
-      dfs(next.target, nextVisited)
-    }
-  }
-  dfs(rootId, new Set([rootId]))
-  return paths > 1
 }
 
 function parseRef(
@@ -466,6 +420,44 @@ export function validateFlow(
     }
 
     const strings = collectNodeTemplateStrings(node, ctx)
+    // Reference checks do not parse function calls. Validate syntax separately so
+    // Problems reports mistakes before the visitor reaches the step.
+    const checkedExpressions = new Set<string>()
+    const checkExpressions = (value: unknown, field: string): void => {
+      if (typeof value === 'string') {
+        const sources = field === 'onRun' ? value.split(/\r?\n/).filter(line => !/^\s*(?:#|\/\/)/.test(line)) : [value]
+        for (const source of sources) {
+          const identity = `${field}:${source}`
+          if (checkedExpressions.has(identity)) continue
+          checkedExpressions.add(identity)
+          const error = validateExpressionText(source)
+          if (error) issues.push({ severity: 'error', nodeId: node.id, field, code: 'invalid_expression', message: `${field}: ${error}` })
+        }
+      } else if (Array.isArray(value)) {
+        value.forEach((item, index) => checkExpressions(item, `${field}[${index}]`))
+      } else if (value && typeof value === 'object') {
+        for (const [key, item] of Object.entries(value)) checkExpressions(item, field ? `${field}.${key}` : key)
+      }
+    }
+    const activeConfig = activeTemplateConfig(node)
+    checkExpressions(activeConfig, '')
+    if (typeof activeConfig.templateBindings === 'string') checkExpressions(parseTemplateBindingMap(activeConfig.templateBindings), 'templateBindings')
+    const configStrings = new Set(collectJsonStrings(activeConfig))
+    for (const text of strings) if (!configStrings.has(text)) checkExpressions(text, 'connectionDefaults')
+    const visitedTemplates = new Set<string>()
+    const checkTemplateExpressions = (key: string) => {
+      if (visitedTemplates.has(key) || !ctx.templateContents?.[key]) return
+      visitedTemplates.add(key)
+      const content = ctx.templateContents[key]
+      checkExpressions(content, `templates.${key}`)
+      for (const text of collectJsonStrings(content)) {
+        for (const ref of extractTemplateRefs(text)) {
+          const parsed = parseRef(normalizeRef(ref))
+          if (parsed?.kind === 'templates') checkTemplateExpressions(parsed.name)
+        }
+      }
+    }
+    for (const key of calledTemplateKeys(node, strings)) checkTemplateExpressions(key)
     const allowsOtpCode = nodeAllowsOtpCodeRef(node)
 
     const checkRef = (rawRef: string, templateKey?: string) => {

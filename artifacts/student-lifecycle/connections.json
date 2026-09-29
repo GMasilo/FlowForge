@@ -1,0 +1,610 @@
+{
+  "kind": "flowforge.configuration-guide",
+  "note": "Setup reference, not an import file. Create and install connections in FlowForge, then map their generated IDs. Never store credentials in this file.",
+  "liveSteps": [
+    "student_sign_in",
+    "programme_catalog",
+    "application_upload",
+    "submit_application",
+    "save_application",
+    "application_email",
+    "admission_status",
+    "accept_offer_api",
+    "funding_lookup",
+    "tuition_payment",
+    "payment_plan",
+    "registration_clearance",
+    "register_modules",
+    "lms_provision",
+    "campus_calendar",
+    "save_appointment",
+    "orientation_email",
+    "learning_dashboard",
+    "tutor_booking",
+    "support_record",
+    "support_ticket",
+    "adviser_handoff",
+    "academic_results",
+    "assessment_appeal",
+    "career_opportunities",
+    "career_crm",
+    "career_email",
+    "graduation_clearance",
+    "graduation_rsvp",
+    "alumni_preferences",
+    "alumni_crm",
+    "alumni_welcome",
+    "journey_feedback"
+  ],
+  "connections": [
+    {
+      "step": "programme_catalog",
+      "type": "entity",
+      "connection": "FlowForge programmes",
+      "purpose": "Read catalogue",
+      "configuration": {
+        "entityId": "00890c3a-7c06-5b2e-a846-6b29e25e76eb",
+        "operation": "list",
+        "columnMode": "selected",
+        "selectedColumns": [
+          "code",
+          "name",
+          "annual_fee",
+          "minimum_score"
+        ],
+        "outputVariable": "programmes"
+      },
+      "expectedDemoResponse": [
+        {
+          "code": "BSC-CS",
+          "name": "BSc Computing",
+          "faculty": "Science",
+          "annual_fee": 52000,
+          "minimum_score": 28
+        },
+        {
+          "code": "BCOM",
+          "name": "BCom Business",
+          "faculty": "Commerce",
+          "annual_fee": 46000,
+          "minimum_score": 26
+        },
+        {
+          "code": "BA-DES",
+          "name": "BA Design",
+          "faculty": "Humanities",
+          "annual_fee": 48000,
+          "minimum_score": 24
+        }
+      ]
+    },
+    {
+      "step": "submit_application",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/applications",
+      "configuration": {
+        "connectionId": "",
+        "method": "POST",
+        "path": "/applications",
+        "body": "{\"student_ref\": \"{{vars.studentRef}}\", \"route\": \"{{vars.application_type}}\", \"programme\": \"{{vars.programme_choice}}\"}",
+        "outputVariable": "applicationResult"
+      },
+      "expectedDemoResponse": {
+        "reference": "APP-DEMO-001",
+        "status": "received"
+      }
+    },
+    {
+      "step": "save_application",
+      "type": "entity",
+      "connection": "FlowForge applications",
+      "purpose": "Persist applications",
+      "configuration": {
+        "entityId": "1a33563d-7f88-5a23-8f41-bf03698dbb7a",
+        "operation": "create",
+        "fieldMap": {
+          "student_ref": "{{vars.studentRef}}",
+          "programme": "{{vars.programme_choice}}",
+          "status": "received",
+          "consent": "{{vars.consent}}"
+        },
+        "outputVariable": "save_applicationRecord"
+      },
+      "expectedDemoResponse": {
+        "id": "DEMO-save_application",
+        "status": "simulated"
+      }
+    },
+    {
+      "step": "application_email",
+      "type": "email",
+      "connection": "Institution email SMTP",
+      "purpose": "Application acknowledgement \u2014 reference {{vars.applicationResult.reference}}",
+      "configuration": {
+        "connectionId": "",
+        "to": "{{vars.studentEmail}}",
+        "templateKey": "student_email",
+        "subject": "Application acknowledgement \u2014 reference {{vars.applicationResult.reference}}",
+        "body": "Student reference {{vars.studentRef}}. Application acknowledgement \u2014 reference {{vars.applicationResult.reference}}"
+      },
+      "expectedDemoResponse": null
+    },
+    {
+      "step": "admission_status",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/applications/{{vars.studentRef}}/decision",
+      "configuration": {
+        "connectionId": "",
+        "method": "GET",
+        "path": "/applications/{{vars.studentRef}}/decision",
+        "body": "",
+        "outputVariable": "admissionDecision"
+      },
+      "expectedDemoResponse": {
+        "status": "{{vars.demo_decision}}",
+        "offer_ref": "OFFER-DEMO-001"
+      }
+    },
+    {
+      "step": "accept_offer_api",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/offers/{{vars.admissionDecision.offer_ref}}/accept",
+      "configuration": {
+        "connectionId": "",
+        "method": "POST",
+        "path": "/offers/{{vars.admissionDecision.offer_ref}}/accept",
+        "body": "{\"student_ref\": \"{{vars.studentRef}}\"}",
+        "outputVariable": "offerAcceptance"
+      },
+      "expectedDemoResponse": {
+        "status": "accepted_conditionally"
+      }
+    },
+    {
+      "step": "funding_lookup",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/funding/opportunities",
+      "configuration": {
+        "connectionId": "",
+        "method": "GET",
+        "path": "/funding/opportunities",
+        "body": "",
+        "outputVariable": "fundingOptions"
+      },
+      "expectedDemoResponse": [
+        {
+          "name": "Merit award",
+          "status": "Applications open"
+        },
+        {
+          "name": "Financial assistance",
+          "status": "Assessment required"
+        }
+      ]
+    },
+    {
+      "step": "payment_plan",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/finance/payment-plan-requests",
+      "configuration": {
+        "connectionId": "",
+        "method": "POST",
+        "path": "/finance/payment-plan-requests",
+        "body": "{\"student_ref\": \"{{vars.studentRef}}\", \"estimated_balance\": \"{{vars.balanceEstimate}}\"}",
+        "outputVariable": "paymentPlan"
+      },
+      "expectedDemoResponse": {
+        "reference": "PLAN-DEMO-001",
+        "status": "pending_review"
+      }
+    },
+    {
+      "step": "registration_clearance",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/students/{{vars.studentRef}}/registration-clearance",
+      "configuration": {
+        "connectionId": "",
+        "method": "GET",
+        "path": "/students/{{vars.studentRef}}/registration-clearance",
+        "body": "",
+        "outputVariable": "clearance"
+      },
+      "expectedDemoResponse": {
+        "eligible": true
+      }
+    },
+    {
+      "step": "register_modules",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/registrations",
+      "configuration": {
+        "connectionId": "",
+        "method": "POST",
+        "path": "/registrations",
+        "body": "{\"student_ref\": \"{{vars.studentRef}}\", \"module_codes\": [\"CS101\", \"MAT101\", \"COM101\"]}",
+        "outputVariable": "registration"
+      },
+      "expectedDemoResponse": {
+        "reference": "REG-DEMO-001",
+        "status": "registered"
+      }
+    },
+    {
+      "step": "lms_provision",
+      "type": "integration",
+      "connection": "LMS / Moodle or Canvas enrolment",
+      "purpose": "LMS / Moodle or Canvas enrolment",
+      "configuration": {
+        "provider": "",
+        "integrationId": "",
+        "action": "",
+        "fieldValues": {
+          "student_ref": "{{vars.studentRef}}"
+        },
+        "outputVariable": "lmsAccess"
+      },
+      "expectedDemoResponse": {
+        "course_space": "DEMO-CS101",
+        "status": "provisioned"
+      }
+    },
+    {
+      "step": "campus_calendar",
+      "type": "integration",
+      "connection": "Calendar appointment / Microsoft 365 or Google Calendar",
+      "purpose": "Calendar appointment / Microsoft 365 or Google Calendar",
+      "configuration": {
+        "provider": "",
+        "integrationId": "",
+        "action": "",
+        "fieldValues": {
+          "student_ref": "{{vars.studentRef}}"
+        },
+        "outputVariable": "campusAppointment"
+      },
+      "expectedDemoResponse": {
+        "reference": "APT-DEMO-001",
+        "status": "requested"
+      }
+    },
+    {
+      "step": "save_appointment",
+      "type": "entity",
+      "connection": "FlowForge appointments",
+      "purpose": "Persist appointments",
+      "configuration": {
+        "entityId": "5ed7c5ce-d8aa-5eb1-ba3a-2d0a74332673",
+        "operation": "create",
+        "fieldMap": {
+          "student_ref": "{{vars.studentRef}}",
+          "service": "{{vars.campus_service}}",
+          "date": "{{vars.campus_date}}"
+        },
+        "outputVariable": "save_appointmentRecord"
+      },
+      "expectedDemoResponse": {
+        "id": "DEMO-save_appointment",
+        "status": "simulated"
+      }
+    },
+    {
+      "step": "orientation_email",
+      "type": "email",
+      "connection": "Institution email SMTP",
+      "purpose": "Your campus service request has been received",
+      "configuration": {
+        "connectionId": "",
+        "to": "{{vars.studentEmail}}",
+        "templateKey": "student_email",
+        "subject": "Your campus service request has been received",
+        "body": "Student reference {{vars.studentRef}}. Your campus service request has been received"
+      },
+      "expectedDemoResponse": null
+    },
+    {
+      "step": "learning_dashboard",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/students/{{vars.studentRef}}/learning",
+      "configuration": {
+        "connectionId": "",
+        "method": "GET",
+        "path": "/students/{{vars.studentRef}}/learning",
+        "body": "",
+        "outputVariable": "learningRows"
+      },
+      "expectedDemoResponse": [
+        {
+          "module": "CS101",
+          "next_class": "Monday 09:00",
+          "attendance": 92
+        },
+        {
+          "module": "MAT101",
+          "next_class": "Tuesday 10:00",
+          "attendance": 68
+        }
+      ]
+    },
+    {
+      "step": "tutor_booking",
+      "type": "integration",
+      "connection": "Student success / tutor appointment",
+      "purpose": "Student success / tutor appointment",
+      "configuration": {
+        "provider": "",
+        "integrationId": "",
+        "action": "",
+        "fieldValues": {
+          "student_ref": "{{vars.studentRef}}"
+        },
+        "outputVariable": "tutorRequest"
+      },
+      "expectedDemoResponse": {
+        "status": "requested",
+        "reference": "TUTOR-DEMO-001"
+      }
+    },
+    {
+      "step": "support_record",
+      "type": "entity",
+      "connection": "FlowForge support_cases",
+      "purpose": "Persist support_cases",
+      "configuration": {
+        "entityId": "000698c3-6dfc-5647-b602-2c18af2e32cc",
+        "operation": "create",
+        "fieldMap": {
+          "student_ref": "{{vars.studentRef}}",
+          "topic": "{{vars.support_topic}}",
+          "priority": "{{vars.casePriority}}",
+          "status": "open"
+        },
+        "outputVariable": "support_recordRecord"
+      },
+      "expectedDemoResponse": {
+        "id": "DEMO-support_record",
+        "status": "simulated"
+      }
+    },
+    {
+      "step": "support_ticket",
+      "type": "integration",
+      "connection": "Jira Service Management / create student case",
+      "purpose": "Jira Service Management / create student case",
+      "configuration": {
+        "provider": "",
+        "integrationId": "",
+        "action": "",
+        "fieldValues": {
+          "student_ref": "{{vars.studentRef}}"
+        },
+        "outputVariable": "supportTicket"
+      },
+      "expectedDemoResponse": {
+        "key": "STUDENT-DEMO-001",
+        "status": "open"
+      }
+    },
+    {
+      "step": "academic_results",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/students/{{vars.studentRef}}/results",
+      "configuration": {
+        "connectionId": "",
+        "method": "GET",
+        "path": "/students/{{vars.studentRef}}/results",
+        "body": "",
+        "outputVariable": "results"
+      },
+      "expectedDemoResponse": [
+        {
+          "module": "CS101",
+          "mark": 74,
+          "credits": 16
+        },
+        {
+          "module": "MAT101",
+          "mark": 61,
+          "credits": 16
+        },
+        {
+          "module": "COM101",
+          "mark": 79,
+          "credits": 8
+        }
+      ]
+    },
+    {
+      "step": "assessment_appeal",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/assessment/review-requests",
+      "configuration": {
+        "connectionId": "",
+        "method": "POST",
+        "path": "/assessment/review-requests",
+        "body": "{\"student_ref\": \"{{vars.studentRef}}\", \"reason\": \"Student requested an academic review\"}",
+        "outputVariable": "appeal"
+      },
+      "expectedDemoResponse": {
+        "reference": "APPEAL-DEMO-001",
+        "status": "received"
+      }
+    },
+    {
+      "step": "career_opportunities",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/careers/opportunities",
+      "configuration": {
+        "connectionId": "",
+        "method": "GET",
+        "path": "/careers/opportunities",
+        "body": "",
+        "outputVariable": "opportunities"
+      },
+      "expectedDemoResponse": [
+        {
+          "code": "INT-001",
+          "role": "Software intern",
+          "employer": "Example Labs"
+        },
+        {
+          "code": "INT-002",
+          "role": "Business analyst intern",
+          "employer": "Demo Consulting"
+        }
+      ]
+    },
+    {
+      "step": "career_crm",
+      "type": "integration",
+      "connection": "Careers CRM / placement expression of interest",
+      "purpose": "Careers CRM / placement expression of interest",
+      "configuration": {
+        "provider": "",
+        "integrationId": "",
+        "action": "",
+        "fieldValues": {
+          "student_ref": "{{vars.studentRef}}"
+        },
+        "outputVariable": "placement"
+      },
+      "expectedDemoResponse": {
+        "reference": "PLACE-DEMO-001",
+        "status": "submitted_for_review"
+      }
+    },
+    {
+      "step": "career_email",
+      "type": "email",
+      "connection": "Institution email SMTP",
+      "purpose": "Your placement interest has been received \u2014 no placement is guaranteed",
+      "configuration": {
+        "connectionId": "",
+        "to": "{{vars.studentEmail}}",
+        "templateKey": "student_email",
+        "subject": "Your placement interest has been received \u2014 no placement is guaranteed",
+        "body": "Student reference {{vars.studentRef}}. Your placement interest has been received \u2014 no placement is guaranteed"
+      },
+      "expectedDemoResponse": null
+    },
+    {
+      "step": "graduation_clearance",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/students/{{vars.studentRef}}/graduation-clearance",
+      "configuration": {
+        "connectionId": "",
+        "method": "GET",
+        "path": "/students/{{vars.studentRef}}/graduation-clearance",
+        "body": "",
+        "outputVariable": "graduationClearance"
+      },
+      "expectedDemoResponse": {
+        "eligible": true,
+        "academic": "cleared",
+        "library": "cleared",
+        "finance": "cleared"
+      }
+    },
+    {
+      "step": "graduation_rsvp",
+      "type": "http",
+      "connection": "Student information system HTTP",
+      "purpose": "/graduation/rsvp",
+      "configuration": {
+        "connectionId": "",
+        "method": "POST",
+        "path": "/graduation/rsvp",
+        "body": "{\"student_ref\": \"{{vars.studentRef}}\", \"attendance\": \"{{vars.graduation_attendance}}\"}",
+        "outputVariable": "graduationRsvp"
+      },
+      "expectedDemoResponse": {
+        "reference": "GRAD-DEMO-001",
+        "status": "received"
+      }
+    },
+    {
+      "step": "alumni_preferences",
+      "type": "entity",
+      "connection": "FlowForge alumni_preferences",
+      "purpose": "Persist alumni_preferences",
+      "configuration": {
+        "entityId": "06e20e8b-4c87-5599-bebc-b7e7eb00b04d",
+        "operation": "create",
+        "fieldMap": {
+          "student_ref": "{{vars.studentRef}}",
+          "interest": "{{vars.alumni_interest}}",
+          "email_opt_in": "{{vars.alumni_opt_in}}"
+        },
+        "outputVariable": "alumni_preferencesRecord"
+      },
+      "expectedDemoResponse": {
+        "id": "DEMO-alumni_preferences",
+        "status": "simulated"
+      }
+    },
+    {
+      "step": "alumni_crm",
+      "type": "integration",
+      "connection": "Alumni CRM / upsert contact preferences",
+      "purpose": "Alumni CRM / upsert contact preferences",
+      "configuration": {
+        "provider": "",
+        "integrationId": "",
+        "action": "",
+        "fieldValues": {
+          "student_ref": "{{vars.studentRef}}"
+        },
+        "outputVariable": "alumniProfile"
+      },
+      "expectedDemoResponse": {
+        "reference": "ALUM-DEMO-001",
+        "status": "preferences_saved"
+      }
+    },
+    {
+      "step": "alumni_welcome",
+      "type": "email",
+      "connection": "Institution email SMTP",
+      "purpose": "Your alumni communication preferences",
+      "configuration": {
+        "connectionId": "",
+        "to": "{{vars.studentEmail}}",
+        "templateKey": "student_email",
+        "subject": "Your alumni communication preferences",
+        "body": "Student reference {{vars.studentRef}}. Your alumni communication preferences"
+      },
+      "expectedDemoResponse": null
+    },
+    {
+      "step": "journey_feedback",
+      "type": "entity",
+      "connection": "FlowForge journey_feedback",
+      "purpose": "Persist journey_feedback",
+      "configuration": {
+        "entityId": "e253069e-a2d7-52d0-995a-e3b07df58bfd",
+        "operation": "create",
+        "fieldMap": {
+          "student_ref": "{{vars.studentRef}}",
+          "score": "{{vars.journey_score}}",
+          "comment": "{{vars.journey_comment}}"
+        },
+        "outputVariable": "journey_feedbackRecord"
+      },
+      "expectedDemoResponse": {
+        "id": "DEMO-journey_feedback",
+        "status": "simulated"
+      }
+    }
+  ]
+}

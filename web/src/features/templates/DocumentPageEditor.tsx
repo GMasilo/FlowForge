@@ -4,6 +4,8 @@ import type { TemplateSuggestion } from '@/features/designer/inspector/TemplateF
 import { TemplateField } from '@/features/designer/inspector/TemplateField'
 import {
   DIVIDER_MIN_MM,
+  documentPageCount,
+  insertDocumentPage,
   a4SizeMm,
   clampBlock,
   cssFontFamily,
@@ -32,7 +34,7 @@ const ADD_TYPES: Array<{ type: DocumentBlockType; label: string }> = [
   { type: 'heading', label: 'Heading' },
   { type: 'text', label: 'Text' },
   { type: 'field', label: 'Field' },
-  { type: 'image', label: 'Signature' },
+  { type: 'image', label: 'Image / signature' },
   { type: 'divider', label: 'Line' },
   { type: 'cart', label: 'Cart' },
 ]
@@ -50,6 +52,10 @@ export function DocumentPageEditor({
   suggestions: TemplateSuggestion[]
   readOnly?: boolean
 }) {
+  const [requestedPage, setRequestedPage] = useState(1)
+  const pageCount = documentPageCount(content.blocks)
+  const activePage = Math.min(requestedPage, pageCount)
+  const pageBlocks = content.blocks.filter(block => (block.page || 1) === activePage)
   const pageRef = useRef<HTMLDivElement>(null)
   const drag = useRef<{
     id: string
@@ -59,6 +65,7 @@ export function DocumentPageEditor({
     orig: DocumentBlock
   } | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(content.blocks[0]?.id ?? null)
+  const [imageError, setImageError] = useState<string | null>(null)
   const [snapGrid, setSnapGrid] = useState(true)
   const [guides, setGuides] = useState<SnapGuide[]>([])
   const selected = content.blocks.find((b) => b.id === selectedId) ?? null
@@ -74,8 +81,10 @@ export function DocumentPageEditor({
   }
 
   function addBlock(type: DocumentBlockType) {
-    const y = content.blocks.reduce((max, b) => Math.max(max, b.y + b.h), 6) + 1.5
+    const y = pageBlocks.reduce((max, b) => Math.max(max, b.y + b.h), 6) + 1.5
     const block = emptyDocumentBlock(type, Math.min(88, y), orientation)
+    block.page = activePage
+    if (type === 'image') { block.label = ''; block.value = '' }
     patchBlocks([...content.blocks, block])
     setSelectedId(block.id)
   }
@@ -110,7 +119,7 @@ export function DocumentPageEditor({
     const p = pagePoint(e)
     const dx = p.x - active.startX
     const dy = p.y - active.startY
-    const siblings = content.blocks.filter((b) => b.id !== active.id)
+    const siblings = pageBlocks.filter((b) => b.id !== active.id)
     const opts = snapOpts(e)
     if (active.mode === 'resize') {
       const next = snapBlockResize(active.orig, dx, dy, siblings, {
@@ -137,6 +146,21 @@ export function DocumentPageEditor({
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
       <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-border)] p-2">
+          <label className="flex items-center gap-2 text-sm">Page
+            <Select value={activePage} onChange={event => { setRequestedPage(Number(event.target.value)); setSelectedId(null); endDrag() }}>
+              {Array.from({ length: pageCount }, (_, index) => <option key={index} value={index + 1}>{index + 1} of {pageCount}</option>)}
+            </Select>
+          </label>
+          <Button type="button" size="sm" variant="secondary" disabled={readOnly} onClick={() => {
+            const blocks = insertDocumentPage(content.blocks, activePage, orientation)
+            patchBlocks(blocks)
+            setRequestedPage(activePage + 1)
+            setSelectedId(blocks[blocks.length - 1]!.id)
+            endDrag()
+          }}><Plus className="h-3.5 w-3.5" />Page break / new page</Button>
+        </div>
+        <p className="text-xs text-[var(--color-ink-muted)]">A page break inserts a new page after this one. Add content there, or move a selected item using its Page setting.</p>
         <div className="flex flex-wrap items-center gap-1.5">
           {ADD_TYPES.map((item) => (
             <Button
@@ -195,7 +219,7 @@ export function DocumentPageEditor({
               />
             ),
           )}
-          {content.blocks.map((block) => {
+          {pageBlocks.map((block) => {
             const active = block.id === selectedId
             const divider = block.type === 'divider'
             return (
@@ -240,7 +264,9 @@ export function DocumentPageEditor({
                     />
                   </>
                 ) : (
-                  blockPreview(block)
+                  block.type === 'image' && /^(data:image\/(png|jpeg);base64,|https?:\/\/)/i.test(block.value.trim())
+                    ? <img src={block.value.trim()} alt={block.label || 'Document image'} className="h-full w-full object-contain pointer-events-none" draggable={false} />
+                    : blockPreview(block)
                 )}
                 {active && !readOnly ? (
                   <span
@@ -254,14 +280,14 @@ export function DocumentPageEditor({
               </div>
             )
           })}
-          {!content.blocks.length ? (
+          {!pageBlocks.length ? (
             <p className="absolute inset-0 grid place-items-center text-center text-xs text-slate-400">
               Add a heading, field, or signature, then drag it into place.
             </p>
           ) : null}
         </div>
         <p className="text-center text-[11px] text-[var(--color-ink-muted)]">
-          A4 {orientation} page. Type millimetres in the sidebar, or drag on the page. Pull the teal corner to resize.
+          Page {activePage} of {pageCount}. A4 {orientation}. Type millimetres in the sidebar, or drag on the page. Pull the teal corner to resize.
           Blocks snap to the grid and to each other; hold Alt to move freely. PDF keeps these positions; Word and Excel
           follow the same order.
         </p>
@@ -270,6 +296,15 @@ export function DocumentPageEditor({
         {selected ? (
           <>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{blockTypeLabel(selected.type)}</p>
+            <label className="block space-y-1 text-sm">Page
+              <Select disabled={readOnly} value={selected.page || 1} onChange={event => {
+                const page = Number(event.target.value)
+                patchBlock(selected.id, { page })
+                setRequestedPage(page)
+              }}>
+                {Array.from({ length: pageCount }, (_, index) => <option key={index} value={index + 1}>Page {index + 1}</option>)}
+              </Select>
+            </label>
             {selected.type === 'heading' || selected.type === 'text' ? (
               <div>
                 <Label>Text</Label>
@@ -304,6 +339,31 @@ export function DocumentPageEditor({
                 </div>
               </>
             ) : null}
+            {selected.type === 'image' && <div className="space-y-2">
+              <Label htmlFor="document-image-upload">Add image from device</Label>
+              <Input id="document-image-upload" type="file" accept="image/png,image/jpeg" disabled={readOnly} onChange={async e => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (!file) return
+                const id = selected.id
+                setImageError(null)
+                if (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+                  setImageError('Choose a PNG or JPEG image smaller than 2 MB.')
+                  return
+                }
+                try {
+                  const value = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader()
+                    reader.onload = () => resolve(String(reader.result))
+                    reader.onerror = () => reject(new Error('Could not read the image.'))
+                    reader.readAsDataURL(file)
+                  })
+                  patchBlock(id, { value, label: '' })
+                } catch { setImageError('Could not read the image. Please try another file.') }
+              }} />
+              <p className="text-xs text-slate-500">PNG or JPEG, up to 2 MB. Images are embedded in the saved template. You can also enter an image URL or a variable above.</p>
+              {imageError && <p role="alert" className="text-sm text-red-600">{imageError}</p>}
+            </div>}
             {selected.type === 'cart' ? (
               <div>
                 <Label>Heading</Label>

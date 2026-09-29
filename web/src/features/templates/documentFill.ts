@@ -207,6 +207,7 @@ export function buildFilledTable(
       ? columns
           .filter((c) => c.key.trim() || c.label.trim())
           .map((c) => ({
+            total: c.total === true,
             key: c.key.trim() || c.label.trim(),
             label: c.label.trim() || c.key.trim(),
           }))
@@ -229,6 +230,23 @@ export function buildFilledTable(
       return colIdx === 0 ? stringifyValue(row) : ''
     }),
   )
+  if (cols.some(col => col.total)) {
+    const totals = cols.map((col, index) => {
+      if (!col.total) return ''
+      let sum = 0
+      for (const row of outRows) {
+        const value = row[index]!.trim()
+        if (!value) continue
+        if (!Number.isFinite(Number(value))) throw new Error(`Table total: "${col.label}" must contain plain numbers without currency symbols or separators.`)
+        sum += Number(value)
+      }
+      if (!Number.isFinite(sum)) throw new Error(`Table total: "${col.label}" is too large.`)
+      return (Math.round((sum + Number.EPSILON) * 100) / 100).toFixed(2)
+    })
+    const labelIndex = cols.findIndex(col => !col.total)
+    if (labelIndex >= 0) totals[labelIndex] = 'Total'
+    outRows.push(totals)
+  }
   return { headers, rows: outRows }
 }
 

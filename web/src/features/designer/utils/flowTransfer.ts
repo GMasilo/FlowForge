@@ -57,7 +57,7 @@ export type FlowEntityDefExport = {
 export type FlowTestScenarioExport = {
   name: string
   globals?: Record<string, unknown>
-  expected?: { variables?: string[]; stepKeys?: string[] }
+  expected?: { variables?: string[]; stepKeys?: string[]; answers?: Array<{ step: string; value: unknown }>; values?: Record<string, unknown>; mocks?: Record<string, unknown> }
 }
 
 export type ChatbotFlowExport = {
@@ -347,7 +347,12 @@ function parseTestScenarios(raw: unknown): FlowTestScenarioExport[] {
     const stepKeys = Array.isArray(expectedRaw.stepKeys)
       ? expectedRaw.stepKeys.map((v) => String(v).trim()).filter(Boolean)
       : []
-    out.push({ name, globals, expected: { variables, stepKeys } })
+    const answers = Array.isArray(expectedRaw.answers) ? expectedRaw.answers.filter((a): a is {step:string;value:unknown} => isRecord(a) && typeof a.step === 'string' && Object.prototype.hasOwnProperty.call(a,'value')) : []
+    out.push({ name, globals, expected: { variables, stepKeys,
+      ...(answers.length ? {answers} : {}),
+      ...(isRecord(expectedRaw.values) ? {values:expectedRaw.values} : {}),
+      ...(isRecord(expectedRaw.mocks) ? {mocks:expectedRaw.mocks} : {}),
+    } })
   }
   return out
 }

@@ -1,3 +1,4 @@
+import { ExpressionBuilder } from './VisualExpressionBuilder';
 import {
   useEffect,
   useId,
@@ -1023,13 +1024,14 @@ export function TemplateField({
                 </span>
                 <span className="text-[10px] uppercase tracking-wide text-[var(--color-ink-muted)]">
                   {s.group}
-                  {s.detail ? ` ┬╖ ${s.detail}` : ""}
+                  {s.detail ? `  ${s.detail}` : ""}
                 </span>
               </button>
             </li>
           ))}
         </ul>
       ) : null}
+      {!disabled && <ExpressionBuilder suggestions={suggestions ?? []} onInsert={expression => onChange(value + expression)} />}
       {!hideHint ? (
         <p className="mt-1 text-[11px] leading-snug text-[var(--color-ink-muted)]">
           Type <code className="rounded bg-slate-100 px-1">{"{{"}</code> for
@@ -1041,7 +1043,7 @@ export function TemplateField({
           <code className="rounded bg-slate-100 px-1">{`{{vars.count + 1}}`}</code>
           ,{" "}
           <code className="rounded bg-slate-100 px-1">{`{{if(empty(vars.x), 'n/a', vars.x)}}`}</code>
-          . Click a chip to edit it, or use ├ù to remove. Use{" "}
+          . Click a chip to edit it, or use to remove. Use{" "}
           <code className="rounded bg-slate-100 px-1">{`{{embed("https://ΓÇª")}}`}</code>{" "}
           for YouTube, X, Vimeo, Spotify, or TikTok.
         </p>

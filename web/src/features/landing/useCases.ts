@@ -16,6 +16,7 @@ export type UseCaseIndustry = {
   highlights: string[]
   suggestedSlug: string
   sampleFile: string
+  setupFile?: string
 }
 
 export const USE_CASES: UseCaseIndustry[] = [
@@ -33,15 +34,16 @@ export const USE_CASES: UseCaseIndustry[] = [
   },
   {
     id: 'education',
-    title: 'Student application journey',
+    title: 'Student lifecycle: admission to alumni',
     brand: 'Summit University',
     summary:
-      'Apply online, browse programmes, book open days, estimate fees, and check application status.',
+      'Explore twelve connected chapters: admissions, funding, registration, learning, support, careers, graduation and alumni.',
     scenario:
-      'An applicant browses programmes, estimates net fees with a bursary, or checks status with a verification code.',
-    highlights: ['Applications', 'Programme browse', 'Fee estimates', 'Open days', 'Status checks'],
+      'Follow a fictional student through the complete journey or explore a chapter. Demo mode works with sample records; configure HTTP, email and integrations for live services.',
+    highlights: ['12 lifecycle chapters', 'Entities & tables', 'HTTP & email', 'Payments & integrations', 'Automated scenarios'],
     suggestedSlug: 'usecase-education',
-    sampleFile: 'flowforge-usecase-education.json',
+    sampleFile: 'flowforge-usecase-student-lifecycle.json',
+    setupFile: 'student-lifecycle-setup.md',
   },
   {
     id: 'mining',

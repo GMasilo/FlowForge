@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="%BASE_URL%favicon.svg?v=flowforge-1" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -10,7 +10,34 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Sora:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <title>FlowForge</title>
+    <title>FlowForge — Chatbot Builder &amp; Workflow Automation</title>
+    <meta name="application-name" content="FlowForge" />
+    <meta name="description" content="FlowForge is a business application for building chatbots, automating workflows, connecting services, managing structured data and supporting customer conversations." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FlowForge" />
+    <meta property="og:title" content="FlowForge — Chatbot Builder &amp; Workflow Automation" />
+    <meta property="og:description" content="FlowForge is a business application for building chatbots, automating workflows, connecting services, managing structured data and supporting customer conversations." />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="FlowForge — Chatbot Builder &amp; Workflow Automation" />
+    <meta name="twitter:description" content="FlowForge is a business application for building chatbots, automating workflows, connecting services, managing structured data and supporting customer conversations." />
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "FlowForge",
+  "applicationCategory": "BusinessApplication",
+  "applicationSubCategory": "Chatbot development and workflow automation",
+  "operatingSystem": "Web browser",
+  "description": "FlowForge is a business application for building chatbots, automating workflows, connecting services, managing structured data and supporting customer conversations.",
+  "featureList": [
+    "Visual chatbot flow designer",
+    "Workflow automation and service integrations",
+    "Structured data management",
+    "Conversation analytics",
+    "Human support handoff"
+  ]
+}
+    </script>
     <script>
       ;(function () {
         try {
@@ -28,6 +55,11 @@
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>FlowForge — Chatbot Builder &amp; Workflow Automation</h1>
+      <p>Build chatbots, automate business workflows, connect services and manage customer conversations. JavaScript is required to use the application.</p>
+      <p><a href="%BASE_URL%about.html">About FlowForge</a></p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

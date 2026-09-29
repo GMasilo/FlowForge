@@ -1,3 +1,4 @@
+import { replayWebhookDelivery } from '@/shared/lib/flowforgeApi'
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -79,6 +80,11 @@ export function WebhooksPage({ chatbotId }: { chatbotId?: string }) {
     },
   })
 
+  const replay = useMutation({
+    mutationFn: replayWebhookDelivery,
+    onSuccess: async (result) => { setError(result.ok ? null : result.error ?? 'Replay failed'); await qc.invalidateQueries({ queryKey: ['webhook-deliveries', instance.id] }) },
+    onError: (e: Error) => setError(e.message),
+  })
   const create = useMutation({
     mutationFn: async () => {
       const targetUrl = destination.destination === 'slack' && destination.slackMode === 'bot' ? 'https://slack.com/api/chat.postMessage' : url.trim()
@@ -167,6 +173,7 @@ export function WebhooksPage({ chatbotId }: { chatbotId?: string }) {
         }
       />
 
+      {error && !open ? <FieldError>{error}</FieldError> : null}
       <p className="text-sm text-[var(--color-ink-muted)]">Enter your receiving endpoint URL. FlowForge sends signed JSON POST requests when selected events occur. {chatbotId ? 'These subscriptions apply only to this chatbot; organisation subscriptions also continue to receive events.' : 'These subscriptions apply to all chatbots in the organisation.'}</p>
       {hooks.error || deliveries.error || toggleEnabled.error || remove.error ? <FieldError>{(hooks.error || deliveries.error || toggleEnabled.error || remove.error)?.message}</FieldError> : null}
       {open ? (
@@ -312,7 +319,7 @@ export function WebhooksPage({ chatbotId }: { chatbotId?: string }) {
                         {d.status_code != null ? ` · ${d.status_code}` : ''}
                       </Badge>
                     </td>
-                    <td className="max-w-xs truncate px-4 py-2 text-rose-600">{d.error || '—'}</td>
+                    <td className="max-w-xs truncate px-4 py-2 text-rose-600">{d.error || '—'}{!d.ok && [401,403,404,422,429].includes(d.status_code ?? 0) ? <Button size="sm" variant="ghost" disabled={replay.isPending} onClick={() => { if (window.confirm('Replay this rejected delivery using the current destination settings? This sends a real request. Each delivery can be replayed once.')) replay.mutate(d.id) }}>Replay</Button> : null}</td>
                   </tr>
                 ))}
               </tbody>

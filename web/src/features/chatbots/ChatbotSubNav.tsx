@@ -22,6 +22,7 @@ const tabs = [
   { end: false, suffix: '/test', label: 'Test', icon: Radio },
   { end: false, suffix: '/templates', label: 'Templates', icon: LayoutTemplate },
   { end: false, suffix: '/data', label: 'Data', icon: Database },
+  { end: false, suffix: '/operations', label: 'Operations', icon: Settings2 },
   { end: false, suffix: '/webhooks', label: 'Webhooks', icon: Webhook },
 ] as const
 

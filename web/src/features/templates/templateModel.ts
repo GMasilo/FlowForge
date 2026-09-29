@@ -1,3 +1,4 @@
+import { styleBuiltInDocument } from './builtInDocumentStyles'
 import { parseDocumentBlocks } from '@/features/templates/documentLayout'
 import { parsePaymentTemplateContent, type PaymentTemplateContent } from './paymentTemplate'
 export type { PaymentTemplateContent } from './paymentTemplate'
@@ -185,6 +186,8 @@ export type DocumentField = {
 
 /** Column mapping for multi-row tables filled from an array variable. */
 export type DocumentTableColumn = {
+  /** Append a total for this numeric column (rounded to two decimal places). */
+  total?: boolean
   /** Property on each row object (e.g. name) or 0-based index for array rows. */
   key: string
   label: string
@@ -920,7 +923,7 @@ export function inputSuggestionsFromTemplate(inputs: TemplateInput[]): Array<{ i
     .map((input) => ({
       insert: `{{inputs.${input.key}}}`,
       label: input.label || input.key,
-      hint: `${input.type}${input.required ? ' ┬╖ required' : ''}`,
+      hint: `${input.type}${input.required ? '  required' : ''}`,
     }))
 }
 
@@ -1061,6 +1064,7 @@ function parseDocumentTableColumns(raw: unknown): DocumentTableColumn[] {
       return {
         key: str(row.key),
         label: str(row.label) || str(row.key),
+        total: row.total === true,
       } satisfies DocumentTableColumn
     })
     .filter((col) => col.key.trim() || col.label.trim())
@@ -1451,6 +1455,12 @@ export function emptyWebhookContent(): WebhookContent {
 }
 
 export function starterTemplateContent(kind: TemplateKind): TemplateContent {
+  const content = baseStarterTemplateContent(kind)
+  return ['agreement', 'certificate', 'checklist'].includes(kind)
+    ? styleBuiltInDocument(kind, content as DocumentContent) : content
+}
+
+function baseStarterTemplateContent(kind: TemplateKind): TemplateContent {
   switch (kind) {
     case 'payment': return parsePaymentTemplateContent({ paymentAmount: '{{vars.cart.total}}', currencyCode: 'ZAR', paymentItemName: 'Order payment' })
     case 'email':
@@ -1624,7 +1634,7 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
           'Please review this agreement carefully. By signing, you acknowledge the terms below and confirm your identity.',
         body: [
           '1. Parties',
-          'This agreement is between {{inputs.company_name}} (ΓÇ£ProviderΓÇ¥) and {{inputs.signer_name}} (ΓÇ£SignerΓÇ¥), email {{inputs.signer_email}}.',
+          'This agreement is between {{inputs.company_name}} (Provider) and {{inputs.signer_name}} (Signer), email {{inputs.signer_email}}.',
           '',
           '2. Scope',
           '{{inputs.scope}}',
@@ -1635,7 +1645,7 @@ export function starterTemplateContent(kind: TemplateKind): TemplateContent {
           '4. Effective date',
           'This agreement takes effect on the date signed below.',
         ].join('\n'),
-        footer: 'Electronically signed via FlowForge ┬╖ Keep a copy for your records.',
+        footer: 'Electronically signed via FlowForge  Keep a copy for your records.',
         fields: [
           { label: 'Provider / company', value: '{{inputs.company_name}}', as: 'text' },
           { label: 'Signer name', value: '{{inputs.signer_name}}', as: 'text' },
@@ -2525,7 +2535,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       const c = content as FaqContent
       const items = c.items
         .filter((i) => i.question.trim() || i.answer.trim())
-        .map((i) => `ΓÇó ${i.question.trim()}\n  ${i.answer.trim()}`)
+        .map((i) => ` ${i.question.trim()}\n  ${i.answer.trim()}`)
       return [c.intro.trim(), ...items].filter(Boolean).join('\n\n')
     }
     case 'cart': {
@@ -2546,7 +2556,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
           const price = formatTemplateMoney(p.price, c.currency)
           const sku = p.sku.trim() ? ` (${p.sku.trim()})` : ''
           const desc = p.description.trim() ? `  ${p.description.trim()}` : ''
-          return `ΓÇó ${p.name.trim()}${sku}: ${price}${desc}`
+          return ` ${p.name.trim()}${sku}: ${price}${desc}`
         })
         blocks.push([cat.name.trim(), ...lines].filter(Boolean).join('\n'))
       }
@@ -2555,8 +2565,8 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
         .filter((f) => f.name.trim() && f.amount > 0)
         .map((f) =>
           f.kind === 'percent'
-            ? `ΓÇó ${f.name.trim()}: ${f.amount}%`
-            : `ΓÇó ${f.name.trim()}: ${formatTemplateMoney(f.amount, c.currency)}`,
+            ? ` ${f.name.trim()}: ${f.amount}%`
+            : ` ${f.name.trim()}: ${formatTemplateMoney(f.amount, c.currency)}`,
         )
       if (feeLines.length) blocks.push(['Fees', ...feeLines].join('\n'))
       return blocks.filter(Boolean).join('\n\n')
@@ -2567,7 +2577,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
         .filter((i) => i.label.trim())
         .map((i) => {
           const desc = i.description.trim() ? `  ${i.description.trim()}` : ''
-          return `ΓÇó ${i.label.trim()}${desc}`
+          return ` ${i.label.trim()}${desc}`
         })
       return [c.title.trim(), ...lines].filter(Boolean).join('\n')
     }
@@ -2604,15 +2614,15 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       const c = content as SsoContent
       const name = c.providerName.trim() || 'SSO'
       if (c.protocol === 'saml') {
-        return `${name} ┬╖ SAML ┬╖ ${c.samlSsoUrl.trim() || 'no SSO URL'}`
+        return `${name}  SAML  ${c.samlSsoUrl.trim() || 'no SSO URL'}`
       }
-      return `${name} ┬╖ OIDC ┬╖ ${c.oidcIssuer.trim() || c.oidcAuthorizationUrl.trim() || 'no issuer'}`
+      return `${name}  OIDC  ${c.oidcIssuer.trim() || c.oidcAuthorizationUrl.trim() || 'no issuer'}`
     }
     case 'appointment': {
       const c = content as AppointmentContent
       const services = c.services
         .filter((s) => s.name.trim())
-        .map((s) => `ΓÇó ${s.name.trim()} (${s.durationMinutes}min)${s.description.trim() ? `  ${s.description.trim()}` : ''}`)
+        .map((s) => ` ${s.name.trim()} (${s.durationMinutes}min)${s.description.trim() ? `  ${s.description.trim()}` : ''}`)
       return [c.title.trim(), c.intro.trim(), ...services, c.note.trim()].filter(Boolean).join('\n')
     }
     case 'location': {
@@ -2621,7 +2631,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
         .filter((l) => l.name.trim() || l.address.trim())
         .map((l) => {
           const parts = [l.name.trim(), l.address.trim(), l.city.trim(), l.phone.trim(), l.email.trim(), l.hoursNote.trim()].filter(Boolean)
-          return `ΓÇó ${parts.join(' ┬╖ ')}`
+          return ` ${parts.join('  ')}`
         })
       return [c.intro.trim(), ...locs].filter(Boolean).join('\n')
     }
@@ -2633,7 +2643,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
           const coord =
             p.lat.trim() && p.lng.trim() ? `${p.lat.trim()}, ${p.lng.trim()}` : ''
           const parts = [p.label.trim(), p.description.trim(), coord].filter(Boolean)
-          return `ΓÇó ${parts.join(' ┬╖ ')}`
+          return ` ${parts.join('  ')}`
         })
       return [c.title.trim(), c.intro.trim(), ...pins].filter(Boolean).join('\n')
     }
@@ -2698,7 +2708,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       const c = content as TeamContent
       const members = c.members
         .filter((m) => m.name.trim())
-        .map((m) => `ΓÇó ${m.name.trim()} (${m.role.trim()})${m.skills.trim() ? `  ${m.skills.trim()}` : ''}`)
+        .map((m) => ` ${m.name.trim()} (${m.role.trim()})${m.skills.trim() ? `  ${m.skills.trim()}` : ''}`)
       return [c.intro.trim(), ...members].filter(Boolean).join('\n')
     }
     case 'pricing': {
@@ -2708,7 +2718,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
         .map((p) => {
           const price = formatTemplateMoney(p.price, c.currency)
           const features = p.features.filter(Boolean).join(', ')
-          return `ΓÇó ${p.name.trim()}: ${price}/${p.period}${features ? `  ${features}` : ''}`
+          return ` ${p.name.trim()}: ${price}/${p.period}${features ? `  ${features}` : ''}`
         })
       return [c.intro.trim(), ...plans].filter(Boolean).join('\n')
     }
@@ -2716,7 +2726,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       const c = content as SurveyContent
       const questions = c.questions
         .filter((q) => q.prompt.trim())
-        .map((q) => `ΓÇó [${q.kind}] ${q.prompt.trim()}`)
+        .map((q) => ` [${q.kind}] ${q.prompt.trim()}`)
       return [c.intro.trim(), ...questions].filter(Boolean).join('\n')
     }
     case 'announcement': {
@@ -2764,7 +2774,7 @@ export function renderTemplateText(kind: TemplateKind, content: TemplateContent)
       const c = content as WebhookContent
       const headers = c.headers.filter((h) => h.key.trim()).map((h) => `${h.key}: ${h.value}`).join(', ')
       return [
-        `${c.name.trim()} ┬╖ ${c.method} ${c.contentType}`,
+        `${c.name.trim()}  ${c.method} ${c.contentType}`,
         c.description.trim(),
         headers ? `Headers: ${headers}` : '',
         c.bodyJson.trim(),
@@ -3035,7 +3045,7 @@ export function renderReceiptFromCart(
   if (cart?.itemCount) {
     lines.push('')
     for (const item of cart.items) {
-      lines.push(`${item.name} ├ù ${item.qty}  ${formatTemplateMoney(item.lineTotal, cart.currency)}`)
+      lines.push(`${item.name} ${item.qty}  ${formatTemplateMoney(item.lineTotal, cart.currency)}`)
     }
     if (cart.fees?.length) {
       lines.push(`Subtotal ${formatTemplateMoney(cart.subtotal, cart.currency)}`)
@@ -3069,12 +3079,12 @@ export function shopCartDisplayText(cart: ShopCartValue): string {
   if (!cart.itemCount) return 'Empty cart'
   const payable = cart.total ?? cart.subtotal
   const formatted = formatTemplateMoney(payable, cart.currency)
-  const names = cart.items.map((line) => `${line.name} ├ù ${line.qty}`).join(', ')
+  const names = cart.items.map((line) => `${line.name} ${line.qty}`).join(', ')
   const feeNote =
     cart.fees?.length
       ? ` incl. ${cart.fees.map((f) => f.name).join(', ')}`
       : ''
-  return `${cart.itemCount} item${cart.itemCount === 1 ? '' : 's'} ┬╖ ${formatted}${feeNote}${names ? ` (${names})` : ''}`
+  return `${cart.itemCount} item${cart.itemCount === 1 ? '' : 's'}  ${formatted}${feeNote}${names ? ` (${names})` : ''}`
 }
 
 export function collectStoreImageFilenames(

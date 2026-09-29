@@ -222,7 +222,7 @@ export function ChatbotDataPage() {
       {chatbotId ? <EntitiesPanel chatbotId={chatbotId} /> : null}
       {chatbotId ? <ChatbotConnectionsPanel chatbotId={chatbotId} /> : null}
       {chatbotId ? <ChatbotIntegrationsPanel chatbotId={chatbotId} /> : null}
-      {chatbotId ? <TestScenariosPanel chatbotId={chatbotId} /> : null}
+      {chatbotId ? <TestScenariosPanel chatbotId={chatbotId} nodes={mapNodes(bundle.data?.nodes ?? [])} globals={Object.fromEntries((bundle.data?.globals ?? []).map(g=>[g.key,g.default_value]))} flowLoading={bundle.isPending} flowError={bundle.error?.message} /> : null}
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1">

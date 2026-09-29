@@ -161,6 +161,15 @@ export function UseCasesPage() {
                         <Download className="h-3.5 w-3.5" aria-hidden />
                         Download JSON
                       </a>
+                      {industry.setupFile && (
+                        <a
+                          href={sampleHref(industry.setupFile)}
+                          download={industry.setupFile}
+                          className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+                        >
+                          Setup guide
+                        </a>
+                      )}
                     </div>
                   </Card>
                 </li>

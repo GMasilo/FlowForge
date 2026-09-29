@@ -1,7 +1,8 @@
+import { FlowForgeMark } from '@/shared/ui/flowforge-mark'
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom'
-import { ChevronDown, CircleHelp, LogOut, Shield, Sparkles } from 'lucide-react'
+import { ChevronDown, CircleHelp, LogOut, Shield } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { Button } from '@/shared/ui/button'
 import { Badge } from '@/shared/ui/badge'
@@ -29,7 +30,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-[var(--color-border)]/40 bg-[var(--color-surface)]/75 shadow-[0_8px_30px_-18px_rgb(15_23_42_/_0.35)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[var(--color-surface)]/65">
         <div className="flex w-full items-center gap-3 px-4 py-2.5 sm:gap-4 sm:px-6">
           <div className="flex min-w-0 shrink items-center gap-2 sm:gap-2.5">
-            <Link to={homeTo} className="group flex shrink-0 items-center gap-2.5">
+            <Link to={homeTo} aria-label={workspaceTitle} className="group flex shrink-0 items-center gap-2.5">
               {logoUrl ? (
                 <img
                   src={logoUrl}
@@ -37,9 +38,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
                   className="h-9 w-9 rounded-xl object-contain ring-1 ring-[var(--color-border)]/60 transition-transform duration-300 ease-[var(--ease-spring)] group-hover:scale-105"
                 />
               ) : (
-                <span className="ff-brand-mark grid h-9 w-9 place-items-center rounded-xl text-white transition-transform duration-300 ease-[var(--ease-spring)] group-hover:scale-105 group-hover:rotate-3">
-                  <Sparkles className="h-4 w-4" />
-                </span>
+                <FlowForgeMark className="h-9 w-9 transition-transform duration-300 group-hover:scale-105" />
               )}
               <span className="hidden font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight sm:inline">
                 <span className="ff-gradient-text">{workspaceTitle}</span>

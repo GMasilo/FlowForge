@@ -160,8 +160,25 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
 
   const items = useMemo(() => buildLinearItems(nodes, edges), [nodes, edges])
   const tree = useMemo(() => toScopeTree(items), [items])
+  // Each nested lane consumes padding, borders and a rail. Reserve that space
+  // rather than letting flexbox progressively crush the innermost step cards.
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const linearWidth = useMemo(() => {
+    let depth = 0
+    const pending = [...tree]
+    while (pending.length) {
+      const scope = pending.pop()!
+      depth = Math.max(depth, scope.item.depth)
+      if (scope.kind === 'step') continue
+      pending.push(...scope.then)
+      if (collapsed[scope.item.node.id] ?? true) continue
+      if (scope.kind === 'condition') pending.push(...scope.yes, ...scope.no)
+      else if (scope.kind === 'switch') pending.push(...scope.default, ...scope.cases.flatMap(lane => lane.nodes))
+      else pending.push(...scope.body)
+    }
+    return Math.max(672, 400 + depth * 64)
+  }, [tree, collapsed])
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
@@ -208,7 +225,7 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
   }, [readOnly, selectedNodeId, clipboard, copyNode, pasteAfter, duplicateNode])
 
   function toggleCollapsed(id: string) {
-    setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }))
+    setCollapsed((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }))
   }
 
   function rewireAfterAdd(rewire: () => void) {
@@ -390,7 +407,7 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
                 <ConditionBlock
                   node={node}
                   readOnly={readOnly}
-                  collapsed={!!collapsed[id]}
+                  collapsed={collapsed[id] ?? true}
                   onToggle={() => toggleCollapsed(id)}
                   selectedNodeId={selectedNodeId}
                   issueCounts={issueCounts}
@@ -409,7 +426,7 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
                 <SwitchBlock
                   node={node}
                   readOnly={readOnly}
-                  collapsed={!!collapsed[id]}
+                  collapsed={collapsed[id] ?? true}
                   onToggle={() => toggleCollapsed(id)}
                   selectedNodeId={selectedNodeId}
                   issueCounts={issueCounts}
@@ -428,7 +445,7 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
                 <LoopBlock
                   node={node}
                   readOnly={readOnly}
-                  collapsed={!!collapsed[id]}
+                  collapsed={collapsed[id] ?? true}
                   onToggle={() => toggleCollapsed(id)}
                   selectedNodeId={selectedNodeId}
                   issueCounts={issueCounts}
@@ -490,7 +507,8 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
   }
 
   return (
-    <div className="ff-stagger mx-auto flex w-full max-w-2xl flex-col items-stretch gap-0 px-1">
+    <div className="w-full min-w-0 overflow-x-auto pb-4" role="region" aria-label="Linear flow, scroll horizontally to explore nested branches" tabIndex={0}>
+    <div className="ff-stagger mx-auto flex flex-col items-stretch gap-0 px-1" style={{ width: linearWidth, minWidth: '100%' }}>
       {tree.length === 0 ? (
         <p className="text-sm text-[var(--color-ink-muted)]">No steps yet.</p>
       ) : (
@@ -501,6 +519,7 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
           onAddEmpty: (type, seed) => addNode(type, null, seed),
         })
       )}
+    </div>
     </div>
   )
 }

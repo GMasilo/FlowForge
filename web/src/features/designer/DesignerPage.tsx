@@ -1,10 +1,15 @@
+import { SubflowsPanel } from '@/features/operations/SubflowsPanel'
+import { expandStoredSubflows } from '@/features/operations/subflowApi'
+import { operationsRpc } from '@/features/operations/operationsApi'
+import { ReleaseComparison } from '@/features/operations/ReleaseComparison'
+import { ReleaseChecksPanel } from './preview/ReleaseChecksPanel'
 import { DesignIntelligencePanel } from '@/features/intelligence/DesignIntelligencePanel'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
-import { Cloud, CloudOff, History, ListTree, Loader2, Minimize2, Network, Redo2, Rocket, Save, Sparkles, Undo2, X } from 'lucide-react'
+import { Cloud, CloudOff, History, ListTree, Loader2, Maximize2, Minimize2, Network, Redo2, Rocket, Save, Sparkles, Undo2, X } from 'lucide-react'
 import { useRequiredInstance } from '@/features/instances/InstanceContext'
 import {
   canEdit,
@@ -148,7 +153,7 @@ export function DesignerPage() {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
   const [hydratedFor, setHydratedFor] = useState<string | null>(null)
   const hydrated = !!chatbotId && hydratedFor === chatbotId
-  const [canvasFullscreen, setCanvasFullscreen] = useState(false)
+  const [designerFullscreen, setDesignerFullscreen] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const now = useRelativeClock()
   const autosaveTimer = useRef<number | null>(null)
@@ -443,8 +448,8 @@ export function DesignerPage() {
   }, [flowId, instance, mergeServerDraft])
 
   useEffect(() => {
-    if (viewMode !== 'canvas') setCanvasFullscreen(false)
-  }, [viewMode])
+    setDesignerFullscreen(false)
+  }, [viewMode, chatbotId])
 
   useEffect(() => {
     if (!editable) return
@@ -468,9 +473,9 @@ export function DesignerPage() {
   }, [editable, undo, redo])
 
   useEffect(() => {
-    if (!canvasFullscreen) return
+    if (!designerFullscreen) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setCanvasFullscreen(false)
+      if (e.key === 'Escape') setDesignerFullscreen(false)
     }
     document.addEventListener('keydown', onKey)
     const prevOverflow = document.body.style.overflow
@@ -479,10 +484,10 @@ export function DesignerPage() {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prevOverflow
     }
-  }, [canvasFullscreen])
+  }, [designerFullscreen])
 
-  const toggleCanvasFullscreen = useCallback(() => {
-    setCanvasFullscreen((v) => !v)
+  const toggleDesignerFullscreen = useCallback(() => {
+    setDesignerFullscreen((v) => !v)
   }, [])
 
   const persistFlow = useCallback(async () => {
@@ -603,7 +608,7 @@ export function DesignerPage() {
     },
   })
 
-  const publishFlow = useCallback(async () => {
+  const publishFlow = useCallback(async (reviewOnly = false) => {
     const state = useDesignerStore.getState()
     if (!state.flowId || !chatbotId) throw new Error('Flow not loaded')
 
@@ -630,9 +635,10 @@ export function DesignerPage() {
     const nextVersion = flowRow.published_at ? (flowRow.version ?? 0) + 1 : 1
     const publishedAt = new Date().toISOString()
     const templateRows = chatbotId ? await fetchChatbotTemplates(chatbotId) : []
+    const expanded = await expandStoredSubflows(instance.id, state.nodes, state.edges)
     const graph = buildPublishedGraph({
-      nodes: state.nodes,
-      edges: state.edges,
+      nodes: expanded.nodes,
+      edges: expanded.edges,
       globals: (globals ?? []).map((g) => ({
         key: g.key,
         value_type: g.value_type,
@@ -644,6 +650,7 @@ export function DesignerPage() {
       templates: publishedTemplatesFromRows(templateRows),
     })
 
+    if (reviewOnly) { await operationsRpc('request_release_review', { p_flow_id: state.flowId, p_graph: publishedGraphAsJson(graph) }); return { publishedAt: new Date(publishedAt), version: nextVersion } }
     const { data: published, error: publishError } = await supabase.rpc('publish_flow_version', {
       p_flow_id: state.flowId,
       p_published_graph: publishedGraphAsJson(graph),
@@ -673,6 +680,12 @@ export function DesignerPage() {
     }
   }, [chatbotId, persistFlow, markClean, instance.id])
 
+  const reviewRelease = useMutation({ mutationFn: () => publishFlow(true), onSuccess: () => qc.invalidateQueries({ queryKey: ['release-reviews', chatbotId] }) })
+
+  const reviewSnapshot=useMutation({
+    mutationFn:async({flowId,graph}:{flowId:string;graph:Json})=>operationsRpc('request_release_review',{p_flow_id:flowId,p_graph:graph}),
+    onSuccess:()=>qc.invalidateQueries({queryKey:['release-reviews',chatbotId]}),
+  })
   const rollback = useMutation({
     mutationFn: async (version: number) => {
       const state = useDesignerStore.getState()
@@ -722,7 +735,7 @@ export function DesignerPage() {
   })
 
   const publish = useMutation({
-    mutationFn: publishFlow,
+    mutationFn: () => publishFlow(),
     onSuccess: async (result) => {
       setSaveError(null)
       setLastSavedAt(result.publishedAt)
@@ -749,9 +762,10 @@ export function DesignerPage() {
       const templateRows = await fetchChatbotTemplates(chatbotId)
       const nextStaging = (flowBundle.data?.flow.staging_version ?? 0) + 1
       const publishedAt = new Date().toISOString()
+      const expanded = await expandStoredSubflows(instance.id, state.nodes, state.edges)
       const graph = buildPublishedGraph({
-        nodes: state.nodes,
-        edges: state.edges,
+        nodes: expanded.nodes,
+        edges: expanded.edges,
         globals: (globals ?? []).map((g) => ({
           key: g.key,
           value_type: g.value_type,
@@ -945,7 +959,7 @@ export function DesignerPage() {
       subtitle={selected ? `${selected.label} · ${nodeTypeLabel(selected.type)}` : 'Select a step to configure'}
       defaultOpen
       widthClass="lg:w-80"
-      className={canvasFullscreen ? 'h-full max-h-full' : undefined}
+      className={designerFullscreen ? 'h-full max-h-full' : undefined}
     >
       {selected ? (
         <StepInspector
@@ -977,8 +991,9 @@ export function DesignerPage() {
   const canvasView = (
     <CanvasFlowView
       readOnly={!editable}
-      fullscreen={canvasFullscreen}
-      onToggleFullscreen={toggleCanvasFullscreen}
+      fullscreen={designerFullscreen}
+      onToggleFullscreen={toggleDesignerFullscreen}
+      title={chatbot.data?.name ?? 'Flow'}
     />
   )
 
@@ -1022,7 +1037,7 @@ export function DesignerPage() {
       className="space-y-4"
       style={{ '--ff-designer-aside-top': `${asideTopPx}px` } as CSSProperties}
     >
-      <DesignIntelligencePanel editable={editable} />
+
       <div
         ref={toolbarRef}
         className="sticky top-14 z-[15] flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/60 bg-white/90 p-4 shadow-[var(--shadow-soft)] backdrop-blur-xl"
@@ -1139,6 +1154,11 @@ export function DesignerPage() {
           </Button>
           {editable ? (
             <>
+              <Button size="sm" variant="secondary" disabled={reviewRelease.isPending} onClick={() => reviewRelease.mutate()}>Request release approval</Button>
+              {reviewRelease.error ? <span role="alert">{reviewRelease.error.message}</span> : null}
+              {reviewSnapshot.error ? <span role="alert">{reviewSnapshot.error.message}</span> : null}
+              {reviewSnapshot.isSuccess ? <span role="status">Snapshot review requested — see Operations.</span> : null}
+              {reviewRelease.isSuccess ? <span role="status">Review requested — see Operations.</span> : null}
               <Button size="sm" disabled={save.isPending || !dirty} onClick={() => save.mutate()}>
                 <Save className="h-4 w-4" />
                 {save.isPending ? 'Saving…' : dirty ? 'Save now' : 'Saved'}
@@ -1187,6 +1207,7 @@ export function DesignerPage() {
                   >
                     {publishStaging.isPending ? 'Staging…' : 'Publish staging'}
                   </Button>
+                  {stagingStatus?.kind === 'live' && flowBundle.data?.flow.staging_published_graph ? <Button size="sm" variant="ghost" disabled={reviewSnapshot.isPending} onClick={()=>reviewSnapshot.mutate({flowId:flowBundle.data!.flow.id,graph:flowBundle.data!.flow.staging_published_graph!})}>Request staging approval</Button> : null}
                   {stagingStatus?.kind === 'live' ? (
                     <Button
                       size="sm"
@@ -1220,6 +1241,20 @@ export function DesignerPage() {
         </div>
       </div>
 
+      <details key={`design-tools-${chatbotId}`} className={cn('rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3', designerFullscreen && 'hidden')}>
+        <summary className="cursor-pointer rounded-lg text-sm font-semibold text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--color-accent)]">
+          Design tools and checks
+          <span className="ml-2 text-xs font-normal text-[var(--color-ink-muted)]">Analysis, subflows and release testing</span>
+          {errorCount > 0 ? <span className="ml-2 text-xs text-red-600">{errorCount} validation {errorCount === 1 ? 'error' : 'errors'}</span> : null}
+        </summary>
+        <div className="mt-3 space-y-3">
+      <DesignIntelligencePanel editable={editable} />
+      <SubflowsPanel editable={editable} />
+      <ReleaseComparison nodes={nodes} edges={edges} production={flowBundle.data?.flow.published_graph} staging={flowBundle.data?.flow.staging_published_graph} selectNode={selectNode} />
+      {chatbotId ? <ReleaseChecksPanel key={chatbotId} chatbotId={chatbotId} nodes={nodes} edges={edges} issues={issues} selectNode={selectNode} /> : null}
+        </div>
+      </details>
+
       <div className="space-y-4 ff-page-enter">
       {saveError ? <FieldError>{saveError}</FieldError> : null}
 
@@ -1249,7 +1284,7 @@ export function DesignerPage() {
                     ) : null}
                   </div>
                   {editable ? (
-                    <Button
+                    <><Button size="sm" variant="ghost" disabled={reviewSnapshot.isPending} onClick={()=>reviewSnapshot.mutate({flowId:row.flow_id,graph:row.published_graph})}>Request rollback approval</Button><Button
                       size="sm"
                       variant="secondary"
                       disabled={rollback.isPending}
@@ -1262,7 +1297,7 @@ export function DesignerPage() {
                       }}
                     >
                       Rollback
-                    </Button>
+                    </Button></>
                   ) : null}
                 </li>
               ))}
@@ -1273,7 +1308,7 @@ export function DesignerPage() {
         </Card>
       ) : null}
 
-      {!canvasFullscreen ? canvasPalette : null}
+      {!designerFullscreen ? canvasPalette : null}
 
       <div
         className={cn(
@@ -1290,9 +1325,17 @@ export function DesignerPage() {
           chatbot={chatbot.data ? { id: chatbot.data.id, name: chatbot.data.name } : null}
         />
         <div className="min-w-0">
-          {viewMode === 'linear' ? <LinearFlowView readOnly={!editable} /> : !canvasFullscreen ? canvasView : null}
+          {!designerFullscreen && (viewMode === 'linear' ? <>
+            <div className="mb-3 flex justify-end">
+              <Button size="sm" variant="secondary" onClick={toggleDesignerFullscreen}>
+                <Maximize2 className="h-4 w-4" />
+                Fullscreen linear view
+              </Button>
+            </div>
+            <LinearFlowView key={chatbotId} readOnly={!editable} />
+          </> : canvasView)}
         </div>
-        {!canvasFullscreen ? inspectorCard : null}
+        {!designerFullscreen ? inspectorCard : null}
         {instanceFeatureEnabled(instance, 'collaborative_editing') && flowBundle.data?.flow.id ? (
           <DesignerCollabPanel
             flowId={flowBundle.data.flow.id}
@@ -1305,17 +1348,17 @@ export function DesignerPage() {
         ) : null}
       </div>
 
-      {canvasFullscreen && viewMode === 'canvas'
+      {designerFullscreen
         ? createPortal(
             <div className="fixed inset-0 z-[80] flex flex-col bg-slate-100/95 backdrop-blur-[2px]">
               <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 shadow-sm">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-slate-800">Canvas · {chatbot.data?.name ?? 'Flow'}</div>
+                  <div className="text-sm font-semibold text-slate-800">{viewMode === 'canvas' ? 'Canvas' : 'Linear view'} · {chatbot.data?.name ?? 'Flow'}</div>
                   <div className="text-[11px] text-slate-500">Wider editing view — press Esc to exit</div>
                 </div>
                 {canvasPalette}
                 {editable ? <DesignerHistoryButtons /> : null}
-                <Button size="sm" variant="secondary" onClick={() => setCanvasFullscreen(false)}>
+                <Button size="sm" variant="secondary" onClick={() => setDesignerFullscreen(false)}>
                   <Minimize2 className="h-4 w-4" />
                   Exit fullscreen
                 </Button>
@@ -1323,13 +1366,13 @@ export function DesignerPage() {
                   type="button"
                   aria-label="Close fullscreen"
                   className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                  onClick={() => setCanvasFullscreen(false)}
+                  onClick={() => setDesignerFullscreen(false)}
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
               <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-                <div className="min-h-0 min-w-0">{canvasView}</div>
+                <div className={cn("min-h-0 min-w-0", viewMode === 'linear' && "overflow-auto rounded-xl bg-[var(--color-surface)] p-3")} >{viewMode === 'linear' ? <LinearFlowView key={chatbotId} readOnly={!editable} /> : canvasView}</div>
                 <div className="min-h-0 overflow-hidden">{inspectorCard}</div>
               </div>
             </div>,

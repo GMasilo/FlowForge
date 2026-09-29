@@ -384,3 +384,10 @@ export function snapBlockResize(
   }
   return { w, h, guides }
 }
+
+/** Insert an editable page without changing the order of later pages. */
+export function insertDocumentPage(blocks: DocumentBlock[], afterPage: number, orientation: DocumentOrientation): DocumentBlock[] {
+  const nextPage = afterPage + 1
+  const placeholder = { ...emptyDocumentBlock('text', 8, orientation), page: nextPage, text: '' }
+  return [...blocks.map(block => ({ ...block, page: (block.page || 1) > afterPage ? (block.page || 1) + 1 : (block.page || 1) })), placeholder]
+}

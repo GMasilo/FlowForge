@@ -1404,6 +1404,7 @@ export function setVariableConfigFromAssignments(
 }
 
 export const OPERATION_OPTIONS = [
+  { value: 'subflow', label: 'Call reusable subflow', hint: 'Configure inputs and outputs in Reusable subflows above the canvas.', needsRight: false },
   {
     value: 'concat',
     label: 'Concatenate',
@@ -1494,8 +1495,12 @@ export const OPERATION_OPTIONS = [
 export type OperationKind = (typeof OPERATION_OPTIONS)[number]['value']
 
 export const operationConfigSchema = z.object({
+  subflowId: z.string().optional(),
+  subflowInputs: z.record(z.string(),z.string()).optional(),
+  subflowOutputs: z.record(z.string(),z.string()).optional(),
   operation: z
     .enum([
+      'subflow',
       'concat',
       'add',
       'subtract',
@@ -1859,7 +1864,9 @@ export function getStepOutputVariables(node: DesignerNode): string[] {
   const cfg = node.config
   const fromOnRun = onRunAssignedVariableKeys(cfg)
   let base: string[] = []
-  if (node.type === 'button') {
+  if (node.type === 'operation' && cfg.operation === 'subflow') {
+    base = Object.values((cfg.subflowOutputs ?? {}) as Record<string,string>).filter(Boolean)
+  } else if (node.type === 'button') {
     base = buttonAssignedVariableKeys(cfg)
   } else if (
     node.type === 'question' ||

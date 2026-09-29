@@ -254,23 +254,24 @@ export function AgentConsolePage() {
     <div className="space-y-6">
       <PageHeader
         title="Agent console"
-        description="Queues, routing skills, and agent concurrency for the live inbox."
+        description="Choose who helps customers when your chatbot hands over a conversation."
         help={PAGE_HELP.agentConsole}
       />
 
       {error ? <FieldError>{error}</FieldError> : null}
 
       <Card>
-        <SectionHeading title="Queues" help={SECTION_HELP.queues} size="lg" className="mt-0" />
+        <SectionHeading title="1. Set up support groups" help={SECTION_HELP.queues} size="lg" className="mt-0" />
         <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-          Handoff steps can target a queue. Routing rules match agent skills for auto-assign when
-          agents are online and under their concurrency limit.
+          A support group (called a queue in the chatbot designer) collects conversations about a topic, such as admissions or billing. Choose this group in a Handoff step.
         </p>
 
         {editable ? (
+          <details className="mt-4 rounded-lg border border-[var(--color-border)] p-4">
+          <summary className="cursor-pointer font-medium">Create a support group</summary>
           <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={onCreateQueue}>
             <div>
-              <Label>Name</Label>
+              <Label>Group name</Label>
               <Input
                 value={queueForm.name}
                 onChange={(e) => setQueueForm((f) => ({ ...f, name: e.target.value }))}
@@ -278,7 +279,7 @@ export function AgentConsolePage() {
               />
             </div>
             <div>
-              <Label>Required skills (comma-separated)</Label>
+              <Label>Topics agents should know (optional)</Label>
               <Input
                 value={queueForm.skills}
                 onChange={(e) => setQueueForm((f) => ({ ...f, skills: e.target.value }))}
@@ -293,8 +294,12 @@ export function AgentConsolePage() {
                 onChange={(e) => setQueueForm((f) => ({ ...f, description: e.target.value }))}
               />
             </div>
+            <details className="sm:col-span-2 rounded-lg bg-[var(--color-surface)] p-3">
+              <summary className="cursor-pointer text-sm font-medium">More options: assignment and response targets</summary>
+              <p className="my-3 text-xs text-[var(--color-ink-muted)]">The defaults work for most teams. If you list topics, agents need all of them unless you select the option below. Leave topics blank to allow any available agent.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label>First-response SLA (seconds)</Label>
+              <Label>Target time to first reply (seconds)</Label>
               <Input
                 type="number"
                 min={30}
@@ -303,7 +308,7 @@ export function AgentConsolePage() {
               />
             </div>
             <div>
-              <Label>Resolve SLA (seconds)</Label>
+              <Label>Target time to finish helping (seconds)</Label>
               <Input
                 type="number"
                 min={60}
@@ -319,7 +324,7 @@ export function AgentConsolePage() {
                 checked={queueForm.matchAny}
                 onChange={(e) => setQueueForm((f) => ({ ...f, matchAny: e.target.checked }))}
               />
-              Match any required skill (otherwise all)
+              An agent only needs one of the listed topics
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -327,7 +332,7 @@ export function AgentConsolePage() {
                 checked={queueForm.autoAssign}
                 onChange={(e) => setQueueForm((f) => ({ ...f, autoAssign: e.target.checked }))}
               />
-              Auto-assign when escalating
+              Automatically choose an available agent
             </label>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
               <input
@@ -335,17 +340,21 @@ export function AgentConsolePage() {
                 checked={queueForm.isDefault}
                 onChange={(e) => setQueueForm((f) => ({ ...f, isDefault: e.target.checked }))}
               />
-              Make default queue
+              Use this group when no group is selected
             </label>
+              </div>
+            </details>
             <div className="sm:col-span-2">
               <Button type="submit" size="sm" disabled={createQueue.isPending}>
                 <Plus className="h-3.5 w-3.5" />
-                Add queue
+                Create support group
               </Button>
             </div>
           </form>
+          </details>
         ) : null}
 
+        {!queues.isPending && !queues.data?.length ? <p className="mt-4 text-sm text-[var(--color-ink-muted)]">No support groups yet. Create one above to organise conversations.</p> : null}
         <ul className="mt-6 divide-y divide-[var(--color-border)]">
           {(queues.data ?? []).map((q) => {
             const rules = parseRoutingRules(q.routing_rules)
@@ -357,7 +366,7 @@ export function AgentConsolePage() {
                       {q.name}
                       {q.is_default ? (
                         <span className="ml-2 text-xs font-normal text-[var(--color-ink-muted)]">
-                          default
+                          Default group
                         </span>
                       ) : null}
                     </div>
@@ -365,9 +374,8 @@ export function AgentConsolePage() {
                       <p className="mt-1 text-sm text-[var(--color-ink-muted)]">{q.description}</p>
                     ) : null}
                     <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
-                      SLA first {q.sla_first_response_seconds}s · resolve {q.sla_resolve_seconds}s ·
-                      skills {rules.requiredSkills.length ? rules.requiredSkills.join(', ') : 'any'} ·
-                      auto-assign {rules.autoAssign ? 'on' : 'off'}
+                      {rules.autoAssign ? 'Automatically assigns an available agent' : 'Conversations are assigned manually'}.
+                      {' '}{rules.requiredSkills.length ? `Topics: ${rules.requiredSkills.join(', ')} (${rules.matchAny ? 'any one' : 'all required'}).` : 'Any topic.'}
                     </p>
                   </div>
                   {editable && !q.is_default ? (
@@ -375,6 +383,8 @@ export function AgentConsolePage() {
                       type="button"
                       size="sm"
                       variant="ghost"
+                      aria-label={`Delete ${q.name} support group`}
+                      title={`Delete ${q.name}`}
                       onClick={() => deleteQueue.mutate(q.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -382,7 +392,11 @@ export function AgentConsolePage() {
                   ) : null}
                 </div>
                 {editable ? (
-                  <div className="grid gap-2 sm:grid-cols-3">
+                  <details className="rounded-lg border border-[var(--color-border)] p-3">
+                    <summary className="cursor-pointer text-sm font-medium">Edit group settings</summary>
+                    <p className="my-2 text-xs text-[var(--color-ink-muted)]">Changes save when you leave a field. Reply target: {q.sla_first_response_seconds} seconds. Resolution target: {q.sla_resolve_seconds} seconds.</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <label className="space-y-1 text-sm">Topics (separate with commas)
                     <Input
                       defaultValue={rules.requiredSkills.join(', ')}
                       placeholder="skills"
@@ -402,8 +416,11 @@ export function AgentConsolePage() {
                         })
                       }}
                     />
+                    </label>
+                    <label className="space-y-1 text-sm">Target time to first reply (seconds)
                     <Input
                       type="number"
+                      min={30}
                       defaultValue={q.sla_first_response_seconds}
                       onBlur={(e) => {
                         const n = Number(e.target.value)
@@ -414,6 +431,7 @@ export function AgentConsolePage() {
                         })
                       }}
                     />
+                    </label>
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -427,9 +445,10 @@ export function AgentConsolePage() {
                           })
                         }
                       />
-                      Auto-assign
+                      Automatically choose an agent
                     </label>
                   </div>
+                  </details>
                 ) : null}
               </li>
             )
@@ -438,10 +457,9 @@ export function AgentConsolePage() {
       </Card>
 
       <Card>
-        <SectionHeading title="Agent profiles" help={SECTION_HELP.agentProfiles} size="lg" className="mt-0" />
+        <SectionHeading title="2. Set up your team" help={SECTION_HELP.agentProfiles} size="lg" className="mt-0" />
         <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-          Skills must match queue routing rules for auto-assign. Max concurrent limits claim and
-          assign.
+          Add the topics each person can help with. Use the same spelling and capitalisation as the support group, separated by commas. The conversation limit helps prevent overload.
         </p>
         <ul className="mt-4 divide-y divide-[var(--color-border)]">
           {operators.map((m) => {
@@ -462,7 +480,7 @@ export function AgentConsolePage() {
                   />
                 </div>
                 <div>
-                  <Label>Skills</Label>
+                  <Label>Topics this person can help with</Label>
                   <Input
                     disabled={!editable}
                     defaultValue={skills}
@@ -472,7 +490,7 @@ export function AgentConsolePage() {
                 </div>
                 <div className="flex items-end gap-2">
                   <div className="flex-1">
-                    <Label>Max concurrent</Label>
+                    <Label>Conversations at a time</Label>
                     <Input
                       disabled={!editable}
                       type="number"
@@ -512,7 +530,7 @@ export function AgentConsolePage() {
             )
           })}
           {!operators.length ? (
-            <li className="py-4 text-sm text-[var(--color-ink-muted)]">No operators yet.</li>
+            <li className="py-4 text-sm text-[var(--color-ink-muted)]">No team members yet. Add members to your instance to get started.</li>
           ) : null}
         </ul>
       </Card>

@@ -1,3 +1,4 @@
+import { localizedStepText, SENSITIVE_ANSWER_TYPES } from '@/features/operations/conversationPrivacy'
 import { runtimeResilience } from '@/features/intelligence/runtimeResilience'
 import { resolvePaymentQuestionConfig } from '@/features/templates/paymentTemplate'
 import {
@@ -53,6 +54,8 @@ import type { FlowNodeType } from '@/shared/types/database'
 export type ChatRole = 'bot' | 'user' | 'system' | 'agent'
 
 export interface ChatMessage {
+  sensitive?: boolean
+  nodeKey?: string
   id: string
   role: ChatRole
   text: string
@@ -277,7 +280,7 @@ export function applyOnRunExpressions(
   }
 
   // Keep side-effect results in vars; never render On run output as a chat bubble.
-  void errors
+  if (errors.length) throw new Error(errors.join('; '))
   return { ...state, vars: ctx.vars }
 }
 
@@ -1108,6 +1111,25 @@ export function tickPreview(
   nodes: DesignerNode[],
   edges: DesignerEdge[],
 ): PreviewEngineState {
+  try {
+    return tickPreviewUnchecked(state, nodes, edges)
+  } catch (error) {
+    const node = nodes.find((item) => item.id === state.currentId)
+    const detail = error instanceof Error ? error.message : String(error)
+    return {
+      ...state,
+      currentId: null,
+      phase: { kind: 'finished' },
+      messages: [...state.messages, msg('system', `Step "${node?.key ?? 'unknown'}" failed: ${detail}`)],
+    }
+  }
+}
+
+function tickPreviewUnchecked(
+  state: PreviewEngineState,
+  nodes: DesignerNode[],
+  edges: DesignerEdge[],
+): PreviewEngineState {
   bindCookieScope(state)
   if (
     !state.currentId ||
@@ -1158,7 +1180,7 @@ export function tickPreview(
 
   if (node.type === 'message') {
     const bindings = bindingsOf(node.config)
-    const template = String(node.config.text ?? '')
+    const template = localizedStepText(node.config, 'text', next.vars)
     const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates, bindings)
     const media = attachmentsFor(node, next.mediaCatalog)
     const stored = stripFileEmbeds(text)
@@ -1201,7 +1223,7 @@ export function tickPreview(
 
   if (node.type === 'button') {
     const bindings = bindingsOf(node.config)
-    const template = String(node.config.text ?? '')
+    const template = localizedStepText(node.config, 'text', next.vars)
     const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates, bindings)
     const buttons = resolveButtonOptions(node.config, (raw) =>
       interpolate(raw, next.vars, next.stepOutputs, next.media, false, next.templates, bindings),
@@ -1239,7 +1261,7 @@ export function tickPreview(
 
   if (node.type === 'question') {
     const qBindings = bindingsOf(node.config)
-    const promptTemplate = String(node.config.prompt ?? '')
+    const promptTemplate = localizedStepText(node.config, 'prompt', next.vars)
     const prompt = interpolateChat(promptTemplate, next.vars, next.stepOutputs, next.media, next.templates, qBindings)
     const choices = resolveQuestionChoices(node.config, {
       resolve: (raw) => resolveValue(raw, next.vars, next.stepOutputs, next.media, next.templates, qBindings),
@@ -1644,7 +1666,7 @@ export function tickPreview(
   }
 
   if (node.type === 'handoff') {
-    const template = String(node.config.message ?? 'Connecting you with an agent…')
+    const template = localizedStepText(node.config, 'message', next.vars, 'Connecting you with an agent…')
     const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates, bindingsOf(node.config))
     const media = attachmentsFor(node, next.mediaCatalog)
     next = appendRun(next, node, {
@@ -1674,7 +1696,7 @@ export function tickPreview(
   }
 
   if (node.type === 'end') {
-    const template = String(node.config.message ?? 'Thanks — conversation complete.')
+    const template = localizedStepText(node.config, 'message', next.vars, 'Thanks — conversation complete.')
     const text = interpolateChat(template, next.vars, next.stepOutputs, next.media, next.templates, bindingsOf(node.config))
     const media = attachmentsFor(node, next.mediaCatalog)
     next = appendRun(next, node, {
@@ -2138,7 +2160,7 @@ export function submitPreviewAnswer(
       ...state,
       messages: [
         ...state.messages,
-        msg('user', failedText || 'Invalid answer'),
+        msg('user', failedText || 'Invalid answer', { nodeKey: node.key, sensitive: node.config.sensitive === true || SENSITIVE_ANSWER_TYPES.has(answerType) }),
         msg('system', validated.error),
       ],
       phase: { ...waiting, validationError: validated.error },
@@ -2156,7 +2178,7 @@ export function submitPreviewAnswer(
         ...state,
         messages: [
           ...state.messages,
-          msg('user', entered),
+          msg('user', entered, {nodeKey:node.key,sensitive:true}),
           msg('system', 'Verification code has not been sent yet. Use Resend code.'),
         ],
         phase: { ...waiting, validationError: 'Code not sent yet' },
@@ -2167,7 +2189,7 @@ export function submitPreviewAnswer(
         ...state,
         messages: [
           ...state.messages,
-          msg('user', entered),
+          msg('user', entered, {nodeKey:node.key,sensitive:true}),
           msg('system', 'That code has expired. Resend a new code.'),
         ],
         phase: { ...waiting, validationError: 'Code expired' },
@@ -2178,7 +2200,7 @@ export function submitPreviewAnswer(
         ...state,
         messages: [
           ...state.messages,
-          msg('user', entered),
+          msg('user', entered, {nodeKey:node.key,sensitive:true}),
           msg('system', 'Too many incorrect attempts. Resend a new code.'),
         ],
         phase: { ...waiting, validationError: 'Too many attempts' },
@@ -2195,7 +2217,7 @@ export function submitPreviewAnswer(
       return {
         ...state,
         otpChallenge: challenge,
-        messages: [...state.messages, msg('user', entered), msg('system', error)],
+        messages: [...state.messages, msg('user', entered, {nodeKey:node.key,sensitive:true}), msg('system', error)],
         phase: { ...waiting, validationError: error },
       }
     }
@@ -2273,7 +2295,7 @@ export function submitPreviewAnswer(
           : msg('user', validated.displayText)
   let next: PreviewEngineState = {
     ...state,
-    messages: [...state.messages, userMessage],
+    messages: [...state.messages, { ...userMessage, nodeKey: node.key, sensitive: node.config.sensitive === true || SENSITIVE_ANSWER_TYPES.has(answerType) }],
     phase: { kind: 'typing' },
     otpChallenge: null,
     signInAttempts: null,
@@ -3393,5 +3415,17 @@ export async function runEntityStep(
     savedAs: savedAsVar(outputKey) ?? savedAsStep(node.key),
   })
 
+  return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
+}
+/** Complete a test fixture without invoking a connector. Never used by public runtime. */
+export function completeMockStep(state: PreviewEngineState, nodes: DesignerNode[], edges: DesignerEdge[], fixture: { value: unknown; status?: PreviewRunStatus }): PreviewEngineState {
+  const node = nodes.find(n => n.id === state.currentId)
+  if (!node || !['http','database','email','entity','integration'].includes(node.type)) throw new Error('Only connection and entity steps can be mocked')
+  if (!shouldRunAfterPredecessor(node.config, previousRunStatus(state))) return skipDueToRunAfter(state,node,edges,nodes)
+  const status = fixture.status ?? 'Succeeded'
+  const key = String(node.config.outputVariable ?? node.config.resultVariable ?? '').trim()
+  let next = { ...state, stepOutputs: { ...state.stepOutputs, [node.key]: { response: fixture.value, data: fixture.value, mocked: true } } }
+  if (key && status === 'Succeeded') next = { ...next, vars: { ...next.vars, [key]: fixture.value } }
+  next = appendRun(next, node, { status, inputs: { mocked: true }, processed: { mocked: true }, outputs: { response: fixture.value }, savedAs: key ? savedAsVar(key) : savedAsStep(node.key) })
   return resolveAfterStep(next, edges, nodes, nextNodeId(edges, node.id))
 }

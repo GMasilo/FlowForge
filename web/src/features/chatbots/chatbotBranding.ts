@@ -506,7 +506,8 @@ export function chatBrandingCssVars(branding: ResolvedChatBranding): ChatBrandin
   const theme = chatAppearanceThemeMeta(branding.appearanceTheme)
   const header = branding.headerColor ?? theme.colors.headerColor
   const header2 = mix(header, 'white', (branding.appearanceTheme === 'midnight' || branding.appearanceTheme === 'ocean') ? 0.08 : 0.22)
-  const headerFg = branding.headerTextColor ?? theme.colors.headerTextColor
+  const headerFg = branding.headerTextColor ?? (branding.headerColor || branding.appearanceTheme === 'default'
+    ? contrastFg(header2) : theme.colors.headerTextColor)
   const user = branding.bubbleUserColor ?? theme.colors.bubbleUserColor
   const user2 = mix(user, 'white', (branding.appearanceTheme === 'midnight' || branding.appearanceTheme === 'ocean') ? 0.12 : 0.18)
   const userFg = contrastFg(user)
@@ -530,6 +531,9 @@ export function chatBrandingCssVars(branding: ResolvedChatBranding): ChatBrandin
     '--ff-chat-header': header,
     '--ff-chat-header-2': header2,
     '--ff-chat-header-fg': headerFg,
+    '--ff-chat-header-control-bg': 'color-mix(in srgb, var(--ff-chat-header-fg) 12%, transparent)',
+    '--ff-chat-header-control-hover': 'color-mix(in srgb, var(--ff-chat-header-fg) 22%, transparent)',
+    '--ff-chat-header-border': 'color-mix(in srgb, var(--ff-chat-header-fg) 24%, transparent)',
     '--ff-chat-bubble-user': user,
     '--ff-chat-bubble-user-2': user2,
     '--ff-chat-bubble-user-fg': userFg,
@@ -565,7 +569,7 @@ export function chatBrandingCssVars(branding: ResolvedChatBranding): ChatBrandin
 
 export function chatRootStyle(branding: ResolvedChatBranding): CSSProperties {
   const vars = chatBrandingCssVars(branding)
-  const style = { ...vars } as CSSProperties
+  const style = { ...vars, color: 'var(--color-ink)', colorScheme: branding.appearanceTheme === 'midnight' || branding.appearanceTheme === 'ocean' ? 'dark' : 'light' } as CSSProperties
   // Keep product accent tokens in sync so send buttons / chips match chat branding.
   style['--color-accent' as keyof CSSProperties] = vars['--ff-chat-accent'] as never
   style['--color-accent-2' as keyof CSSProperties] = vars['--ff-chat-header-2'] as never

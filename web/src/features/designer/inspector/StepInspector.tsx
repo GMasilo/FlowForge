@@ -846,6 +846,8 @@ function StepRunSettings({
         </p>
       </div>
 
+      {nodeType === 'question' ? <label className="flex gap-2 text-sm"><input type="checkbox" disabled={readOnly} checked={config.sensitive === true} onChange={e=>patchConfig({sensitive:e.target.checked})}/>Mask this answer in stored conversation history</label> : null}
+      {['message','question','button','end','handoff'].includes(nodeType) ? <div><Label>Translations</Label><p className="text-xs text-[var(--color-ink-muted)]">Language codes and translated text. Uses the _locale variable, with the original text as fallback.</p><Textarea disabled={readOnly} defaultValue={JSON.stringify(config.localizedText ?? {},null,2)} key={JSON.stringify(config.localizedText)} onBlur={e=>{e.target.setCustomValidity('');try{const value=JSON.parse(e.target.value);if(value&&typeof value==='object'&&!Array.isArray(value)&&Object.values(value).every(v=>typeof v==='string'))patchConfig({localizedText:value});else e.target.setCustomValidity('Use a JSON object with language codes and text')}catch{e.target.setCustomValidity('Enter valid JSON')}e.target.reportValidity()}} placeholder={'{"en":"Hello", "fr":"Bonjour"}'} /></div> : null}
       <div>
         <Label htmlFor="step-delay">Delay before run (seconds)</Label>
         <Input

@@ -154,7 +154,7 @@ export function validateValueAgainstSchema(
       if (!field.key.trim()) continue
       const key = field.key.trim()
       const childPath = `${path}.${key}`
-      if (!(key in obj) || obj[key] === undefined || obj[key] === null) {
+      if (!Object.prototype.hasOwnProperty.call(obj, key) || obj[key] === undefined || obj[key] === null) {
         if (field.required) errors.push(`Missing required field ${childPath}`)
         continue
       }
@@ -192,11 +192,12 @@ function validateLeaf(value: unknown, field: SchemaField, path: string): string[
 
 function validatePrimitive(value: unknown, type: VariableType, path: string): string[] {
   switch (type) {
-    case 'string':
     case 'date':
+      return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value.slice(0,10)).toISOString().slice(0,10) === value.slice(0,10) ? [] : [`${path} must be a valid ISO date`]
+    case 'string':
       return typeof value === 'string' ? [] : [`${path} must be a string`]
     case 'number':
-      return typeof value === 'number' && !Number.isNaN(value) ? [] : [`${path} must be a number`]
+      return typeof value === 'number' && Number.isFinite(value) ? [] : [`${path} must be a number`]
     case 'boolean':
       return typeof value === 'boolean' ? [] : [`${path} must be a boolean`]
     default:

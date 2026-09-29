@@ -780,3 +780,7 @@ export async function testWebhook(payload: { webhookId: string; event: string; v
     webhook_id: payload.webhookId, event: payload.event, variables: payload.variables,
   })
 }
+
+export async function replayWebhookDelivery(deliveryId: string): Promise<{ ok: boolean; error?: string; status_code?: number }> {
+  return postJson('/webhooks/replay', { delivery_id: deliveryId })
+}

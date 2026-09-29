@@ -1232,7 +1232,7 @@ export function ChatbotSettingsPage() {
                 size="sm"
                 viewerMode="absolute"
               >
-                <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-full bg-white/20 ring-1 ring-white/30">
+                <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-full bg-[var(--ff-chat-header-control-bg)] ring-1 ring-[var(--ff-chat-header-border)]">
                   {resolvedPreview.resolvedLogoUrl ? (
                     <img src={resolvedPreview.resolvedLogoUrl} alt="" className="h-full w-full object-cover" />
                   ) : (

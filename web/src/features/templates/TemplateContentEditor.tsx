@@ -1,3 +1,4 @@
+import { DOCUMENT_DESIGNS, applyDocumentDesign } from './documentDesigns'
 import {
   Users,
   Briefcase,
@@ -480,7 +481,7 @@ function TemplateKindFields({
     )
   }
 
-  if (kind === 'document') {
+  if (kind === 'document' || kind === 'agreement' || kind === 'certificate' || kind === 'checklist') {
     const c = asDocument(content)
     function patchField(index: number, patch: Partial<DocumentField>) {
       const fields = c.fields.map((row, i) => (i === index ? { ...row, ...patch } : row))
@@ -520,6 +521,16 @@ function TemplateKindFields({
             />
           </div>
         </div>
+        <div className="space-y-2 rounded-xl border border-[var(--color-border)] p-3">
+          <Label>A4 portrait designs</Label>
+          <p className="text-xs text-[var(--color-ink-muted)]">Choose a styled PDF page. Applying a design replaces the current page blocks; your inputs remain available.</p>
+          <div className="flex flex-wrap gap-2">
+            {DOCUMENT_DESIGNS.map(design => <Button key={design.id} type="button" variant="secondary" size="sm" disabled={readOnly} onClick={() => {
+              if (c.blocks.length && !window.confirm('Replace the current page blocks with this design?')) return
+              onChange(applyDocumentDesign(c, design.id))
+            }}>{design.name}</Button>)}
+          </div>
+        </div>
         <div>
           <Label>Layout</Label>
           <Select
@@ -538,7 +549,7 @@ function TemplateKindFields({
             <option value="page">Page (drag on A4)</option>
           </Select>
           <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
-            Page layout is a Word-style canvas: place headings, fields, and signatures exactly where they should print.
+            Page layout lets you position headings, text, fields, images and signatures on A4. Use List layout for automatically flowing tables and long checklists.
             Snap to the grid and other blocks, then set font and color per block. Best fidelity is PDF.
           </p>
         </div>
@@ -639,7 +650,7 @@ function TemplateKindFields({
         <div className="space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
           <Label>Data table (multiple rows)</Label>
           <p className="text-[11px] text-[var(--color-ink-muted)]">
-            Bind an array of objects (or JSON array string). Excel writes a header row plus one row per item.
+            Bind an array of objects (or JSON array string). PDF tables wrap onto new pages and repeat column headings. In Page layout, the table follows the designed pages.
             Example source: {'{{inputs.lines}}'} or {'{{vars.items}}'} with columns key <code className="font-mono">name</code>,{' '}
             <code className="font-mono">qty</code>. Leave columns empty to infer keys from the first object.
           </p>
@@ -653,11 +664,13 @@ function TemplateKindFields({
               placeholder="{{inputs.lines}} or {{vars.items}}"
             />
           </div>
+          <p className="text-[11px] text-[var(--color-ink-muted)]">Enable a total for numeric columns. Use plain numbers; totals round to two decimal places.</p>
           {c.tableColumns.map((col, index) => (
             <div
               key={index}
               className="grid gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-2 sm:grid-cols-[1fr_1fr_auto]"
             >
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" disabled={readOnly} checked={!!col.total} onChange={e => patchColumn(index, { total: e.target.checked })} />Total this column</label>
               <Input
                 disabled={readOnly}
                 value={col.key}
@@ -725,179 +738,6 @@ function TemplateKindFields({
         <p className="text-[11px] text-[var(--color-ink-muted)]">
           Insert {'{{templates.key.file}}'} on a Message or End step. Visitors get a download chip; the file is built
           from this conversation’s answers (including signatures) when they click it.
-        </p>
-      </div>
-    )
-  }
-
-  if (kind === 'agreement') {
-    const c = asDocument(content)
-    function patchField(index: number, patch: Partial<DocumentField>) {
-      const fields = c.fields.map((row, i) => (i === index ? { ...row, ...patch } : row))
-      onChange({ ...c, fields })
-    }
-    return (
-      <div className="space-y-3">
-        <div className="rounded-xl border border-teal-200/70 bg-teal-50/40 px-3 py-2 text-[11px] text-slate-600">
-          Adobe Sign–style agreement: collect party details and a signature in the flow, then send{' '}
-          <code className="font-mono">{'{{templates.key.file}}'}</code> on a Message or End step so the visitor
-          downloads a signed PDF.
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label>Agreement name</Label>
-            <TemplateField
-              disabled={readOnly}
-              value={c.title}
-              suggestions={suggestions}
-              onChange={(title) => onChange({ ...c, title })}
-              placeholder="Service agreement"
-            />
-          </div>
-          <div>
-            <Label>Download file name</Label>
-            <TemplateField
-              disabled={readOnly}
-              value={c.filename}
-              suggestions={suggestions}
-              onChange={(filename) => onChange({ ...c, filename, format: 'pdf' })}
-              placeholder="agreement-{{inputs.signer_name}}.pdf"
-            />
-          </div>
-        </div>
-        <div>
-          <Label>Message to signer</Label>
-          <TemplateField
-            disabled={readOnly}
-            multiline
-            value={c.intro}
-            suggestions={suggestions}
-            onChange={(intro) => onChange({ ...c, intro })}
-            placeholder="Please review and sign…"
-          />
-        </div>
-        <div>
-          <Label>Agreement terms</Label>
-          <TemplateField
-            disabled={readOnly}
-            multiline
-            value={c.body}
-            suggestions={suggestions}
-            onChange={(body) => onChange({ ...c, body })}
-            placeholder="1. Parties… 2. Scope… 3. Acceptance…"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Parties, signature & date</Label>
-          <p className="text-[11px] text-[var(--color-ink-muted)]">
-            Use <span className="font-medium">Image</span> for the signature field (bind a Signature question). Use
-            text for names, email, company, and date signed.
-          </p>
-          {c.fields.map((field, index) => (
-            <div
-              key={index}
-              className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3 sm:grid-cols-[1fr_1fr_7.5rem_auto]"
-            >
-              <Input
-                disabled={readOnly}
-                value={field.label}
-                placeholder="Label"
-                onChange={(e) => patchField(index, { label: e.target.value })}
-              />
-              <TemplateField
-                disabled={readOnly}
-                value={field.value}
-                suggestions={suggestions}
-                onChange={(value) => patchField(index, { value })}
-                placeholder="{{inputs.signer_name}}"
-              />
-              <Select
-                disabled={readOnly}
-                value={field.as}
-                onChange={(e) => patchField(index, { as: e.target.value === 'image' ? 'image' : 'text' })}
-              >
-                <option value="text">Text</option>
-                <option value="image">Signature / image</option>
-              </Select>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={readOnly || c.fields.length <= 1}
-                onClick={() => onChange({ ...c, fields: c.fields.filter((_, i) => i !== index) })}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ))}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={readOnly}
-              onClick={() => onChange({ ...c, fields: [...c.fields, emptyDocumentField()] })}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add field
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={readOnly}
-              onClick={() =>
-                onChange({
-                  ...c,
-                  fields: [
-                    ...c.fields,
-                    { label: 'Signature', value: '{{inputs.signature}}', as: 'image' },
-                  ],
-                })
-              }
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add signature
-            </Button>
-          </div>
-        </div>
-        <div>
-          <Label>Footer / completion note</Label>
-          <TemplateField
-            disabled={readOnly}
-            value={c.footer}
-            suggestions={suggestions}
-            onChange={(footer) => onChange({ ...c, footer })}
-            placeholder="Electronically signed via FlowForge…"
-          />
-        </div>
-        <div>
-          <Label>Layout</Label>
-          <Select
-            disabled={readOnly}
-            value={c.layout}
-            onChange={(e) => {
-              const layout = e.target.value === 'page' ? 'page' : 'flow'
-              onChange({
-                ...c,
-                format: 'pdf',
-                layout,
-                blocks: layout === 'page' ? ensurePageBlocks(c) : c.blocks,
-              })
-            }}
-          >
-            <option value="flow">List (top to bottom)</option>
-            <option value="page">Page (place signatures on A4)</option>
-          </Select>
-        </div>
-        {c.layout === 'page' ? (
-          <DocumentPageEditor
-            content={{ ...c, format: 'pdf' }}
-            onChange={(next) => onChange({ ...next, format: 'pdf' })}
-            suggestions={suggestions}
-            readOnly={readOnly}
-          />
-        ) : null}
-        <p className="text-[11px] text-[var(--color-ink-muted)]">
-          Typical flow: ask name / email / scope → Signature question → Message with{' '}
-          {'{{templates.agreement.file}}'} and bind inputs (including signature).
         </p>
       </div>
     )
@@ -2105,177 +1945,6 @@ function TemplateKindFields({
             <Plus className="h-3.5 w-3.5" />
             Add field
           </Button>
-        </div>
-      </div>
-    )
-  }
-
-  if (kind === 'certificate' || kind === 'checklist') {
-    // Reuse document editor — same as document/agreement
-    const c = asDocument(content)
-    const kindLabel = kind === 'certificate' ? 'Certificate' : 'Checklist'
-    function patchField(index: number, patch: Partial<DocumentField>) {
-      const fields = c.fields.map((row, i) => (i === index ? { ...row, ...patch } : row))
-      onChange({ ...c, fields })
-    }
-    function patchColumn(index: number, patch: Partial<DocumentTableColumn>) {
-      const tableColumns = c.tableColumns.map((row, i) => (i === index ? { ...row, ...patch } : row))
-      onChange({ ...c, tableColumns })
-    }
-    return (
-      <div className="space-y-3">
-        <div className="rounded-xl border border-teal-200/70 bg-teal-50/40 px-3 py-2 text-[11px] text-slate-600">
-          {kindLabel} PDF: fill from answers, then send{' '}
-          <code className="font-mono">{'{{templates.key.file}}'}</code> on a Message or End step.
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label>{kindLabel} title</Label>
-            <TemplateField
-              disabled={readOnly}
-              value={c.title}
-              suggestions={suggestions}
-              onChange={(title) => onChange({ ...c, title })}
-            />
-          </div>
-          <div>
-            <Label>Download file name</Label>
-            <TemplateField
-              disabled={readOnly}
-              value={c.filename}
-              suggestions={suggestions}
-              onChange={(filename) => onChange({ ...c, filename, format: 'pdf' })}
-              placeholder={`${kind}-{{inputs.name}}.pdf`}
-            />
-          </div>
-        </div>
-        <div>
-          <Label>Intro</Label>
-          <TemplateField
-            disabled={readOnly}
-            multiline
-            value={c.intro}
-            suggestions={suggestions}
-            onChange={(intro) => onChange({ ...c, intro })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Fields</Label>
-          {c.fields.map((field, index) => (
-            <div
-              key={index}
-              className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3 sm:grid-cols-[1fr_1fr_7.5rem_auto]"
-            >
-              <Input
-                disabled={readOnly}
-                value={field.label}
-                placeholder="Label"
-                onChange={(e) => patchField(index, { label: e.target.value })}
-              />
-              <TemplateField
-                disabled={readOnly}
-                value={field.value}
-                suggestions={suggestions}
-                onChange={(value) => patchField(index, { value })}
-                placeholder="{{inputs.name}}"
-              />
-              <Select
-                disabled={readOnly}
-                value={field.as}
-                onChange={(e) => patchField(index, { as: e.target.value === 'image' ? 'image' : 'text' })}
-              >
-                <option value="text">Text</option>
-                <option value="image">Image</option>
-              </Select>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={readOnly || c.fields.length <= 1}
-                onClick={() => onChange({ ...c, fields: c.fields.filter((_, i) => i !== index) })}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ))}
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={readOnly}
-            onClick={() => onChange({ ...c, fields: [...c.fields, emptyDocumentField()] })}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add field
-          </Button>
-        </div>
-        {kind === 'checklist' && (
-          <div className="space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
-            <Label>Data table (multiple rows)</Label>
-            <div>
-              <Label>Rows source</Label>
-              <TemplateField
-                disabled={readOnly}
-                value={c.tableRowsSource}
-                suggestions={suggestions}
-                onChange={(tableRowsSource) => onChange({ ...c, tableRowsSource })}
-                placeholder="{{inputs.items}}"
-              />
-            </div>
-            {c.tableColumns.map((col, index) => (
-              <div
-                key={index}
-                className="grid gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-2 sm:grid-cols-[1fr_1fr_auto]"
-              >
-                <Input
-                  disabled={readOnly}
-                  value={col.key}
-                  placeholder="Property key"
-                  onChange={(e) => patchColumn(index, { key: e.target.value })}
-                />
-                <Input
-                  disabled={readOnly}
-                  value={col.label}
-                  placeholder="Header label"
-                  onChange={(e) => patchColumn(index, { label: e.target.value })}
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={readOnly}
-                  onClick={() => onChange({ ...c, tableColumns: c.tableColumns.filter((_, i) => i !== index) })}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={readOnly}
-              onClick={() => onChange({ ...c, tableColumns: [...c.tableColumns, emptyDocumentTableColumn()] })}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add column
-            </Button>
-          </div>
-        )}
-        <div>
-          <Label>Body</Label>
-          <TemplateField
-            disabled={readOnly}
-            multiline
-            value={c.body}
-            suggestions={suggestions}
-            onChange={(body) => onChange({ ...c, body })}
-          />
-        </div>
-        <div>
-          <Label>Footer</Label>
-          <TemplateField
-            disabled={readOnly}
-            value={c.footer}
-            suggestions={suggestions}
-            onChange={(footer) => onChange({ ...c, footer })}
-          />
         </div>
       </div>
     )

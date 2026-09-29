@@ -1,6 +1,13 @@
 RewriteEngine On
 RewriteBase /flowforge/
 
+# Revalidate entry pages after a deployment so browsers load the current bundle.
+<IfModule mod_headers.c>
+  <FilesMatch "\.html$">
+    Header always set Cache-Control "no-cache, max-age=0, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
 # API has its own scripts / .htaccess under /flowforge/api/
 RewriteRule ^api(?:/|$) - [L]
 
@@ -17,6 +24,10 @@ RewriteRule ^api(?:/|$) - [L]
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
+
+# A removed build asset must return 404, not the SPA HTML document.
+# Existing assets have already passed through the file check above.
+RewriteRule ^assets/ - [R=404,L]
 
 # SPA client routes → index.html (e.g. /flowforge/signup, /flowforge/embed/…)
 RewriteRule ^ index.html [L]

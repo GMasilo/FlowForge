@@ -1,3 +1,4 @@
+import { SavedReplies, ConversationSummary } from '@/features/operations/AgentTools'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -364,6 +365,7 @@ export function ConversationDetailPage() {
               <span className="text-[11px] text-violet-700">Agent is typing…</span>
             ) : null}
           </div>
+          <ConversationSummary events={events} />
           {eventsQuery.isLoading ? (
             <p className="text-sm text-[var(--color-ink-muted)]">Loading transcript…</p>
           ) : !events.length ? (
@@ -461,6 +463,7 @@ export function ConversationDetailPage() {
           {isEscalated && editable ? (
             <form className="space-y-2 border-t border-slate-200 pt-3" onSubmit={onReply}>
               <p className="text-xs font-semibold text-violet-800">Reply as agent</p>
+              <SavedReplies draft={reply} onChoose={setReply} />
               {replyError ? <FieldError>{replyError}</FieldError> : null}
               <Input
                 value={reply}

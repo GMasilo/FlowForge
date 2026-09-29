@@ -1,3 +1,4 @@
+import { EntityRulesEditor } from '@/features/operations/EntityRulesEditor'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Database, Download, FileSpreadsheet, Plus, Trash2 } from 'lucide-react'
@@ -810,6 +811,7 @@ function EntityEditor({
         </p>
       ) : null}
 
+      <EntityRulesEditor entityId={entity.id} editable={schemaEditable} />
       <AttributesTable
         entity={entity}
         editable={schemaEditable}

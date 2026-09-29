@@ -1,3 +1,6 @@
+import { fetchPublicOperations, operationsRpc, type OperationsSettings } from '@/features/operations/operationsApi'
+import { ConversationCheckpoint, readResumeTicket, storeResumeTicket, type ResumeTicket } from '@/features/operations/conversationCheckpoint'
+import { canCheckpointFlow, sensitiveVariableNames, redactSensitive, redactChatText, SENSITIVE_ANSWER_TYPES } from '@/features/operations/conversationPrivacy'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns'
@@ -283,6 +286,12 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
   )
   const [nodes, setNodes] = useState<DesignerNode[]>([])
   const [edges, setEdges] = useState<DesignerEdge[]>([])
+  const [operationalPolicy, setOperationalPolicy] = useState<OperationsSettings>({})
+  const [pendingConsent, setPendingConsent] = useState<PreviewEngineState | null>(null)
+  const [resumeError, setResumeError] = useState('')
+  const checkpoint = useRef<ConversationCheckpoint | null>(null)
+  const submissionBusy = useRef(false)
+  const resumeKey = `ff-resume:${orgSlug ?? ''}:${publicSlug ?? ''}:${chatEnvironment}`
   const [state, setState] = useState<PreviewEngineState | null>(null)
   const [draft, setDraft] = useState('')
   const [selectedChoices, setSelectedChoices] = useState<string[]>([])
@@ -304,6 +313,8 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
   const bootSeqRef = useRef(0)
   const sessionIdRef = useRef<string | null>(null)
   const stateRef = useRef<PreviewEngineState | null>(null)
+  const privacyNamesRef=useRef(new Set<string>())
+  privacyNamesRef.current=sensitiveVariableNames(nodes,operationalPolicy.sensitiveVariables)
   const embedRef = useRef(embed)
   const shouldAnimateBubble = useChatBubbleEntrance(state?.messages)
   const typewriterCps = TYPEWRITER_CPS[branding.typewriterSpeed]
@@ -316,11 +327,11 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
     function onPageHide(event: PageTransitionEvent) {
       if (event.persisted) return
       const id = sessionIdRef.current
-      if (!id || completedRef.current) return
+      if (!id || completedRef.current || checkpoint.current) return
       const phase = stateRef.current?.phase
       if (phase?.kind === 'finished') return
       completedRef.current = true
-      abandonChatSessionOnUnload(id, stateRef.current?.vars)
+      abandonChatSessionOnUnload(id, redactSensitive(stateRef.current?.vars, privacyNamesRef.current) as Record<string, unknown>)
       if (embedRef.current) {
         postToEmbedParent({
           source: FLOWFORGE_EMBED_SOURCE,
@@ -407,6 +418,25 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
 
     ;(async () => {
       try {
+        if (!stagingTest && restartNonce === 0) {
+          const ticket = readResumeTicket(resumeKey)
+          if (ticket) {
+            const loaded = await operationsRpc<{snapshot: ChatSsoSnapshot | null; revision:number} | null>('load_conversation_checkpoint', {p_token:ticket.token})
+            if (cancelled || seq !== bootSeqRef.current) return
+            if (loaded?.snapshot) {
+              const snap=loaded.snapshot
+              checkpoint.current=new ConversationCheckpoint({...ticket,revision:loaded.revision})
+              setBotName(snap.botName);setSessionId(snap.sessionId);setChatbotId(snap.chatbotId);setInstanceId(snap.instanceId)
+              if(snap.branding)setBranding(snap.branding)
+              setNodes(snap.nodes);setEdges(snap.edges)
+              lastLoggedMsgCount.current=snap.state.messages.length;lastLoggedRunCount.current=snap.state.runs.length
+              const policy=await fetchPublicOperations(snap.sessionId)
+              if(cancelled||seq!==bootSeqRef.current)return
+              setOperationalPolicy(policy??{});setState(snap.state);return
+            }
+            storeResumeTicket(resumeKey,null)
+          }
+        }
         const row = stagingTest
           ? await fetchStagingTestBoot(testToken!, visitorKey())
           : await (async () => {
@@ -471,7 +501,18 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
                   }),
               )
             : []
-        setState(createInitialPreviewState(graph.nodes, graph.edges, globalsMap, mediaCatalog, templatesExprMap(graph.templates ?? []), String(row.chatbot_id)))
+        const policy = await fetchPublicOperations(String(row.session_id))
+        if(cancelled||seq!==bootSeqRef.current)return
+        setOperationalPolicy(policy??{})
+        globalsMap._locale=policy?.defaultLocale??globalsMap._locale??'en'
+        if (!stagingTest && policy?.resumeHours && canCheckpointFlow(graph.nodes) && !policy.sensitiveVariables?.length) {
+          const ticket=await operationsRpc<ResumeTicket | null>('create_conversation_checkpoint',{p_session_id:String(row.session_id),p_visitor_key:visitorKey()})
+          if(cancelled||seq!==bootSeqRef.current)return
+          if(ticket){checkpoint.current=new ConversationCheckpoint(ticket);storeResumeTicket(resumeKey,ticket)}
+        }
+        const initial=createInitialPreviewState(graph.nodes, graph.edges, globalsMap, mediaCatalog, templatesExprMap(graph.templates ?? []), String(row.chatbot_id))
+        if(policy?.consentText?.trim())setPendingConsent(initial)
+        else setState(initial)
         void appendEvent(String(row.session_id), 'session.started', null, {
           publish_version: row.publish_version ?? null,
           environment: chatEnvironment,
@@ -501,6 +542,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
   }, [orgSlug, publicSlug, testToken, stagingTest, embed, chatEnvironment, embedKey, restartNonce])
 
   async function restartPublicChat(opts?: { clearCookies?: boolean }) {
+    checkpoint.current=null;storeResumeTicket(resumeKey,null);setPendingConsent(null);setResumeError('')
     const prevSessionId = sessionId
     const prevVars = state?.vars
     const clearCookies = opts?.clearCookies === true
@@ -509,7 +551,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
     if (prevSessionId && !completedRef.current) {
       completedRef.current = true
       try {
-        await completeSession(prevSessionId, 'abandoned', 'restarted', prevVars)
+        await completeSession(prevSessionId, 'abandoned', 'restarted', redactSensitive(prevVars,sensitiveVariableNames(nodes,operationalPolicy.sensitiveVariables)) as Record<string,unknown>)
       } catch {
         // Best-effort — still start a fresh session
       }
@@ -731,6 +773,28 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       })
   }, [state, nodes, connectionsById, connectionCtx])
 
+  useEffect(() => {
+    const controller=checkpoint.current
+    if(!controller||!state||!sessionId||!chatbotId||!instanceId||!['waiting_input','waiting_button','waiting_suggestion'].includes(state.phase.kind))return
+    const snapshot:ChatSsoSnapshot={sessionId,chatbotId,instanceId,botName,publicSlug:publicSlug??null,testToken:testToken??null,embed,stagingTest,state,nodes,edges,branding}
+    void controller.save(snapshot).then(()=>storeResumeTicket(resumeKey,controller.ticket)).catch(e=>setResumeError(e instanceof Error?e.message:'Could not save progress'))
+  },[state,sessionId])
+
+  async function claimInput(expected:PreviewEngineState):Promise<boolean>{
+    if(submissionBusy.current||stateRef.current!==expected)return false
+    submissionBusy.current=true
+    try{if(checkpoint.current){await checkpoint.current.claim();storeResumeTicket(resumeKey,checkpoint.current.ticket)}return stateRef.current===expected}
+    catch(e){setResumeError(e instanceof Error?e.message:'Could not submit this answer');return false}
+    finally{submissionBusy.current=false}
+  }
+  async function submitAnswerSafely(answer:Parameters<typeof submitPreviewAnswer>[3]){
+    const current=stateRef.current;if(!current||current.phase.kind!=='waiting_input'||submissionBusy.current)return
+    const next=submitPreviewAnswer(current,nodes,edges,answer)
+    if(next.phase.kind==='waiting_input'){setState(next);stateRef.current=next;return}
+    if(await claimInput(current)){stateRef.current=next;setState(next)}
+  }
+  async function submitSuggestionSafely(answer:string){const current=stateRef.current;if(!current||current.phase.kind!=='waiting_suggestion')return;if(await claimInput(current)){const next=submitPreviewSuggestion(current,nodes,edges,answer);stateRef.current=next;setState(next)}}
+
   // Log new messages / runs
   useEffect(() => {
     if (!sessionId || !state) return
@@ -740,7 +804,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       for (const m of fresh) {
         // Agent messages are already persisted by agent_reply_to_conversation.
         if (m.role === 'agent' || m.role === 'system') continue
-        void appendEvent(sessionId, `message.${m.role}`, null, { text: m.text, id: m.id })
+        void appendEvent(sessionId, `message.${m.role}`, null, { text: m.sensitive || (m.nodeKey && nodes.some(n=>n.key===m.nodeKey && operationalPolicy.sensitiveVariables?.includes(String(n.config.outputVariable)))) ? '[Redacted]' : redactChatText(m.text,state.vars,sensitiveVariableNames(nodes,operationalPolicy.sensitiveVariables)), id: m.id })
       }
     }
     if (state.runs.length > lastLoggedRunCount.current) {
@@ -758,7 +822,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
         void appendEvent(sessionId, 'step.run', run.nodeKey, {
           type: run.type,
           status: run.status,
-          outputs: run.outputs,
+          outputs: nodes.some(n=>n.key===run.nodeKey && (n.config.sensitive===true || operationalPolicy.sensitiveVariables?.includes(String(n.config.outputVariable)) || SENSITIVE_ANSWER_TYPES.has(String(n.config.answerType)))) ? {response:'[Redacted]'} : redactSensitive(run.outputs,sensitiveVariableNames(nodes,operationalPolicy.sensitiveVariables)),
           durationMs: run.durationMs,
           startedAt: run.startedAt,
           finishedAt: run.finishedAt,
@@ -785,13 +849,14 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
     if (!sessionId || !state || completedRef.current) return
     if (state.phase.kind === 'finished') {
       completedRef.current = true
+      checkpoint.current=null;storeResumeTicket(resumeKey,null)
       const failed = state.runs.some((r) => r.status === 'Failed' || r.status === 'TimedOut')
       const status = failed ? 'failed' : 'completed'
       void completeSession(
         sessionId,
         status,
         failed ? 'One or more steps failed' : null,
-        state.vars,
+        redactSensitive(state.vars,sensitiveVariableNames(nodes,operationalPolicy.sensitiveVariables)) as Record<string,unknown>,
       )
       void appendEvent(sessionId, failed ? 'session.failed' : 'session.completed')
       if (embed) {
@@ -1020,11 +1085,12 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
   function onSuggestionPick(text: string) {
     if (!state) return
     setDraft('')
-    setState(submitPreviewSuggestion(state, nodes, edges, text))
+    void submitSuggestionSafely(text)
   }
 
-  function onButtonInteract(event: ButtonListenerEvent, button: ResolvedButtonOption) {
+  async function onButtonInteract(event: ButtonListenerEvent, button: ResolvedButtonOption) {
     if (!state || state.phase.kind !== 'waiting_button') return
+    if (!(await claimInput(state))) return
     const { state: next, sideEffects } = handlePreviewButtonInteract(
       state,
       nodes,
@@ -1056,7 +1122,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
         // Phase is already `restart`; the effect below starts a fresh session.
       }
     }
-    setState(next)
+    stateRef.current=next;setState(next)
   }
 
   function onSubmitSuggestion(e: FormEvent) {
@@ -1065,7 +1131,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
     if (!draft.trim()) return
     const answer = draft.trim()
     setDraft('')
-    setState(submitPreviewSuggestion(state, nodes, edges, answer))
+    void submitSuggestionSafely(answer)
   }
 
   function onSubmit(e: FormEvent) {
@@ -1074,11 +1140,11 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
     if (isChoiceType) {
       if (waiting.allowMultiple) {
         if (!selectedChoices.length) return
-        setState(submitPreviewAnswer(state, nodes, edges, selectedChoices))
+        void submitAnswerSafely(selectedChoices)
       } else {
         const one = selectedChoices[0]
         if (!one) return
-        setState(submitPreviewAnswer(state, nodes, edges, one))
+        void submitAnswerSafely(one)
       }
       setSelectedChoices([])
       return
@@ -1086,7 +1152,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
     if (!draft.trim()) return
     const answer = draft.trim()
     setDraft('')
-    setState(submitPreviewAnswer(state, nodes, edges, answer))
+    void submitAnswerSafely(answer)
   }
 
   function onHandoffSubmit(e: FormEvent) {
@@ -1163,6 +1229,8 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
     }
   }
 
+  if (resumeError && !bootError) return <div role="alert" className="p-6">{resumeError}<p>Reload this page to recover the last saved checkpoint.</p></div>
+
   if (bootError) {
     return (
       <div
@@ -1181,6 +1249,8 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
       </div>
     )
   }
+
+  if (pendingConsent) return <div className="mx-auto max-w-lg space-y-4 p-6"><h1 className="text-lg font-semibold">Before we begin</h1><p className="whitespace-pre-wrap">{operationalPolicy.consentText}</p><Button onClick={()=>{void appendEvent(sessionId!, 'consent.accepted', null, { policy: operationalPolicy.consentText });setState(pendingConsent);setPendingConsent(null)}}>I agree — start chat</Button><Button variant="secondary" onClick={()=>{checkpoint.current=null;storeResumeTicket(resumeKey,null);setPendingConsent(null);setBootError('You chose not to start this conversation.')}}>Decline</Button></div>
 
   if (!state) {
     return (
@@ -1236,7 +1306,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
           >
             <span
               className={cn(
-                'grid place-items-center overflow-hidden rounded-full bg-white/20 ring-1 ring-white/30',
+                'grid place-items-center overflow-hidden rounded-full bg-[var(--ff-chat-header-control-bg)] ring-1 ring-[var(--ff-chat-header-border)]',
                 embed ? 'h-8 w-8' : 'h-10 w-10',
               )}
             >
@@ -1456,7 +1526,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <ThumbsAnswerField
-            onSelect={(v) => setState(submitPreviewAnswer(state, nodes, edges, v))}
+            onSelect={(v) => void submitAnswerSafely(v)}
           />
         </div>
       ) : null}
@@ -1467,7 +1537,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
             embed ? '' : 'mx-auto max-w-2xl',
           )}
         >          <MoodAnswerField
-            onSelect={(v) => setState(submitPreviewAnswer(state, nodes, edges, v))}
+            onSelect={(v) => void submitAnswerSafely(v)}
           />
         </div>
       ) : null}
@@ -1479,7 +1549,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
           )}
         >          <LikertAnswerField
             choices={likertChoices}
-            onSelect={(v) => setState(submitPreviewAnswer(state, nodes, edges, v))}
+            onSelect={(v) => void submitAnswerSafely(v)}
           />
         </div>
       ) : null}
@@ -1492,7 +1562,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
         >
           <NumberedChoiceAnswerField
             choices={numberedChoices}
-            onSelect={(v) => setState(submitPreviewAnswer(state, nodes, edges, v))}
+            onSelect={(v) => void submitAnswerSafely(v)}
           />
         </div>
       ) : null}
@@ -1503,7 +1573,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
               key={n}
               type="button"
               className="grid h-10 w-10 place-items-center rounded-full border border-teal-200 bg-teal-50/80 text-sm font-semibold text-teal-800"
-              onClick={() => setState(submitPreviewAnswer(state, nodes, edges, String(n)))}
+              onClick={() => void submitAnswerSafely(String(n))}
             >
               {n}
             </button>
@@ -1519,7 +1589,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
         >          <StarsAnswerField
             min={starsMin}
             max={starsMax}
-            onSelect={(n) => setState(submitPreviewAnswer(state, nodes, edges, String(n)))}
+            onSelect={(n) => void submitAnswerSafely(String(n))}
           />
         </div>
       ) : null}
@@ -1535,7 +1605,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
             max={npsMax}
             minLabel="Not at all likely"
             maxLabel="Extremely likely"
-            onSelect={(n) => setState(submitPreviewAnswer(state, nodes, edges, String(n)))}
+            onSelect={(n) => void submitAnswerSafely(String(n))}
           />
         </div>
       ) : null}
@@ -1551,7 +1621,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
             accept={normalizeFileAccept(waitingCfg.fileAccept)}
             maxFiles={normalizeMaxFiles(waitingCfg.maxFiles)}
             storeCtx={answerStoreCtx}
-            onSubmit={(value) => setState(submitPreviewAnswer(state, nodes, edges, value))}
+            onSubmit={(value) => void submitAnswerSafely(value)}
           />
           {waitingOptional ? (
             <Button type="button" size="sm" variant="ghost" className="self-start" onClick={onSkipOptional}>
@@ -1570,7 +1640,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
         >
           <SignatureAnswerField
             storeCtx={answerStoreCtx}
-            onSubmit={(value) => setState(submitPreviewAnswer(state, nodes, edges, value))}
+            onSubmit={(value) => void submitAnswerSafely(value)}
           />
           {waitingOptional ? (
             <Button type="button" size="sm" variant="ghost" className="self-start" onClick={onSkipOptional}>
@@ -1782,7 +1852,7 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
             choices={waiting.choices ?? []}
             allowMultiple={waiting.allowMultiple === true}
             storeCtx={answerStoreCtx}
-            onSubmit={(value) => setState(submitPreviewAnswer(state, nodes, edges, value))}
+            onSubmit={(value) => void submitAnswerSafely(value)}
             optional={waitingOptional}
             onSkip={onSkipOptional}
             validationError={waiting.validationError}
@@ -2036,12 +2106,12 @@ export function PublicChatPage({ embed = false, stagingTest = false }: { embed?:
 
       {waiting?.answerType === 'boolean' ? (
         <div className="mx-auto flex w-full max-w-2xl gap-2 border-t border-[var(--color-border)] bg-[var(--ff-chat-composer-surface)] px-4 py-3">
-          <Button onClick={() => setState(submitPreviewAnswer(state, nodes, edges, 'true'))}>
+          <Button onClick={() => void submitAnswerSafely('true')}>
             Yes
           </Button>
           <Button
             variant="secondary"
-            onClick={() => setState(submitPreviewAnswer(state, nodes, edges, 'false'))}
+            onClick={() => void submitAnswerSafely('false')}
           >
             No
           </Button>

@@ -235,7 +235,15 @@ async function generatePdfPage(doc: FilledDocument): Promise<Uint8Array> {
 }
 
 async function generatePdf(doc: FilledDocument): Promise<Uint8Array> {
-  if (doc.layout === 'page' && doc.blocks.length) return generatePdfPage(doc)
+  if (doc.layout === 'page' && doc.blocks.length) {
+    const bytes = await generatePdfPage(doc)
+    if (!doc.table?.headers.length) return bytes
+    const { PDFDocument } = await import('pdf-lib')
+    const pdf = await PDFDocument.load(bytes)
+    const table = await PDFDocument.load(await generatePdf({ ...doc, layout: 'flow', blocks: [], title: `${doc.title || 'Document'} - details`, intro: '', body: '', fields: [], cart: null }))
+    for (const page of await pdf.copyPages(table, table.getPageIndices())) pdf.addPage(page)
+    return pdf.save()
+  }
   const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib')
   const pdf = await PDFDocument.create()
   const font = await pdf.embedFont(StandardFonts.Helvetica)
@@ -303,7 +311,7 @@ async function generatePdf(doc: FilledDocument): Promise<Uint8Array> {
     y -= gap
   }
 
-  write(doc.title || doc.filename, 18, bold, ink, 10)
+  write(doc.title || doc.filename, 24, bold, rgb(0.06, 0.46, 0.43), 14)
   write(doc.intro, 11, font, muted, 12)
   for (const field of doc.fields) {
     write(`${field.label}: ${field.imageUrl ? '' : field.text}`, 11, font, ink, field.imageUrl ? 4 : 8)
@@ -326,9 +334,63 @@ async function generatePdf(doc: FilledDocument): Promise<Uint8Array> {
   }
   write(doc.body, 11, font, ink, 12)
   if (doc.table?.headers.length) {
-    write(doc.table.headers.join('  |  '), 11, bold, ink, 6)
+    const count = doc.table.headers.length
+    const cellWidth = maxWidth / count
+    const fontSize = Math.max(6, Math.min(10, 72 / count))
+    const lineHeight = fontSize + 4
+    const cellLines = (value: string, face: typeof font) => {
+      const lines: string[] = []
+      for (const paragraph of cleanPdfText(value).split('\n')) {
+        let line = ''
+        for (const char of paragraph) {
+          if (line && face.widthOfTextAtSize(line + char, fontSize) > cellWidth - 10) {
+            const space = line.lastIndexOf(' ')
+            if (space > 0) { lines.push(line.slice(0, space)); line = line.slice(space + 1) }
+            else { lines.push(line); line = '' }
+          }
+          line += char
+        }
+        lines.push(line)
+      }
+      return lines
+    }
+    const headings = doc.table.headers.map(value => cellLines(value, bold))
+    const headerHeight = Math.max(...headings.map(lines => lines.length)) * lineHeight + 10
+    if (headerHeight > page.getHeight() - margin * 2 - lineHeight - 10) throw new Error('Table headings are too long. Shorten the labels or use fewer columns.')
+    const drawCells = (cells: string[][], start: number, length: number, header: boolean) => {
+      const height = length * lineHeight + 10
+      cells.forEach((lines, index) => {
+        const x = margin + index * cellWidth
+        page.drawRectangle({ x, y: y - height, width: cellWidth, height, borderWidth: 0.5, borderColor: rgb(0.8, 0.85, 0.86), color: header ? rgb(0.90, 0.95, 0.94) : rgb(1, 1, 1) })
+        lines.slice(start, start + length).forEach((line, i) => page.drawText(line, { x: x + 5, y: y - 5 - fontSize - i * lineHeight, size: fontSize, font: header ? bold : font, color: ink }))
+      })
+      y -= height
+    }
+    const drawHeader = () => drawCells(headings, 0, Math.max(...headings.map(lines => lines.length)), true)
+    ensure(headerHeight + lineHeight + 10)
+    drawHeader()
     for (const row of doc.table.rows) {
-      write(row.join('  |  '), 10, font, ink, 4)
+      const cells = doc.table.headers.map((_, index) => cellLines(row[index] ?? '', font))
+      const lineCount = Math.max(...cells.map(lines => lines.length))
+      const rowHeight = lineCount * lineHeight + 10
+      if (rowHeight <= page.getHeight() - margin * 2 - headerHeight && rowHeight > y - margin) {
+        page = pdf.addPage(pageSize)
+        y = page.getHeight() - margin
+        drawHeader()
+      }
+      let offset = 0
+      while (offset < lineCount) {
+        let available = Math.floor((y - margin - 10) / lineHeight)
+        if (available < 1) {
+          page = pdf.addPage(pageSize)
+          y = page.getHeight() - margin
+          drawHeader()
+          available = Math.floor((y - margin - 10) / lineHeight)
+        }
+        const length = Math.min(lineCount - offset, available)
+        drawCells(cells, offset, length, false)
+        offset += length
+      }
     }
     y -= 6
   }

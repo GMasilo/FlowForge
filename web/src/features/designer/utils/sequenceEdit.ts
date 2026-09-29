@@ -257,38 +257,38 @@ export function confirmNodeDeletionMessage(plan: NodeDeletePlan): string {
   return `Delete step “${plan.label}”?`
 }
 
+type SiblingContext = { sequenceIds: string[]; index: number }
+// Graph arrays are immutable store snapshots. Reuse one index for every row's
+// move controls; weak keys release obsolete graphs after edits and undo.
+const siblingIndexes = new WeakMap<DesignerNode[], WeakMap<DesignerEdge[], Map<string, SiblingContext>>>()
+
 export function findSiblingContext(
   nodes: DesignerNode[],
   edges: DesignerEdge[],
   nodeId: string,
-): { sequenceIds: string[]; index: number } | null {
-  const tree = toScopeTree(buildLinearItems(nodes, edges))
-
-  function walk(seq: ScopeNode[]): { sequenceIds: string[]; index: number } | null {
-    const ids = seq.map((n) => n.item.node.id)
-    const index = ids.indexOf(nodeId)
-    if (index >= 0) return { sequenceIds: ids, index }
-
-    for (const n of seq) {
-      if (n.kind === 'condition') {
-        const hit = walk(n.yes) ?? walk(n.no) ?? walk(n.then)
-        if (hit) return hit
-      } else if (n.kind === 'switch') {
-        for (const lane of n.cases) {
-          const hit = walk(lane.nodes)
-          if (hit) return hit
-        }
-        const hit = walk(n.default) ?? walk(n.then)
-        if (hit) return hit
-      } else if (n.kind === 'loop') {
-        const hit = walk(n.body) ?? walk(n.then)
-        if (hit) return hit
-      }
-    }
-    return null
+): SiblingContext | null {
+  let byEdges = siblingIndexes.get(nodes)
+  if (!byEdges) {
+    byEdges = new WeakMap()
+    siblingIndexes.set(nodes, byEdges)
   }
-
-  return walk(tree)
+  let index = byEdges.get(edges)
+  if (!index) {
+    index = new Map()
+    const pending = [toScopeTree(buildLinearItems(nodes, edges))]
+    while (pending.length) {
+      const seq = pending.pop()!
+      const sequenceIds = seq.map(n => n.item.node.id)
+      seq.forEach((n, position) => {
+        index!.set(n.item.node.id, { sequenceIds, index: position })
+        if (n.kind === 'condition') pending.push(n.yes, n.no, n.then)
+        else if (n.kind === 'switch') pending.push(...n.cases.map(lane => lane.nodes), n.default, n.then)
+        else if (n.kind === 'loop') pending.push(n.body, n.then)
+      })
+    }
+    byEdges.set(edges, index)
+  }
+  return index.get(nodeId) ?? null
 }
 
 /**

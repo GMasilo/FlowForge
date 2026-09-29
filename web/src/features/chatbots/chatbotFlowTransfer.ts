@@ -1,6 +1,6 @@
 import { supabase } from '@/shared/lib/supabase'
 import type { Json } from '@/shared/types/database'
-import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
+import { getStepOutputVariables, readSetVariableAssignments, type DesignerEdge, type DesignerNode } from '@/features/designer/model/flowSchema'
 import {
   remapEntityIds,
   remapFlowGraphIds,
@@ -229,39 +229,33 @@ export async function replaceFlowInDb(args: {
   const entityRemapped = remapEntityIds(args.nodes, entitiesExport, targetEntities)
   const { nodes, edges: remappedEdges } = remapFlowGraphIds(entityRemapped, edges)
 
-  const { error: delEdgesError } = await supabase.from('flow_edges').delete().eq('flow_id', flowId)
-  if (delEdgesError) throw delEdgesError
-  const { error: delNodesError } = await supabase.from('flow_nodes').delete().eq('flow_id', flowId)
-  if (delNodesError) throw delNodesError
-
-  if (nodes.length) {
-    const { error: insertNodesError } = await supabase.from('flow_nodes').insert(
-      nodes.map((n) => ({
-        id: n.id,
-        flow_id: flowId,
-        key: n.key,
-        type: n.type,
-        label: n.label,
-        config: n.config as Json,
-        position_x: n.position.x,
-        position_y: n.position.y,
-      })),
-    )
-    if (insertNodesError) throw insertNodesError
-  }
-
-  if (remappedEdges.length) {
-    const { error: insertEdgesError } = await supabase.from('flow_edges').insert(
-      remappedEdges.map((e) => ({
-        id: e.id,
-        flow_id: flowId,
-        source_node_id: e.source,
-        target_node_id: e.target,
-        source_handle: e.sourceHandle ?? null,
-        label: e.label ?? null,
-      })),
-    )
-    if (insertEdgesError) throw insertEdgesError
+  // Use the same transactional save as the designer. A rejected node or edge
+  // rolls the graph replacement back instead of leaving a deleted draft.
+  const { data: currentFlow, error: readFlowError } = await supabase
+    .from('chatbot_flows').select('updated_at').eq('id', flowId).single()
+  if (readFlowError) throw readFlowError
+  const stepVars = nodes.flatMap(node => getStepOutputVariables(node).map(key => ({
+    key,
+    value_type: node.type === 'set_variable'
+      ? readSetVariableAssignments(node.config).find(row => row.variableKey.trim() === key)?.valueType ?? 'string'
+      : 'string',
+    source_node_key: node.key,
+  }))).filter((row, index, rows) => rows.findIndex(other => other.key === row.key) === index)
+  const { error: saveError } = await supabase.rpc('save_flow_draft', {
+    p_flow_id: flowId,
+    p_expected_updated_at: currentFlow.updated_at,
+    p_nodes: nodes.map(node => ({
+      id: node.id, key: node.key, type: node.type, label: node.label,
+      config: node.config, position_x: node.position.x, position_y: node.position.y,
+    })) as unknown as Json,
+    p_edges: remappedEdges.map(edge => ({
+      id: edge.id, source_node_id: edge.source, target_node_id: edge.target,
+      source_handle: edge.sourceHandle ?? null, label: edge.label ?? null,
+    })) as unknown as Json,
+    p_step_vars: stepVars as unknown as Json,
+  })
+  if (saveError) {
+    throw new Error(`Could not import the flow. The previous graph was preserved. ${saveError.message}${saveError.hint ? ` (${saveError.hint})` : ''}`)
   }
 
   for (const g of globals) {

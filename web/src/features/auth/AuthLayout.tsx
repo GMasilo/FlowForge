@@ -1,5 +1,5 @@
+import { FlowForgeMark } from '@/shared/ui/flowforge-mark'
 import type { ReactNode } from 'react'
-import { Sparkles } from 'lucide-react'
 import { Card } from '@/shared/ui/card'
 
 export function AuthLayout({
@@ -21,9 +21,7 @@ export function AuthLayout({
 
       <div className="ff-page-enter relative z-10 w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl ff-brand-mark text-white">
-            <Sparkles className="h-6 w-6" />
-          </div>
+          <FlowForgeMark className="mx-auto mb-4 block h-14 w-14" />
           <p className="font-[family-name:var(--font-display)] text-4xl font-semibold tracking-tight">
             <span className="ff-gradient-text">FlowForge</span>
           </p>

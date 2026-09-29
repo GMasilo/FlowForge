@@ -1,3 +1,4 @@
+import { buildLinearItems, findContinueRootIds, isContainerNodeType } from '../src/features/designer/utils/conditionGraph'
 ﻿import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -69,6 +70,12 @@ describe('Atlas import pack',()=>{
     const seen = new Set<string>();const queue=[nodeByKey.welcome.id]
     while(queue.length){const id=queue.shift()!;if(seen.has(id))continue;seen.add(id);queue.push(...parsed.edges.filter(e=>e.source===id).map(e=>e.target));const n=parsed.nodes.find(n=>n.id===id)!;if(n.type==='skip_to'){expect(nodeByKey[String(n.config.targetNodeKey)]).toBeDefined();queue.push(nodeByKey[String(n.config.targetNodeKey)].id)}}
     expect(seen.size).toBe(parsed.nodes.length)
+  })
+  it('lays out every Atlas node and resolves cyclic branch continuations',()=>{
+    const items=buildLinearItems(parsed.nodes,parsed.edges)
+    expect(new Set(items.map(item=>item.node.id)).size).toBe(parsed.nodes.length)
+    expect(items).toHaveLength(parsed.nodes.length)
+    for(const node of parsed.nodes.filter(n=>isContainerNodeType(n.type))) expect(()=>findContinueRootIds(node.id,parsed.edges,parsed.nodes)).not.toThrow()
   })
   it('guards every live connector in demo mode',()=>{
     for(const [gate,target] of [['payment_mode','demo_payment'],['agent_mode','demo_handoff'],['identity_mode','identity_demo'],...['http','database','email','integration','transfer'].map(k=>['gate_'+k,'preview_'+k])]){

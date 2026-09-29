@@ -39,6 +39,16 @@ export function parseScenarioGlobals(raw: unknown): Record<string, unknown> {
   return { ...(raw as Record<string, unknown>) }
 }
 
+function sameJsonValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false
+  if (Array.isArray(left) !== Array.isArray(right)) return false
+  const a = left as Record<string, unknown>
+  const b = right as Record<string, unknown>
+  const keys = Object.keys(a)
+  return keys.length === Object.keys(b).length && keys.every(key => Object.prototype.hasOwnProperty.call(b, key) && sameJsonValue(a[key], b[key]))
+}
+
 export function evaluateScenario(args: {
   name: string
   expected: unknown
@@ -63,6 +73,11 @@ export function evaluateScenario(args: {
       ok,
       message: ok ? `Step "${key}" succeeded` : `Step "${key}" did not succeed`,
     })
+  }
+  const values = parseScenarioGlobals(parseScenarioGlobals(args.expected).values)
+  for (const [key, value] of Object.entries(values)) {
+    const ok = sameJsonValue(args.vars[key], value)
+    checks.push({ ok, message: ok ? `Variable "${key}" matches its expected value` : `Variable "${key}" does not match its expected value` })
   }
   if (!checks.length) {
     checks.push({ ok: true, message: 'No expected checks — run recorded' })

@@ -42,15 +42,14 @@ import {
   CornerDownRight,
   RotateCcw,
   Server,
+  FileDown,
 } from 'lucide-react'
 import type { FlowNodeType } from '@/shared/types/database'
 import { readMediaFiles } from '@/features/designer/model/chatbotMedia'
 import {
   hasCustomStepSettingsForNode,
   nodeTypeLabel,
-  readSetVariableAssignments,
   stepSettingsSummary,
-  type DesignerNode,
 } from '@/features/designer/model/flowSchema'
 import { parseSwitchCases, switchCaseLabel } from '@/features/designer/model/switchStep'
 import { useDesignerStore } from '@/features/designer/store/designerStore'
@@ -58,6 +57,8 @@ import {
   CANVAS_NODE_WIDTH,
   computeCanvasLayout,
 } from '@/features/designer/utils/canvasLayout'
+import { canvasEdgeMeta, canvasStepPreview } from '@/features/designer/utils/canvasVisuals'
+import { downloadCanvasPdf } from '@/features/designer/utils/exportCanvasPdf'
 import { cn } from '@/shared/lib/utils'
 
 const icons: Record<FlowNodeType, typeof MessageSquare> = {
@@ -102,101 +103,6 @@ const typeColor: Record<FlowNodeType, string> = {
   operation: 'var(--color-node-operation)',
   entity: 'var(--color-node-http)',
   end: 'var(--color-node-end)',
-}
-
-function truncate(value: string, max = 42) {
-  const t = value.replace(/\s+/g, ' ').trim()
-  if (!t) return ''
-  return t.length > max ? `${t.slice(0, max - 1)}…` : t
-}
-
-function stepPreview(node: DesignerNode): string {
-  const c = node.config as Record<string, unknown>
-  switch (node.type) {
-    case 'message':
-      return truncate(String(c.text ?? c.message ?? ''))
-    case 'question':
-      return truncate(String(c.prompt ?? c.question ?? ''))
-    case 'http':
-      return truncate(`${String(c.method ?? 'GET')} ${String(c.url ?? c.path ?? '')}`)
-    case 'database':
-      return truncate(`${String(c.operation ?? 'query')} · ${String(c.sql ?? 'SQL…')}`)
-    case 'email':
-      return truncate(String(c.to ?? c.subject ?? ''))
-    case 'integration':
-      return truncate(String(c.action ?? 'Integration'))
-    case 'handoff':
-      return truncate(String(c.message ?? 'Escalate to agent'))
-    case 'transfer':
-      return truncate(String(c.startNodeKey ? `Start at ${c.startNodeKey}` : 'Transfer to chatbot'))
-    case 'sign_in':
-      return truncate(String(c.prompt ?? c.mode ?? 'Sign in'))
-    case 'button': {
-      const buttons = Array.isArray(c.buttons) ? c.buttons : []
-      const labels = buttons
-        .map((b) => (b && typeof b === 'object' && 'label' in b ? String((b as { label?: unknown }).label ?? '') : ''))
-        .filter(Boolean)
-      return truncate(labels.length ? labels.join(' · ') : String(c.text ?? 'Button'))
-    }
-    case 'skip_to': {
-      const target = String(c.targetNodeKey ?? '').trim()
-      const defaults = Array.isArray(c.variableDefaults) ? c.variableDefaults.length : 0
-      if (!target) return truncate('Skip to…')
-      return truncate(defaults ? `→ ${target} · ${defaults} var${defaults === 1 ? '' : 's'}` : `→ ${target}`)
-    }
-    case 'restart':
-      return c.clearCookies ? 'Restart · clear cookies' : 'Restart conversation'
-    case 'condition':
-      return truncate(String(c.expression ?? c.left ?? 'If…'))
-    case 'switch':
-      return truncate(String(c.value ?? 'Switch…'))
-    case 'loop':
-      return truncate(String(c.collection ?? 'Each item'))
-    case 'set_variable': {
-      const keys = readSetVariableAssignments(c)
-        .map((row) => row.variableKey.trim())
-        .filter(Boolean)
-      if (!keys.length) return truncate('Set variables…')
-      if (keys.length === 1) return truncate(`${keys[0]} = …`)
-      return truncate(`${keys.slice(0, 3).join(', ')}${keys.length > 3 ? '…' : ''} = …`)
-    }
-    case 'operation':
-      return truncate(String(c.operation ?? c.name ?? ''))
-    case 'entity':
-      return truncate(`${String(c.operation ?? 'list')} · entity`)
-    case 'end':
-      return 'Conversation ends'
-    default:
-      return ''
-  }
-}
-
-function edgeMeta(sourceHandle: string | null | undefined, label: string | null | undefined) {
-  if (label === 'Then') {
-    return { label: 'Then', stroke: '#64748b', labelColor: '#475569' }
-  }
-  if (sourceHandle === 'true' || label === 'Yes') {
-    return { label: 'Yes', stroke: '#059669', labelColor: '#047857' }
-  }
-  if (sourceHandle === 'false' || label === 'No') {
-    return { label: 'No', stroke: '#e11d48', labelColor: '#be123c' }
-  }
-  if (sourceHandle === 'success' || label === 'Success') {
-    return { label: 'Success', stroke: '#059669', labelColor: '#047857' }
-  }
-  if (sourceHandle === 'fail' || label === 'Fail') {
-    return { label: 'Fail', stroke: '#e11d48', labelColor: '#be123c' }
-  }
-  if (sourceHandle === 'body' || label === 'Each') {
-    return { label: 'Each', stroke: '#0d9488', labelColor: '#0f766e' }
-  }
-  if (sourceHandle === 'default' || label === 'Default') {
-    return { label: 'Default', stroke: '#64748b', labelColor: '#475569' }
-  }
-  if (sourceHandle?.startsWith('case_') || label === 'Case') {
-    return { label: label && label !== 'Then' ? label : 'Case', stroke: '#d97706', labelColor: '#b45309' }
-  }
-  return { label: label ?? undefined, stroke: '#94a3b8', labelColor: '#64748b' }
 }
 
 function FlowStepNode({ data, selected }: NodeProps) {
@@ -366,12 +272,13 @@ function FlowStepNode({ data, selected }: NodeProps) {
 const nodeTypes = { flowStep: FlowStepNode }
 
 interface CanvasFlowViewProps {
+  title?: string
   readOnly?: boolean
   fullscreen?: boolean
   onToggleFullscreen?: () => void
 }
 
-function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlowViewProps) {
+function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen, title }: CanvasFlowViewProps) {
   const nodes = useDesignerStore((s) => s.nodes)
   const edges = useDesignerStore((s) => s.edges)
   const selectedNodeId = useDesignerStore((s) => s.selectedNodeId)
@@ -384,6 +291,7 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
   const peerLocks = useDesignerStore((s) => s.peerLocks)
   const { fitView } = useReactFlow()
   const [autoLayout, setAutoLayout] = useState(true)
+  const [pdfBusy, setPdfBusy] = useState(false)
 
   const structureKey = useMemo(
     () =>
@@ -451,7 +359,7 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
             label: n.label,
             key: n.key,
             type: n.type,
-            preview: stepPreview(n),
+            preview: canvasStepPreview(n),
             customSettings: hasCustomStepSettingsForNode(n.config, rootIds.has(n.id)),
             settingsSummary: stepSettingsSummary(n.config),
             issueCount: issueCounts.get(n.id) ?? 0,
@@ -476,7 +384,7 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
   const rfEdges: Edge[] = useMemo(
     () =>
       edges.map((e) => {
-        const meta = edgeMeta(e.sourceHandle, e.label)
+        const meta = canvasEdgeMeta(e.sourceHandle, e.label)
         return {
           id: e.id,
           source: e.source,
@@ -523,6 +431,26 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
     },
     [connect, readOnly],
   )
+
+  const onDownloadPdf = useCallback(async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      const positions = new Map(
+        rfNodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
+      )
+      await downloadCanvasPdf({
+        title: title?.trim() || 'Flow',
+        nodes,
+        edges,
+        positions,
+      })
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not download canvas PDF')
+    } finally {
+      setPdfBusy(false)
+    }
+  }, [pdfBusy, rfNodes, title, nodes, edges])
 
   return (
     <div
@@ -582,6 +510,16 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
             <LayoutGrid className="h-3.5 w-3.5" />
             Arrange
           </button>
+          <button
+            type="button"
+            onClick={() => void onDownloadPdf()}
+            disabled={pdfBusy}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+            title="Download the full canvas as a PDF"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            {pdfBusy ? 'PDF…' : 'PDF'}
+          </button>
           {onToggleFullscreen ? (
             <button
               type="button"
@@ -599,10 +537,15 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlo
   )
 }
 
-export function CanvasFlowView({ readOnly, fullscreen, onToggleFullscreen }: CanvasFlowViewProps) {
+export function CanvasFlowView({ readOnly, fullscreen, onToggleFullscreen, title }: CanvasFlowViewProps) {
   return (
     <ReactFlowProvider>
-      <CanvasFlowInner readOnly={readOnly} fullscreen={fullscreen} onToggleFullscreen={onToggleFullscreen} />
+      <CanvasFlowInner
+        readOnly={readOnly}
+        fullscreen={fullscreen}
+        onToggleFullscreen={onToggleFullscreen}
+        title={title}
+      />
     </ReactFlowProvider>
   )
 }
