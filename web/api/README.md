@@ -259,3 +259,9 @@ Conversation (public chat):
 - optional `file_index` when the same response has multiple files
 
 Stored conversation name: `{sessionId}_{nodeKey}.pdf` (example). Fetch with `GET /file/get?kind=conversation&instance_id=…&chatbot_id=…&name=…` (JWT) or add `session_id` for the same conversation.
+# TensorFlow intent API
+
+The optional Node.js intent service is included in [intent/README.md](intent/README.md).
+It provides authenticated classification and health endpoints. Its setup guide includes
+the Apache reverse proxy configuration; it requires a running Node process in addition to PHP.
+

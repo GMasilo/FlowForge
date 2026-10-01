@@ -3042,13 +3042,16 @@ export async function runIntegrationStep(
 
   if (!canCallApi) {
     connectionInvokeMs = 0
-    result = { ...result, ok: true, mocked: true }
+    result = action === 'ml.classify_intent'
+      ? { ...result, ok: false, error: 'Configure the intent service integration before testing classification.', data: { intent: 'unknown', matched: false } }
+      : { ...result, ok: true, mocked: true }
+    if (action === 'ml.classify_intent') runStatus = 'Failed'
     next = {
       ...next,
       messages: appendTechSystemMessage(
         next.messages,
         options,
-        `Integration ${action || '(no action)'} (mocked)`,
+        action === 'ml.classify_intent' ? 'Intent service is not configured.' : `Integration ${action || '(no action)'} (mocked)`,
       ),
     }
   } else {

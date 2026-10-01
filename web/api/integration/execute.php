@@ -429,6 +429,37 @@ try {
         ], $ok ? 200 : 422);
     }
 
+    if ($action === 'ml.classify_intent' && $provider === 'custom') {
+        $baseUrl = rtrim(ff_str($cfg, 'base_url'), '/');
+        if ($baseUrl === '') Response::error('Configure the TensorFlow service base URL on the Custom API integration.', 400);
+        $url = $baseUrl . '/classify';
+        Security::assertSafePublicUrl($url, []);
+        $token = ff_str($secrets, 'api_key');
+        if ($token === '') Response::error('Configure the model service API token on the integration.', 400);
+        $categories = json_decode(ff_str($fields, 'categories'), true);
+        if (!is_array($categories) || !array_is_list($categories) || count($categories) < 2 || count($categories) > 10) Response::error('Provide a JSON array with 2–10 intent categories.', 400);
+        $text = ff_str($fields, 'text');
+        if (trim($text) === '' || strlen($text) > 8000) Response::error('Visitor message is empty or too long.', 400);
+        $thresholdRaw = trim(ff_str($fields, 'threshold'));
+        $marginRaw = trim(ff_str($fields, 'margin'));
+        if (($thresholdRaw !== '' && !is_numeric($thresholdRaw)) || ($marginRaw !== '' && !is_numeric($marginRaw))) Response::error('Similarity and margin must be numbers from 0 to 1.', 400);
+        $threshold = $thresholdRaw === '' ? 0.65 : (float) $thresholdRaw;
+        $margin = $marginRaw === '' ? 0.08 : (float) $marginRaw;
+        if ($threshold < 0 || $threshold > 1 || $margin < 0 || $margin > 1) Response::error('Similarity and margin must be numbers from 0 to 1.', 400);
+        $payload = json_encode(['text' => $text, 'categories' => $categories, 'threshold' => $threshold, 'margin' => $margin], JSON_THROW_ON_ERROR);
+        $http = HttpClient::request('POST', $url, ['Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $token], $payload, 20, 65536);
+        $data = ff_http_data($http);
+        $ok = !empty($http['ok']) && is_array($data) && isset($data['intent'], $data['matched'], $data['score'])
+            && is_string($data['intent']) && is_bool($data['matched']) && is_numeric($data['score'])
+            && is_finite((float) $data['score']) && (float) $data['score'] >= -1 && (float) $data['score'] <= 1;
+        if ($ok) {
+            $ok = $data['matched']
+                ? $data['intent'] !== 'unknown' && in_array($data['intent'], array_column($categories, 'name'), true) && (float) $data['score'] >= $threshold
+                : $data['intent'] === 'unknown';
+        }
+        Response::json(['ok' => $ok, 'status' => (int) ($http['status'] ?? 0), 'data' => $ok ? $data : null, 'error' => $ok ? null : 'Intent service failed or returned an invalid prediction. Check its health and configuration.'], $ok ? 200 : 422);
+    }
+
     if ($action === 'custom.request' && $provider === 'custom') {
         $baseUrl = rtrim(ff_str($cfg, 'base_url'), '/');
         $path = ff_str($fields, 'path') ?: '/';

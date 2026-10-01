@@ -1,5 +1,8 @@
 RewriteEngine On
 
+# TensorFlow is served by the Node reverse proxy, never as static source files.
+RewriteRule ^intent(?:/.*)?$ - [F,L]
+
 # Pass Authorization through to PHP (CGI/FastCGI often strips it otherwise)
 RewriteCond %{HTTP:Authorization} .
 RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

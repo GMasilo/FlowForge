@@ -8,6 +8,7 @@ export type IntegrationActionId =
   | 'storage.upload_text'
   | 'notion.create_page'
   | 'custom.request'
+  | 'ml.classify_intent'
 
 export type IntegrationActionField = {
   key: string
@@ -26,6 +27,16 @@ export type IntegrationActionDef = {
 }
 
 export const INTEGRATION_ACTIONS: IntegrationActionDef[] = [
+  {
+    id: 'ml.classify_intent', label: 'Understand intent (TensorFlow)',
+    description: 'Match a visitor message to example phrases using your TensorFlow service. Returns unknown for weak or ambiguous matches; scores are similarity, not probability.',
+    providers: ['custom'], fields: [
+      { key: 'text', label: 'Visitor message', placeholder: '{{vars.message}}' },
+      { key: 'categories', label: 'Categories and example phrases', multiline: true, placeholder: '[{"name":"billing","examples":["Pay my fees","I need a refund"]},{"name":"admissions","examples":["Apply to study","Admission requirements"]}]', hint: 'Use the category editor above, or provide a JSON array. 2–10 categories; unknown is reserved.' },
+      { key: 'threshold', label: 'Minimum similarity (0–1)', placeholder: '0.65', hint: 'Defaults to 0.65. Tune with real examples before enabling automatic routing.' },
+      { key: 'margin', label: 'Minimum lead over the next category (0–1)', placeholder: '0.08', hint: 'Defaults to 0.08. Similar scores return unknown so you can ask a clarifying question.' },
+    ],
+  },
   {
     id: 'slack.post_message',
     label: 'Post Slack message',
@@ -125,6 +136,7 @@ export function actionDef(id: string | null | undefined): IntegrationActionDef |
 }
 
 export function defaultActionForProvider(provider: IntegrationProvider): IntegrationActionId {
+  if (provider === 'custom') return 'custom.request'
   const list = actionsForProvider(provider)
   return list[0]?.id ?? 'custom.request'
 }

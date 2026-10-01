@@ -1,3 +1,4 @@
+import { IntentCategoryEditor } from '@/features/integrations/IntentCategoryEditor'
 import type { ConnectionWithConfig, FlowNodeType, IntegrationProvider } from '@/shared/types/database'
 import type { DesignerEdge, DesignerNode } from '@/features/designer/model/flowSchema'
 import {
@@ -2854,6 +2855,7 @@ function IntegrationStepFields({
         ) : null}
       </div>
 
+      {actionId === 'ml.classify_intent' && <IntentCategoryEditor disabled={readOnly} value={fieldValues.categories ?? ''} onChange={value => setField('categories', value)} />}
       {selectedAction?.fields.map((field) => (
         <div key={field.key}>
           <Label>{field.label}</Label>
