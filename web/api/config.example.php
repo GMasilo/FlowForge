@@ -66,6 +66,13 @@ return [
     // Example: 'https://gkjtt.co.za/flowforge/api'
     'public_api_url' => 'https://gkjtt.co.za/flowforge/api',
 
+    // TensorFlow intent service (Node in web/api/intent). Prefer loopback so PHP need not call the public URL.
+    // Start: cd web/api/intent && INTENT_API_TOKEN=... PORT=8091 node server.mjs
+    // Apache may also proxy /flowforge/api/intent/{classify,health} → 127.0.0.1:8091 (see intent/apache.example.conf).
+    'intent_service_url' => 'http://127.0.0.1:8091',
+    // Same secret as INTENT_API_TOKEN on the Node process (optional if set on the Custom API integration api_key).
+    // 'intent_api_token' => '',
+
     // Secret for POST /alerts/run (cron). Use a long random string.
     // Schedule example (every 30 min):
     //   */30 * * * * curl -s -X POST -H "Authorization: Bearer $SECRET" https://…/flowforge/api/alerts/run
