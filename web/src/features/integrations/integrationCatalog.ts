@@ -132,7 +132,6 @@ export const INTEGRATION_CATALOG: IntegrationCatalogItem[] = [
     configFields: [
       { key: 'tenant_id', label: 'Tenant ID' },
       { key: 'client_id', label: 'Application (client) ID' },
-      { key: 'site_id', label: 'Site ID' },
     ],
     secretFields: [
       { key: 'client_secret', label: 'Client secret' },
