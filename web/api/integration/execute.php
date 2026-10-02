@@ -429,13 +429,32 @@ try {
         ], $ok ? 200 : 422);
     }
 
-    if ($action === 'ml.classify_intent' && $provider === 'custom') {
-        $baseUrl = rtrim(ff_str($cfg, 'base_url'), '/');
-        if ($baseUrl === '') Response::error('Configure the TensorFlow service base URL on the Custom API integration.', 400);
+    if ($action === 'ml.classify_intent' && ($provider === 'custom' || $provider === 'tensorflow')) {
+        // Prefer server-local intent service (loopback) from API config — avoids SSRF blocks on self-hosted URLs.
+        $intentService = '';
+        if (isset($config) && is_array($config)) {
+            $intentService = trim((string) ($config['intent_service_url'] ?? ''));
+        }
+        if ($intentService === '') {
+            $intentService = trim((string) (getenv('FLOWFORGE_INTENT_URL') ?: ''));
+        }
+        $baseUrl = rtrim($intentService !== '' ? $intentService : ff_str($cfg, 'base_url'), '/');
+        if ($baseUrl === '') {
+            Response::error(
+                'Configure the TensorFlow intent service: set intent_service_url in api/config.php (e.g. http://127.0.0.1:8091) or base_url on the Custom API integration.',
+                400,
+            );
+        }
         $url = $baseUrl . '/classify';
-        Security::assertSafePublicUrl($url, []);
+        $isLoopback = (bool) preg_match('#^https?://(127\.0\.0\.1|localhost)(:\d+)?(/|$)#i', $baseUrl);
+        if (!$isLoopback) {
+            Security::assertSafePublicUrl($url, []);
+        }
         $token = ff_str($secrets, 'api_key');
-        if ($token === '') Response::error('Configure the model service API token on the integration.', 400);
+        if ($token === '' && $intentService !== '') {
+            $token = trim((string) (getenv('INTENT_API_TOKEN') ?: ($config['intent_api_token'] ?? '')));
+        }
+        if ($token === '') Response::error('Configure the model service API token on the integration (api_key) or INTENT_API_TOKEN / intent_api_token.', 400);
         $categories = json_decode(ff_str($fields, 'categories'), true);
         if (!is_array($categories) || !array_is_list($categories) || count($categories) < 2 || count($categories) > 10) Response::error('Provide a JSON array with 2–10 intent categories.', 400);
         $text = ff_str($fields, 'text');
@@ -478,29 +497,20 @@ try {
             $headers['Authorization'] = 'Bearer ' . $token;
         }
         $http = HttpClient::request('POST', $url, $headers, $content !== '' ? $content : '{}', 20, 1_048_576);
+        $data = ff_http_data($http);
         $ok = !empty($http['ok']);
         Response::json([
             'ok' => $ok,
             'status' => (int) ($http['status'] ?? 0),
-            'data' => ff_http_data($http),
-            'error' => $ok ? null : (string) ($http['error'] ?? 'request_failed'),
+            'data' => $data,
+            'error' => $ok ? null : (string) ($http['error'] ?? 'custom_request_failed'),
         ], $ok ? 200 : 422);
     }
 
     if ($action === 'sheets.create_spreadsheet' && $provider === 'google_sheets') {
-        $token = ff_google_access_token($cfg, $secrets, [
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/drive.file',
-        ]);
-        $title = trim(ff_str($fields, 'title')) ?: ('FlowForge ' . gmdate('Y-m-d H:i:s'));
-        $sheetTitle = trim(ff_str($fields, 'sheetTitle')) ?: 'Sheet1';
-        $values = ff_parse_sheet_values(ff_str($fields, 'values'));
-        $createPayload = [
-            'properties' => ['title' => $title],
-            'sheets' => [
-                ['properties' => ['title' => $sheetTitle]],
-            ],
-        ];
+        $token = ff_google_access_token($cfg, $secrets);
+        $title = ff_str($fields, 'title') ?: 'FlowForge Sheet';
+        $payload = json_encode(['properties' => ['title' => $title]], JSON_UNESCAPED_UNICODE);
         $http = HttpClient::request(
             'POST',
             'https://sheets.googleapis.com/v4/spreadsheets',
@@ -508,96 +518,30 @@ try {
                 'Authorization' => 'Bearer ' . $token['access_token'],
                 'Content-Type' => 'application/json',
             ],
-            json_encode($createPayload, JSON_UNESCAPED_UNICODE) ?: '{}',
-            30,
-            2_097_152,
+            $payload ?: '{}',
+            20,
+            1_048_576,
         );
-        $created = ff_http_data($http);
-        if (empty($http['ok']) || !is_array($created)) {
-            $err = 'sheets_create_failed';
-            if (is_array($created) && isset($created['error'])) {
-                $ge = $created['error'];
-                if (is_array($ge) && isset($ge['message'])) {
-                    $err = (string) $ge['message'];
-                } elseif (is_string($ge)) {
-                    $err = $ge;
-                }
-            } elseif (is_string($http['error'] ?? null)) {
-                $err = (string) $http['error'];
-            }
-            Response::json([
-                'ok' => false,
-                'status' => (int) ($http['status'] ?? 0),
-                'data' => $created,
-                'error' => $err,
-            ], 422);
-        }
-
-        $spreadsheetId = (string) ($created['spreadsheetId'] ?? '');
-        $spreadsheetUrl = (string) ($created['spreadsheetUrl'] ?? '');
-        $out = [
-            'spreadsheetId' => $spreadsheetId,
-            'spreadsheetUrl' => $spreadsheetUrl,
-            'title' => $title,
-            'sheetTitle' => $sheetTitle,
-            'created' => $created,
-        ];
-
-        if ($spreadsheetId !== '' && count($values) > 0) {
-            $range = $sheetTitle . '!A1';
-            $appendUrl = 'https://sheets.googleapis.com/v4/spreadsheets/'
-                . rawurlencode($spreadsheetId)
-                . '/values/'
-                . rawurlencode($range)
-                . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
-            $appendHttp = HttpClient::request(
-                'POST',
-                $appendUrl,
-                [
-                    'Authorization' => 'Bearer ' . $token['access_token'],
-                    'Content-Type' => 'application/json',
-                ],
-                json_encode(['values' => [$values]], JSON_UNESCAPED_UNICODE) ?: '{"values":[[]]}',
-                30,
-                2_097_152,
-            );
-            $appendData = ff_http_data($appendHttp);
-            $out['initialRow'] = $appendData;
-            if (empty($appendHttp['ok'])) {
-                $err = is_array($appendData)
-                    ? (string) (($appendData['error']['message'] ?? null) ?: 'sheets_create_ok_but_initial_row_failed')
-                    : 'sheets_create_ok_but_initial_row_failed';
-                Response::json([
-                    'ok' => false,
-                    'status' => (int) ($appendHttp['status'] ?? 0),
-                    'data' => $out,
-                    'error' => $err,
-                ], 422);
-            }
-        }
-
+        $data = ff_http_data($http);
+        $ok = !empty($http['ok']) && is_array($data) && isset($data['spreadsheetId']);
         Response::json([
-            'ok' => true,
-            'status' => (int) ($http['status'] ?? 200),
-            'data' => $out,
-            'error' => null,
-        ]);
+            'ok' => $ok,
+            'status' => (int) ($http['status'] ?? 0),
+            'data' => $data,
+            'error' => $ok ? null : (string) ($http['error'] ?? 'sheets_create_failed'),
+        ], $ok ? 200 : 422);
     }
 
     if ($action === 'sheets.append_row' && $provider === 'google_sheets') {
         $token = ff_google_access_token($cfg, $secrets);
-        $spreadsheetId = ff_str($fields, 'spreadsheetId') ?: ff_str($cfg, 'spreadsheet_id');
-        $range = ff_str($fields, 'range') ?: 'Sheet1!A1';
+        $spreadsheetId = ff_str($fields, 'spreadsheet_id') ?: ff_str($cfg, 'default_spreadsheet_id');
+        $range = ff_str($fields, 'range') ?: 'Sheet1';
         $values = ff_parse_sheet_values(ff_str($fields, 'values'));
-        if ($spreadsheetId === '') {
-            Response::error('spreadsheetId is required', 400);
+        if ($spreadsheetId === '' || empty($values)) {
+            Response::error('spreadsheet_id and values are required', 400);
         }
-        $url = 'https://sheets.googleapis.com/v4/spreadsheets/'
-            . rawurlencode($spreadsheetId)
-            . '/values/'
-            . rawurlencode($range)
-            . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
         $payload = json_encode(['values' => [$values]], JSON_UNESCAPED_UNICODE);
+        $url = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($spreadsheetId) . '/values/' . rawurlencode($range) . ':append?valueInputOption=USER_ENTERED';
         $http = HttpClient::request(
             'POST',
             $url,
@@ -605,64 +549,66 @@ try {
                 'Authorization' => 'Bearer ' . $token['access_token'],
                 'Content-Type' => 'application/json',
             ],
-            $payload ?: '{"values":[[]]}',
-            30,
-            2_097_152,
+            $payload ?: '{}',
+            20,
+            1_048_576,
         );
+        $data = ff_http_data($http);
         $ok = !empty($http['ok']);
         Response::json([
             'ok' => $ok,
             'status' => (int) ($http['status'] ?? 0),
-            'data' => ff_http_data($http),
+            'data' => $data,
             'error' => $ok ? null : (string) ($http['error'] ?? 'sheets_append_failed'),
         ], $ok ? 200 : 422);
     }
 
     if ($action === 'storage.upload_text' && $provider === 'google_drive') {
-        $token = ff_google_access_token($cfg, $secrets);
-        $path = ff_safe_storage_path(ff_str($fields, 'path') ?: 'flowforge-export.txt');
+        $token = ff_google_access_token($cfg, $secrets, [
+            'https://www.googleapis.com/auth/drive.file',
+        ]);
+        $name = ff_str($fields, 'name') ?: 'upload.txt';
         $content = ff_str($fields, 'content');
-        $name = basename($path);
-        $folderId = ff_str($cfg, 'folder_id');
-        $meta = ['name' => $name];
+        $folderId = ff_str($fields, 'folder_id') ?: ff_str($cfg, 'default_folder_id');
+        $metadata = ['name' => $name];
         if ($folderId !== '') {
-            $meta['parents'] = [$folderId];
+            $metadata['parents'] = [$folderId];
         }
-        $boundary = 'ff_' . bin2hex(random_bytes(8));
-        $bodyParts =
-            "--{$boundary}\r\n"
+        $boundary = 'flowforge_' . bin2hex(random_bytes(8));
+        $body = "--{$boundary}\r\n"
             . "Content-Type: application/json; charset=UTF-8\r\n\r\n"
-            . json_encode($meta, JSON_UNESCAPED_UNICODE) . "\r\n"
+            . json_encode($metadata, JSON_UNESCAPED_UNICODE) . "\r\n"
             . "--{$boundary}\r\n"
             . "Content-Type: text/plain; charset=UTF-8\r\n\r\n"
             . $content . "\r\n"
             . "--{$boundary}--";
         $http = HttpClient::request(
             'POST',
-            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
             [
                 'Authorization' => 'Bearer ' . $token['access_token'],
                 'Content-Type' => 'multipart/related; boundary=' . $boundary,
             ],
-            $bodyParts,
+            $body,
             40,
             4_194_304,
         );
-        $ok = !empty($http['ok']);
+        $data = ff_http_data($http);
+        $ok = !empty($http['ok']) && is_array($data) && isset($data['id']);
         Response::json([
             'ok' => $ok,
             'status' => (int) ($http['status'] ?? 0),
-            'data' => ff_http_data($http),
+            'data' => $data,
             'error' => $ok ? null : (string) ($http['error'] ?? 'drive_upload_failed'),
         ], $ok ? 200 : 422);
     }
 
     if ($action === 'storage.upload_text' && $provider === 'microsoft_onedrive') {
         $token = ff_microsoft_access_token($cfg, $secrets);
-        $path = ff_safe_storage_path(ff_str($fields, 'path') ?: 'flowforge-export.txt');
+        $path = ff_safe_storage_path(ff_str($fields, 'path') ?: 'upload.txt');
         $content = ff_str($fields, 'content');
-        $driveId = trim(ff_str($cfg, 'drive_id'));
-        $userPrincipal = trim(ff_str($cfg, 'user_principal') ?: ff_str($cfg, 'user_id'));
+        $driveId = ff_str($fields, 'drive_id') ?: ff_str($cfg, 'default_drive_id');
+        $userPrincipal = ff_str($fields, 'user_principal') ?: ff_str($cfg, 'user_principal');
         $segments = array_map('rawurlencode', explode('/', $path));
         $encodedPath = implode('/', $segments);
         $grant = (string) ($token['grant'] ?? '');
@@ -708,6 +654,10 @@ try {
         ], $ok ? 200 : 422);
     }
 
+    $hint = 'This provider/action pair is not implemented on the API.';
+    if ($action === 'ml.classify_intent') {
+        $hint = 'Understand intent requires a Custom API integration (provider=custom) with the TensorFlow intent service. Deploy web/api/integration/execute.php, run web/api/intent (Node on 8091), configure Apache proxy or intent_service_url=http://127.0.0.1:8091, and set the integration api_key to INTENT_API_TOKEN.';
+    }
     Response::json([
         'ok' => false,
         'status' => 501,
@@ -717,6 +667,7 @@ try {
             'fields' => $fields,
         ],
         'error' => 'integration_action_not_implemented',
+        'hint' => $hint,
     ], 501);
 } catch (Throwable $e) {
     Response::json(['ok' => false, 'status' => 500, 'data' => null, 'error' => $e->getMessage()], 500);
