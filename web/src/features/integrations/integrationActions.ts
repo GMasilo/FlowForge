@@ -9,6 +9,7 @@ export type IntegrationActionId =
   | 'notion.create_page'
   | 'custom.request'
   | 'ml.classify_intent'
+  | 'ml.health_check'
 
 export type IntegrationActionField = {
   key: string
@@ -28,13 +29,51 @@ export type IntegrationActionDef = {
 
 export const INTEGRATION_ACTIONS: IntegrationActionDef[] = [
   {
-    id: 'ml.classify_intent', label: 'Understand intent (TensorFlow)',
-    description: 'Match a visitor message to example phrases using your TensorFlow service. Returns unknown for weak or ambiguous matches; scores are similarity, not probability.',
-    providers: ['custom'], fields: [
+    id: 'ml.classify_intent',
+    label: 'Understand intent (TensorFlow)',
+    description:
+      'Match a visitor message to example phrases using your TensorFlow service. Returns unknown for weak or ambiguous matches; scores are similarity, not probability.',
+    providers: ['custom'],
+    fields: [
       { key: 'text', label: 'Visitor message', placeholder: '{{vars.message}}' },
-      { key: 'categories', label: 'Categories and example phrases', multiline: true, placeholder: '[{"name":"billing","examples":["Pay my fees","I need a refund"]},{"name":"admissions","examples":["Apply to study","Admission requirements"]}]', hint: 'Use the category editor above, or provide a JSON array. 2–10 categories; unknown is reserved.' },
-      { key: 'threshold', label: 'Minimum similarity (0–1)', placeholder: '0.65', hint: 'Defaults to 0.65. Tune with real examples before enabling automatic routing.' },
-      { key: 'margin', label: 'Minimum lead over the next category (0–1)', placeholder: '0.08', hint: 'Defaults to 0.08. Similar scores return unknown so you can ask a clarifying question.' },
+      {
+        key: 'categories',
+        label: 'Categories and example phrases',
+        multiline: true,
+        placeholder:
+          '[{"name":"billing","examples":["Pay my fees","I need a refund"]},{"name":"admissions","examples":["Apply to study","Admission requirements"]}]',
+        hint: 'Use the category editor above, or provide a JSON array. 2–10 categories; unknown is reserved.',
+      },
+      {
+        key: 'threshold',
+        label: 'Minimum similarity (0–1)',
+        placeholder: '0.65',
+        hint: 'Defaults to 0.65. Tune with real examples before enabling automatic routing.',
+      },
+      {
+        key: 'margin',
+        label: 'Minimum lead over the next category (0–1)',
+        placeholder: '0.08',
+        hint: 'Defaults to 0.08. Similar scores return unknown so you can ask a clarifying question.',
+      },
+    ],
+  },
+  {
+    id: 'ml.health_check',
+    label: 'Check intent service health',
+    description:
+      'Call the TensorFlow intent service /health endpoint. Use to verify the model is loaded before classify steps, or in a diagnostic branch.',
+    providers: ['custom'],
+    fields: [],
+  },
+  {
+    id: 'custom.request',
+    label: 'Custom API request',
+    description: 'POST JSON to a path under the integration base URL (or a full path on that host).',
+    providers: ['custom'],
+    fields: [
+      { key: 'path', label: 'Path', placeholder: '/hooks/event' },
+      { key: 'content', label: 'JSON body', multiline: true, placeholder: '{"ok":true}' },
     ],
   },
   {
@@ -65,7 +104,13 @@ export const INTEGRATION_ACTIONS: IntegrationActionDef[] = [
     fields: [
       { key: 'spreadsheetId', label: 'Spreadsheet ID', placeholder: 'Leave blank for integration default' },
       { key: 'range', label: 'Range', placeholder: 'Sheet1!A1' },
-      { key: 'values', label: 'Values', multiline: true, placeholder: 'a,b,c or ["a","b"]', hint: 'Comma-separated or JSON array; templates allowed' },
+      {
+        key: 'values',
+        label: 'Values',
+        multiline: true,
+        placeholder: 'a,b,c or ["a","b"]',
+        hint: 'Comma-separated or JSON array; templates allowed',
+      },
     ],
   },
   {
@@ -112,16 +157,6 @@ export const INTEGRATION_ACTIONS: IntegrationActionDef[] = [
       { key: 'content', label: 'Body', multiline: true },
     ],
   },
-  {
-    id: 'custom.request',
-    label: 'Custom API request',
-    description: 'POST JSON to the integration base URL path.',
-    providers: ['custom'],
-    fields: [
-      { key: 'path', label: 'Path', placeholder: '/hooks/event' },
-      { key: 'content', label: 'JSON body', multiline: true, placeholder: '{"ok":true}' },
-    ],
-  },
 ]
 
 export function actionsForProvider(provider: IntegrationProvider | null | undefined): IntegrationActionDef[] {
@@ -136,7 +171,7 @@ export function actionDef(id: string | null | undefined): IntegrationActionDef |
 }
 
 export function defaultActionForProvider(provider: IntegrationProvider): IntegrationActionId {
-  if (provider === 'custom') return 'custom.request'
+  if (provider === 'custom') return 'ml.classify_intent'
   const list = actionsForProvider(provider)
   return list[0]?.id ?? 'custom.request'
 }
