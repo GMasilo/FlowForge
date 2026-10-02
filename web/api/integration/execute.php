@@ -432,7 +432,7 @@ try {
         $token = ff_google_access_token($cfg, $secrets);
         $title = ff_str($fields, 'title') ?: 'FlowForge spreadsheet';
         $sheetTitle = ff_str($fields, 'sheetTitle') ?: 'Sheet1';
-        $payload = json_encode(['properties' => ['title' => $title], 'sheets' => [['properties' => ['title' => $sheetTitle]]], JSON_UNESCAPED_UNICODE);
+        $payload = json_encode(['properties' => ['title' => $title], 'sheets' => [['properties' => ['title' => $sheetTitle]]]], JSON_UNESCAPED_UNICODE);
         $http = HttpClient::request('POST', 'https://sheets.googleapis.com/v4/spreadsheets', ['Authorization' => 'Bearer ' . $token['access_token'], 'Content-Type' => 'application/json'], $payload ?: '{}', 30, 1_048_576);
         $data = ff_http_data($http);
         $ok = !empty($http['ok']) && is_array($data) && !empty($data['spreadsheetId']);
