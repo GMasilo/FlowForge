@@ -9,6 +9,9 @@ export type IntegrationActionId =
   | 'notion.create_page'
   | 'custom.request'
   | 'ml.classify_intent'
+  | 'ml.analyze_sentiment'
+  | 'ml.text_similarity'
+  | 'ml.classify_image'
   | 'ml.health_check'
 
 export type IntegrationActionField = {
@@ -30,9 +33,9 @@ export type IntegrationActionDef = {
 export const INTEGRATION_ACTIONS: IntegrationActionDef[] = [
   {
     id: 'ml.classify_intent',
-    label: 'Understand intent (TensorFlow)',
+    label: 'Understand intent',
     description:
-      'Match a visitor message to example phrases using your TensorFlow service. Returns unknown for weak or ambiguous matches; scores are similarity, not probability.',
+      'Match a visitor message to your example phrases (Universal Sentence Encoder). Returns unknown for weak or ambiguous matches; scores are cosine similarity, not probability.',
     providers: ['custom'],
     fields: [
       { key: 'text', label: 'Visitor message', placeholder: '{{vars.message}}' },
@@ -59,10 +62,65 @@ export const INTEGRATION_ACTIONS: IntegrationActionDef[] = [
     ],
   },
   {
-    id: 'ml.health_check',
-    label: 'Check intent service health',
+    id: 'ml.analyze_sentiment',
+    label: 'Analyze sentiment',
     description:
-      'Call the TensorFlow intent service /health endpoint. Use to verify the model is loaded before classify steps, or in a diagnostic branch.',
+      'Classify text as positive, negative, or neutral using the TensorFlow sentence encoder (zero-shot against built-in examples).',
+    providers: ['custom'],
+    fields: [
+      { key: 'text', label: 'Text to analyze', placeholder: '{{vars.message}}' },
+      {
+        key: 'threshold',
+        label: 'Minimum similarity (0–1, optional)',
+        placeholder: '0.35',
+        hint: 'Below this, label is neutral. Default 0.35.',
+      },
+    ],
+  },
+  {
+    id: 'ml.text_similarity',
+    label: 'Compare text similarity',
+    description:
+      'Score how similar two texts are (cosine similarity of Universal Sentence Encoder embeddings). Useful for FAQ matching or duplicate detection.',
+    providers: ['custom'],
+    fields: [
+      { key: 'text_a', label: 'First text', placeholder: '{{vars.message}}', multiline: true },
+      { key: 'text_b', label: 'Second text', placeholder: '{{vars.faq_answer}}', multiline: true },
+    ],
+  },
+  {
+    id: 'ml.classify_image',
+    label: 'Classify image (MobileNet)',
+    description:
+      'Predict ImageNet labels for an image URL or base64 payload using TensorFlow.js MobileNet. Use after a file-upload step; pass the public or instance file URL.',
+    providers: ['custom'],
+    fields: [
+      {
+        key: 'image_url',
+        label: 'Image URL',
+        placeholder: '{{vars.uploaded_image_url}}',
+        hint: 'HTTPS URL to a JPEG or PNG. Prefer files uploaded in this conversation.',
+      },
+      {
+        key: 'image_base64',
+        label: 'Image base64 (optional)',
+        multiline: true,
+        placeholder: 'Leave blank if using Image URL',
+        hint: 'Raw base64 or data URL. Used when Image URL is empty.',
+      },
+      {
+        key: 'top_k',
+        label: 'Top labels',
+        placeholder: '5',
+        hint: 'How many labels to return (1–10). Default 5.',
+      },
+    ],
+  },
+  {
+    id: 'ml.health_check',
+    label: 'Check ML service health',
+    description:
+      'Call the TensorFlow service /health endpoint (model load status and readiness).',
     providers: ['custom'],
     fields: [],
   },
