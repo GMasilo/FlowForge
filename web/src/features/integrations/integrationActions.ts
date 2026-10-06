@@ -3,6 +3,7 @@ import type { IntegrationProvider } from '@/shared/types/database'
 export type IntegrationActionId =
   | 'slack.post_message'
   | 'teams.post_message'
+  | 'outlook.send_mail'
   | 'sheets.create_spreadsheet'
   | 'sheets.append_row'
   | 'storage.upload_text'
@@ -152,6 +153,24 @@ export const INTEGRATION_ACTIONS: IntegrationActionDef[] = [
     fields: [
       { key: 'channel', label: 'Channel / team id', placeholder: 'Optional override' },
       { key: 'message', label: 'Message', multiline: true },
+    ],
+  },
+  {
+    id: 'outlook.send_mail',
+    label: 'Send email (Outlook)',
+    description:
+      'Send mail as the connected Microsoft user via Microsoft Graph (Mail.Send). Connect Microsoft on the integration first.',
+    providers: ['microsoft_onedrive', 'microsoft_teams', 'sharepoint'],
+    fields: [
+      { key: 'to', label: 'To', placeholder: '{{vars.email}}', hint: 'Comma-separated addresses' },
+      { key: 'subject', label: 'Subject', placeholder: 'Thanks for chatting' },
+      { key: 'body', label: 'Body', multiline: true, placeholder: 'Hello {{vars.name}}…' },
+      {
+        key: 'content_type',
+        label: 'Content type',
+        placeholder: 'text or html',
+        hint: 'Defaults to text',
+      },
     ],
   },
   {
