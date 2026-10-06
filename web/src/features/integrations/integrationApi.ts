@@ -130,7 +130,6 @@ export async function createIntegration(input: {
   })
   if (secError) throw secError
 
-  // Ensure install link even if the DB trigger is missing on an older deploy.
   await addIntegrationToChatbot({
     chatbotId: input.chatbotId,
     integrationId: data.id,
@@ -221,4 +220,25 @@ export async function removeIntegrationFromChatbot(args: {
     .eq('chatbot_id', args.chatbotId)
     .eq('integration_id', args.integrationId)
   if (error) throw error
+}
+
+/** Browser redirect URL to start Microsoft Entra OAuth for an integration. */
+export function microsoftOAuthStartUrl(args: {
+  integrationId: string
+  instanceId: string
+  accessToken: string
+  returnTo?: string
+}): string {
+  const base = (import.meta.env.VITE_FLOWFORGE_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
+  if (!base) throw new Error('VITE_FLOWFORGE_API_URL is not configured')
+  const url = new URL(`${base}/oauth/microsoft/start`)
+  url.searchParams.set('integration_id', args.integrationId)
+  url.searchParams.set('instance_id', args.instanceId)
+  url.searchParams.set('access_token', args.accessToken)
+  if (args.returnTo) url.searchParams.set('return_to', args.returnTo)
+  return url.toString()
+}
+
+export function isMicrosoftIntegrationProvider(provider: string): boolean {
+  return provider === 'microsoft_onedrive' || provider === 'microsoft_teams' || provider === 'sharepoint'
 }
