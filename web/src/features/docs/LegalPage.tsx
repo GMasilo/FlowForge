@@ -18,7 +18,7 @@ function LegalDocumentView({ doc, other }: { doc: LegalDocument; other: LegalDoc
           {doc.title}
         </h1>
         <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
-          Effective date: <time dateTime="2026-09-11">{doc.effectiveDate}</time>
+          Effective date: <time dateTime={doc.effectiveDateIso}>{doc.effectiveDate}</time>
         </p>
         <p className="mt-4 text-[15px] leading-relaxed text-[var(--color-ink-muted)]">{doc.summary}</p>
         <p className="mt-3 text-sm text-[var(--color-ink-muted)]">

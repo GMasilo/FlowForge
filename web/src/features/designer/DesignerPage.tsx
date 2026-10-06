@@ -39,6 +39,7 @@ import { LinearFlowView } from '@/features/designer/views/LinearFlowView'
 import { CanvasFlowView } from '@/features/designer/views/CanvasFlowView'
 import { StepInspector } from '@/features/designer/inspector/StepInspector'
 import { ProblemsPanel } from '@/features/designer/ProblemsPanel'
+import { StepReviews } from '@/features/designer/StepReviews'
 import { PreviewChat } from '@/features/designer/preview/PreviewChat'
 import type { PreviewStepRun } from '@/features/designer/preview/previewRuntime'
 import type { ScenarioResult } from '@/features/designer/preview/scenarioEval'
@@ -403,7 +404,7 @@ export function DesignerPage() {
     const stepKey = searchParams.get('step')
     if (!stepKey) return
     const match = nodes.find((n) => n.key === stepKey)
-    if (match) selectNode(match.id)
+    if (match) useDesignerStore.getState().revealNode(match.id)
     const next = new URLSearchParams(searchParams)
     next.delete('step')
     setSearchParams(next, { replace: true })
@@ -962,6 +963,8 @@ export function DesignerPage() {
       className={designerFullscreen ? 'h-full max-h-full' : undefined}
     >
       {selected ? (
+        <>
+        {flowBundle.data?.flow.id && <StepReviews key={selected.key} flowId={flowBundle.data.flow.id} nodeKey={selected.key} editable={editable} />}
         <StepInspector
           node={selected}
           connections={connections.data ?? []}
@@ -982,6 +985,7 @@ export function DesignerPage() {
               : null
           }
         />
+        </>
       ) : (
         <p className="text-sm text-[var(--color-ink-muted)]">Select a step in the flow to configure it.</p>
       )}

@@ -1,4 +1,5 @@
 import { validateExpressionText } from '@/features/designer/preview/expressionEval'
+import { policyWarnings } from './policyAdvisor'
 import { validateEntityJoins, type EntityJoin } from '@/features/entities/entityJoins'
 import {
   extractTemplateRefs,
@@ -876,5 +877,5 @@ export function validateFlow(
     })
   }
 
-  return issues
+  return [...issues, ...policyWarnings(nodes, edges, ctx.templateContents)]
 }

@@ -78,6 +78,18 @@ return [
     //   */30 * * * * curl -s -X POST -H "Authorization: Bearer $SECRET" https://…/flowforge/api/alerts/run
     'alerts_cron_secret' => 'aubibcnueoeirejf9c8a340etyujgwmvrwi0jgv940grv8hneiv430v3miorepvm',
 
+    // POST /entity-jobs/run every minute. Set a unique random 32+ character secret.
+    'entity_jobs_cron_secret' => '',
+    // Organisation UUID => named destination. Never put AWS credentials in job rows or the browser.
+    'entity_job_s3_destinations' => [
+        // 'INSTANCE_UUID' => ['nightly_exports' => [
+        //     'bucket' => 'my-private-bucket', 'region' => 'af-south-1', 'prefix' => 'flowforge',
+        //     'access_key_id' => getenv('FLOWFORGE_S3_ACCESS_KEY_ID'),
+        //     'secret_access_key' => getenv('FLOWFORGE_S3_SECRET_ACCESS_KEY'),
+        //     'session_token' => getenv('FLOWFORGE_S3_SESSION_TOKEN') ?: '',
+        // ]],
+    ],
+
     // Secret for POST /retention/purge (cron). Use a long random string or reuse alerts_cron_secret.
     // Schedule example (nightly at 2am UTC):
     //   0 2 * * * curl -s -X POST -H "Authorization: Bearer $SECRET" https://…/flowforge/api/retention/purge

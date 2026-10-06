@@ -1,4 +1,5 @@
 import { EntityRulesEditor } from '@/features/operations/EntityRulesEditor'
+import { EntityJobsPanel } from './EntityJobsPanel'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Database, Download, FileSpreadsheet, Plus, Trash2 } from 'lucide-react'
@@ -452,6 +453,7 @@ export function EntitiesPanel({ chatbotId }: { chatbotId: string }) {
         </div>
       )}
 
+      {selected?.owned && <EntityJobsPanel key={selected.id} entity={selected} canManage={role === 'owner' || role === 'admin'} />}
       {editable && (installable.data?.length ?? 0) > 0 ? (
         <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
           <h4 className="text-sm font-semibold text-slate-900">Install from organisation</h4>

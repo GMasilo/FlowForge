@@ -2,6 +2,12 @@
 
 Multi-instance chatbot builder with role-based access, a hybrid linear/canvas flow designer, typed variables, and reusable HTTP/email connections.
 
+## Documentation
+
+Open `/flowforge/docs` in the app for feature guides and the expression reference, or `/flowforge/help` for guided topics. Recent guides cover designer debugging, multi-page document templates, entity joins and tables, and TensorFlow integrations.
+
+Backend setup and endpoint details: [PHP API](web/api/README.md) and [TensorFlow service](web/api/intent/README.md). TensorFlow requires a running Node service in addition to PHP; deployment is separate from saving a chatbot draft.
+
 ## Stack
 
 - React + Vite + TypeScript + Tailwind

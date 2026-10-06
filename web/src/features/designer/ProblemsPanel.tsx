@@ -240,7 +240,7 @@ export function ProblemsPanel({
   const nodes = useDesignerStore((s) => s.nodes)
   const flowId = useDesignerStore((s) => s.flowId)
   const selectedNodeId = useDesignerStore((s) => s.selectedNodeId)
-  const selectNode = useDesignerStore((s) => s.selectNode)
+  const selectNode = useDesignerStore((s) => s.revealNode)
   const [tab, setTab] = useState<SidebarTab>('problems')
 
   useEffect(() => {
@@ -355,6 +355,14 @@ export function ProblemsPanel({
       </div>
 
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2">
+        {activeTab === 'problems' && warnings.some(issue => issue.code.startsWith('policy_')) && (
+          <p className="rounded-lg bg-amber-50 p-2 text-[11px] text-amber-900">
+            Policy review flags possible data handling, not a missing notice or a legal violation.
+            Check your organisation’s visitor notice before publishing. This local check does not
+            inspect live records, all connection settings, or external services and may miss risks.
+            {' '}<a className="underline" href={`${import.meta.env.BASE_URL}docs#policy-review`} target="_blank" rel="noreferrer">Review guidance</a>
+          </p>
+        )}
         {activeTab === 'run' && scenarioResult ? (
           <div
             className={cn(

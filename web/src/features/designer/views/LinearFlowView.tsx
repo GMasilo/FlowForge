@@ -164,6 +164,34 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
   // rather than letting flexbox progressively crush the innermost step cards.
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const revealRequest = useDesignerStore((s) => s.revealRequest)
+  const viewRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!revealRequest) return
+    const pending = tree.map(scope => ({ scope, ancestors: [] as string[] }))
+    while (pending.length) {
+      const { scope, ancestors } = pending.pop()!
+      if (scope.item.node.id === revealRequest.nodeId) {
+        setCollapsed(previous => ({ ...previous, ...Object.fromEntries(ancestors.map(id => [id, false])) }))
+        break
+      }
+      if (scope.kind === 'step') continue
+      pending.push(...scope.then.map(child => ({ scope: child, ancestors })))
+      const children = scope.kind === 'condition' ? [...scope.yes, ...scope.no]
+        : scope.kind === 'switch' ? [...scope.default, ...scope.cases.flatMap(lane => lane.nodes)] : scope.body
+      pending.push(...children.map(child => ({ scope: child, ancestors: [...ancestors, scope.item.node.id] })))
+    }
+    // Wait for expanded branches to render before locating the step.
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        const element = viewRef.current?.querySelector<HTMLElement>(`[data-step-id="${CSS.escape(revealRequest.nodeId)}"]`)
+        // Target the card/header, never the enclosing branch and its descendants.
+        // Centre vertically so the sticky app header cannot cover the step.
+        element?.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' })
+      })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [revealRequest, tree])
   const linearWidth = useMemo(() => {
     let depth = 0
     const pending = [...tree]
@@ -507,7 +535,7 @@ export function LinearFlowView({ readOnly }: LinearFlowViewProps) {
   }
 
   return (
-    <div className="w-full min-w-0 overflow-x-auto pb-4" role="region" aria-label="Linear flow, scroll horizontally to explore nested branches" tabIndex={0}>
+    <div ref={viewRef} className="w-full min-w-0 overflow-x-auto pb-4" role="region" aria-label="Linear flow, scroll horizontally to explore nested branches" tabIndex={0}>
     <div className="ff-stagger mx-auto flex flex-col items-stretch gap-0 px-1" style={{ width: linearWidth, minWidth: '100%' }}>
       {tree.length === 0 ? (
         <p className="text-sm text-[var(--color-ink-muted)]">No steps yet.</p>
@@ -605,6 +633,7 @@ function StepCard({
 
   return (
     <div
+      data-step-id={node.id}
       className={cn(
         'group relative flex w-full items-center gap-1 rounded-xl border shadow-sm transition-all duration-200',
         selected
@@ -873,7 +902,7 @@ function ConditionBlock({
           selected ? 'border-amber-400/80 ring-2 ring-amber-400/20' : 'border-slate-300/90',
         )}
       >
-        <div className="flex items-stretch border-b border-slate-200/90 bg-white">
+        <div data-step-id={conditionId} className="flex items-stretch border-b border-slate-200/90 bg-white">
           <button
             type="button"
             aria-label={collapsed ? 'Expand condition' : 'Collapse condition'}
@@ -1135,7 +1164,7 @@ function SwitchBlock({
           selected ? 'border-amber-400/80 ring-2 ring-amber-400/20' : 'border-slate-300/90',
         )}
       >
-        <div className="flex items-stretch border-b border-slate-200/90 bg-white">
+        <div data-step-id={switchId} className="flex items-stretch border-b border-slate-200/90 bg-white">
           <button
             type="button"
             aria-label={collapsed ? 'Expand switch' : 'Collapse switch'}
@@ -1319,7 +1348,7 @@ function LoopBlock({
           selected ? 'border-teal-400/80 ring-2 ring-teal-400/20' : 'border-slate-300/90',
         )}
       >
-        <div className="flex items-stretch border-b border-slate-200/90 bg-white">
+        <div data-step-id={loopId} className="flex items-stretch border-b border-slate-200/90 bg-white">
           <button
             type="button"
             aria-label={collapsed ? 'Expand loop' : 'Collapse loop'}

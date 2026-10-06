@@ -977,6 +977,111 @@ export const EXPRESSION_FUNCTIONS: ExprFunctionDoc[] = [
 
 export const DOC_SECTIONS: DocSection[] = [
   {
+    id: 'entity-scheduled-jobs', title: 'Scheduled entity jobs',
+    summary: 'Daily CSV exports to S3 and controlled cleanup of stale records.',
+    body: [
+      { paragraphs: ['Open Data → Entities, select an entity owned by this chatbot, and expand Scheduled jobs. Owners and administrators can add and manage schedules; editors with entity access can review jobs and run history. Jobs are saved paused, including after edits.'] },
+      { heading: 'Daily exports', bullets: ['Choose Export CSV to S3, a daily time, an IANA timezone such as Africa/Johannesburg, and the destination name supplied by your server administrator.', 'Select the columns to export. Password fields are excluded. Each export is limited to 10,000 rows and 20 MB; exceeding either limit fails the job instead of silently truncating the file.', 'Exports use a unique object name for each run. Spreadsheet formula prefixes are neutralised in CSV cells. AWS credentials remain in server configuration, separately scoped to each organisation.'] },
+      { heading: 'Cleanup', bullets: ['Cleanup works on dynamic entities. Choose an exact field value and an age in days. Only records whose last-updated time is older than that age and whose field matches are removed.', 'Save paused, preview the matching count, then enable. Enabling cleanup asks you to confirm permanent daily deletion. Each run removes at most 1,000 matching records; remaining eligible records wait for later runs.', 'Counts can change as records are edited. Review your retention obligations before enabling. Pause prevents future claims; wait for a running job to finish before changing its settings.'] },
+      { heading: 'Server setup and monitoring', paragraphs: ['The PHP API must be deployed with the entity-jobs/run route and a server scheduler calling it every minute using the configured bearer secret. The database migration alone does not start schedules. Run history shows the latest 20 runs, row counts, destination object keys and errors. Missed schedules produce one catch-up run, not a backlog of daily deletions. Failed runs wait for the next daily slot; there is no automatic retry. A worker abandoned for 15 minutes is marked failed on a later scheduler invocation.'] },
+    ],
+  },
+  {
+    id: 'step-reviews', title: 'Step comments and mentions',
+    summary: 'Review flow steps with collaborators without leaving the designer.',
+    body: [
+      { paragraphs: ['Select a saved step in either designer view and expand Step comments in the step inspector. Post a comment, reply to an open thread, or resolve a finished discussion. Resolved threads remain available and can be reopened. Threads refresh periodically and are paginated.'] },
+      { bullets: ['Type @ and select a collaborator from the suggestions. Selected mentions receive an in-app notification linking back to the step. Typing a name without selecting a suggestion does not notify that person.', 'Only current organisation members who can access the chatbot appear in the mention picker. Comments follow chatbot access, and invalid or out-of-scope mentions are rejected by the server.', 'Comment authors and editors or administrators can resolve threads. New unsaved steps must be saved before accepting comments. Renaming a step key leaves its old comments under the original key; avoid renaming keys during an active review.'] },
+    ],
+  },
+  {
+    id: 'policy-review', title: 'Policy review warnings',
+    summary: 'Review possible data collection and sharing while designing a flow.',
+    body: [
+      { paragraphs: ['Problems includes advisory Policy review warnings for configured response types, sensitive question wording, external actions, model inference, entity records, handoffs, cookies and downloadable documents. Click a warning to inspect its step. The checks run locally on the draft through normal validation; they do not send your flow to TensorFlow or an external AI service.'] },
+      { heading: 'What to declare', bullets: ['Explain the collecting organisation, purpose, required or optional fields, recipients, retention and privacy contact before collection. Review applicable consent and safeguards rather than assuming every field requires consent.', 'For connections and integrations, explain data retrieved or sent, the connected provider and its role. FlowForge processes organisation-collected data to provide configured services, not for independent use.', 'For model actions, explain inputs, inferred results and their use. Review provider logging/training terms and human review for consequential decisions.', 'For files, entities and generated documents, consider separately retained and downloaded copies. A conversation deletion does not necessarily delete those copies.'] },
+      { paragraphs: ['To clear downstream declaration reminders, show a legal or consent template in a message or question, then require a Confirm response before collecting data. The template must contain a body and recognisable privacy, consent, personal-data or terms wording. You can reference the template directly in the Confirm question prompt. Every route to the affected step must pass confirmation; bypass branches and configured jumps keep the warning. Removing the notice or confirmation restores warnings. Card security warnings remain.', 'This recognises a notice and confirmation in the flow; it does not assess whether the notice covers every purpose or certify legal compliance. A privacy link alone does not clear warnings. Rules can miss free-text, indirect template references, webhook configuration, entity schemas and external data handling. Review those separately with the organisation’s privacy owner.'] },
+    ],
+  },
+  {
+    id: 'designer-tools',
+    title: 'Designer tools and debugging',
+    summary: 'Work with complex flows, inspect expressions, and test one automated step at a time.',
+    body: [
+      { heading: 'Keep large flows readable', bullets: [
+        'Branching steps open collapsed. Expand the branch you want to work on; use Fullscreen linear view and horizontal scrolling for deeply nested flows.',
+        'Design tools and checks groups design intelligence, reusable subflows, release comparisons, and pre-publish tests. Expand it when you need these tools.',
+        'Canvas export creates a PDF of the flow. This is a diagram export, separate from downloadable document templates.',
+      ] },
+      { heading: 'Build and validate expressions', paragraphs: [
+        'Open Build an expression beside a supported field to format dates, perform arithmetic, join text, choose a fallback, or build a condition. Choose text, number, or variable/expression for each input and insert the generated expression.',
+        'Use {{formatDate(utcNow(), "yyyy-MM-dd")}} for today’s UTC date. Function names must exist: ucNow() and uctNow() are spelling errors. Invalid functions and expression syntax appear in Problems where statically detectable; runtime errors stop the failing step. Preview is still needed for data-dependent errors.',
+      ] },
+      { heading: 'Step-by-step debugger', paragraphs: [
+        'In Preview, expand Step-by-step debugger. Pause stops before the next automated step; an action already in progress finishes. Run next step executes one automated step while paused. Continue resumes normal execution. Questions still need an answer.',
+        'Inspect variables, step outputs and the latest run to see what changed. Preview connection steps may call live services. Automatic scenario checks use fixtures and do not replace a live integration test.',
+      ] },
+      { heading: 'Question response changes', paragraphs: [
+        'Changing a question’s response type removes attributes belonging to the previous response type; the designer also checks older configurations when loading. Wait for loading checks to complete before editing.',
+        'Numbered choices allow visitors to click an option or enter its number. The saved answer is the choice label, not its position. Optional questions can use a timeout and route to a step configured to run after Timed out; test the recovery path as well as a normal answer.',
+      ] },
+    ],
+  },
+  {
+    id: 'document-studio',
+    title: 'Rich documents and multi-page PDFs',
+    summary: 'Start from a sample, add images and page breaks, and fill documents from conversation data.',
+    body: [
+      { heading: 'Choose and preview a document', paragraphs: [
+        'In Templates, use the document gallery to preview a sample, Download Sample PDF, or Use Template to create an editable copy. Samples include Agreement, Certificate, Checklist, Invoice, student welcome, service impact, and project proposal documents. Open the full browser preview to inspect the document at a larger size.',
+        'Use Page layout for graphical A4 designs, including portrait documents. Add headings, text, fields, images, signatures, lines and cart blocks. Sample PDF downloads contain demonstration values; a generated conversation document uses the current input bindings.',
+      ] },
+      { heading: 'Create multiple pages', paragraphs: [
+        'Select a page in the editor, then choose Page break / new page to insert a page after it. Add content to the new page or move a selected block using its Page setting. Later pages shift forward. Use the preview page selector to inspect each page.',
+      ] },
+      { heading: 'Bind inputs and add tables', bullets: [
+        'Declare template inputs and use {{inputs.key}} in content. Values supplied by the inserting step override template inputs, including explicit blank values. Bind dates with {{formatDate(utcNow(), "yyyy-MM-dd")}}.',
+        'For a dynamic table, set Rows source to an array such as {{vars.records}} and map property keys to column headings. Enable totals only for numeric columns; currency symbols and formatted separators are not accepted as numbers.',
+        'PDF tables wrap text and continue over pages with repeated column headings. In Page layout the flowing table follows the designed pages. Inspect the downloaded PDF for final pagination; the editor table preview is not an exact page-layout simulation.',
+        'PDF preserves positioned design. Word and Excel exports use their own document or tabular layouts and should be checked separately.',
+      ] },
+    ],
+  },
+  {
+    id: 'machine-learning',
+    title: 'TensorFlow integrations',
+    summary: 'Recognise intent, analyse sentiment, compare text, and classify images with your hosted model service.',
+    body: [
+      { heading: 'Connect the service', paragraphs: [
+        'Create a Custom API integration under Test Bot’s (or your own chatbot’s) Data → Integrations. Use the hosted service base URL, for example https://YOUR-DOMAIN/flowforge/api/intent, without /classify. Set bearer authentication and enter the matching INTENT_API_TOKEN in API key / token. Set the integration status to Connected after configuration; changing this status alone does not verify the service.',
+        'The service requires a running Node.js process and an HTTPS reverse proxy in addition to the PHP API. Files are supplied in web/api/intent. Uploading files to PHP hosting alone does not start TensorFlow. Deploy the updated PHP integration/execute.php as well as the Node service. Keep credentials out of chatbot variables and message fields.',
+      ] },
+      { heading: 'Choose an Integration action', bullets: [
+        'Understand intent: pass the visitor’s text and 2–10 categories with example phrases. Save output as intentResult, then Switch on {{vars.intentResult.data.intent}}. Default similarity is 0.65 and minimum lead is 0.08. Weak matches and close ties return unknown; send that branch to clarification or handoff.',
+        'Analyze sentiment: compares text against built-in English examples and returns positive, negative or neutral in data.sentiment. Similarity below the default 0.35 threshold returns neutral. This is example-based classification, not a trained sentiment model.',
+        'Compare text similarity: supply First text and Second text; data.score is cosine similarity. Calibrate a threshold using your own examples before routing automatically.',
+        'Classify image (MobileNet): provide a reachable JPEG/PNG URL or base64 data and request 1–10 labels. Results include data.predictions and data.top. Image support is optional; check service capabilities before using it. Private file links must be accessible to the model service.',
+        'Check ML service health: returns readiness, busy status and available capabilities. Image support may be unavailable while text actions remain available.',
+      ] },
+      { heading: 'Test and troubleshoot', bullets: [
+        'Text similarity scores are not probabilities or accuracy guarantees. Use labelled examples to measure wrong routes and unknown results before publishing.',
+        'Integration is not connected: check the integration’s saved status and credentials. integration_action_not_implemented: verify that the deployed PHP handler supports the selected ML action and provider.',
+        'An HTML Forbidden response from the health URL can mean the web server is denying the route before it reaches Node. Check the reverse proxy; do not expose the service source directory to solve it.',
+        '401 indicates missing or incorrect Bearer authentication; 503 indicates loading or unavailable models; 429 means another prediction is running. Route failed and timed-out steps through an explicit recovery path.',
+      ] },
+    ],
+  },
+  {
+    id: 'entity-query-guide',
+    title: 'Entity templates, joins and chat tables',
+    summary: 'Create structured data quickly and show only the fields your conversation needs.',
+    body: [
+      { paragraphs: ['Create an entity from a starter template such as Users, Products or Poll, or start blank. Review attribute names and types before adding records. Import Excel can create an entity from spreadsheet data; review the detected schema before completing import.'] },
+      { paragraphs: ['Entity list/get steps support joins and selecting specific output columns instead of all columns. Configure the joined entity and matching fields, then choose the columns to return. Every joined entity needs to be installed on the chatbot with query permission. Changing the base entity clears its old join and column selections.'] },
+      { paragraphs: ['To show the result in chat, pass flat records to {{tabulate(vars.records)}}. For Excel records use the parsed records array, not the file URL. Tables fill the available chat width and provide Maximise. The current FlowForge embed script supports expansion into the host page; a plain iframe remains constrained to its frame.'] },
+    ],
+  },
+  {
     id: 'operations', title: 'Release controls and operations',
     summary: 'Review releases, reuse processes, resume chats, protect sensitive answers and help your support team.',
     body: [
@@ -2076,6 +2181,18 @@ export const DOC_SECTIONS: DocSection[] = [
 
 export const FAQ_ITEMS: FaqItem[] = [
   {
+    id: 'ml-ready', question: 'Does selecting Connected mean TensorFlow is ready?',
+    answer: 'No. Connected is a saved integration setting. Start the Node model service, configure its reverse proxy and matching token, deploy the updated PHP handler, then run Check ML service health and test a sample in Preview. See Docs → TensorFlow integrations for troubleshooting.',
+  },
+  {
+    id: 'document-pages', question: 'How do I add another page to a document?',
+    answer: 'Open the template’s Page layout, select the current page, and choose Page break / new page. Move selected blocks with their Page setting. Preview each page and download the PDF to verify final pagination.',
+  },
+  {
+    id: 'expression-typos', question: 'Why does my date expression report an unknown function?',
+    answer: 'Use {{formatDate(utcNow(), "yyyy-MM-dd")}}. The clock function is utcNow(), not uctNow() or ucNow(). Check Problems for syntax and function errors, then Preview to catch errors that depend on actual data.',
+  },
+  {
     id: 'what-is-flowforge',
     question: 'What is FlowForge?',
     answer:
@@ -2246,6 +2363,10 @@ export const FAQ_ITEMS: FaqItem[] = [
 ]
 
 export const HELP_TOPICS = [
+  { title: 'Use TensorFlow actions', description: 'Configure the model service, route intent results, and diagnose connection failures.', to: '/docs#machine-learning' },
+  { title: 'Design multi-page documents', description: 'Use samples, images, page breaks, input bindings and dynamic PDF tables.', to: '/docs#document-studio' },
+  { title: 'Debug a complex flow', description: 'Use collapsed branches, expression checks, and the step-by-step debugger.', to: '/docs#designer-tools' },
+  { title: 'Join and display entity records', description: 'Start from entity templates, select columns, and display chat tables.', to: '/docs#entity-query-guide' },
   {
     title: 'Create your first flow',
     description: 'Add a chatbot, open Design, drop a Message and Question, then Preview.',

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -290,6 +290,16 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen, title }: Ca
   const setEdges = useDesignerStore((s) => s.setEdges)
   const peerLocks = useDesignerStore((s) => s.peerLocks)
   const { fitView } = useReactFlow()
+  const revealRequest = useDesignerStore((s) => s.revealRequest)
+  const viewRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!revealRequest) return
+    const frame = requestAnimationFrame(() => {
+      viewRef.current?.scrollIntoView({ behavior: 'instant', block: 'center' })
+      void fitView({ nodes: [{ id: revealRequest.nodeId }], padding: 0.6, maxZoom: 1, duration: 300 })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [revealRequest, fitView])
   const [autoLayout, setAutoLayout] = useState(true)
   const [pdfBusy, setPdfBusy] = useState(false)
 
@@ -454,6 +464,7 @@ function CanvasFlowInner({ readOnly, fullscreen, onToggleFullscreen, title }: Ca
 
   return (
     <div
+      ref={viewRef}
       className={cn(
         'relative overflow-hidden border border-slate-200/80 bg-[linear-gradient(160deg,#f8fafc_0%,#ffffff_42%,#f0fdfa_100%)] shadow-[var(--shadow-soft)]',
         fullscreen ? 'h-full min-h-0 rounded-xl' : 'h-[min(78vh,760px)] rounded-2xl',

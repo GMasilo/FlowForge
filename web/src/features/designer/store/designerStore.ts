@@ -38,6 +38,8 @@ interface DesignerState {
   nodes: DesignerNode[]
   edges: DesignerEdge[]
   selectedNodeId: string | null
+  revealRequest: { nodeId: string } | null
+  revealNode: (nodeId: string) => void
   viewMode: DesignerViewMode
   globalVariables: string[]
   connectionsById: Record<string, ConnectionValidationInfo>
@@ -230,6 +232,8 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   nodes: [],
   edges: [],
   selectedNodeId: null,
+  revealRequest: null,
+  revealNode: (nodeId) => set({ selectedNodeId: nodeId, revealRequest: { nodeId } }),
   viewMode: 'linear',
   globalVariables: [],
   connectionsById: {},
@@ -262,6 +266,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       dirtyNodeKeys: cleanedKeys,
       deletedNodeKeys: [],
       selectedNodeId: nodes[0]?.id ?? null,
+      revealRequest: null,
       issues: recompute(nodes, edges, globalVariables, connectionsById, mediaKeys, templateKeys, get().templateContents, get().installedEntityIds, get().installedIntegrationIds),
       canUndo: false,
       canRedo: false,

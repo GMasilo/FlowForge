@@ -3,6 +3,8 @@
  * Schema portion generated from Supabase; app helpers and QuestionAnswerType are maintained here.
  */
 
+import type { EntityJob, EntityJobRun } from '@/features/entities/entityJobTypes'
+
 export type QuestionAnswerType =
   | 'text'
   | 'long_text'
@@ -67,6 +69,18 @@ export type Database = {
   }
   public: {
     Tables: {
+      entity_jobs: {
+        Row: EntityJob
+        Insert: Pick<EntityJob, 'entity_id' | 'name' | 'action'> & Partial<EntityJob>
+        Update: Partial<EntityJob>
+        Relationships: []
+      }
+      entity_job_runs: {
+        Row: EntityJobRun
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       agent_presence: {
         Row: {
           instance_id: string
@@ -3043,6 +3057,10 @@ export type Database = {
       }
     }
     Functions: {
+      preview_entity_cleanup: { Args: { p_job_id: string }; Returns: number }
+      step_review_members: { Args: { p_flow_id: string }; Returns: Json }
+      add_step_review: { Args: { p_flow_id: string; p_body: string; p_node_key?: string | null; p_parent_id?: string | null; p_mentions?: string[] }; Returns: Json }
+      set_step_review_resolved: { Args: { p_comment_id: string; p_resolved: boolean }; Returns: undefined }
       add_conversation_note: {
         Args: { p_body: string; p_session_id: string }
         Returns: {

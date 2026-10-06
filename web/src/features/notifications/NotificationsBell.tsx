@@ -22,6 +22,7 @@ function kindLabel(kind: string): string {
             case 'handoff.visitor_message':
       return 'Visitor'
     case 'flow.comment':
+    case 'flow.mention':
       return 'Comment'
     case 'flow.shared':
       return 'Share'

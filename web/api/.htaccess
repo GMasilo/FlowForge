@@ -10,7 +10,7 @@ RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 # Deny access to config, storage, libs, instance file blobs, and test harness sources.
 # Mock upstream routes under test/ are allowed (see test/.htaccess).
 RewriteRule ^(config\.php|config\.example\.php|storage/.*|lib/.*|files/.*|tools/.*)$ - [F,L]
-RewriteRule ^(test/(run\.php|Assert\.php|signInBody\.php|README\.md|scenarios/.*))$ - [F,L]
+RewriteRule ^(test/(run\.php|Assert\.php|signInBody\.php|entity-job-export\.php|README\.md|scenarios/.*))$ - [F,L]
 
 # Route pretty paths to scripts
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -38,6 +38,7 @@ RewriteRule ^chat/appearance/?$ chat/appearance.php [L,QSA]
 RewriteRule ^chat/sso_callback/?$ chat/sso_callback.php [L,QSA]
 RewriteRule ^integration/execute/?$ integration/execute.php [L,QSA]
 RewriteRule ^alerts/run/?$ alerts/run.php [L,QSA]
+RewriteRule ^entity-jobs/run/?$ entity-jobs/run.php [L,QSA]
 RewriteRule ^openapi\.json$ openapi.php [L,QSA]
 RewriteRule ^postman\.json$ postman.php [L,QSA]
 RewriteRule ^postman-environment\.json$ postman.php [L,QSA]
