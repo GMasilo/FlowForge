@@ -62,7 +62,7 @@ $rows = SupabaseRest::restSelectAsService(
     'integrations',
     'id=eq.' . rawurlencode($integrationId)
         . '&instance_id=eq.' . rawurlencode($instanceId)
-        . '&deleted_at=is.null&select=id,config,provider',
+        . '&deleted_at=is.null&select=id,config,provider,name',
 );
 if ($rows === [] || !isset($rows[0])) {
     oauth_redirect_error($returnTo, 'Integration not found');
@@ -76,12 +76,16 @@ $cfg['ms_display_name'] = $me['displayName'];
 $cfg['ms_upn'] = $me['userPrincipalName'];
 $cfg['granted_scopes'] = $tokens['scope'];
 $cfg['connected_at'] = gmdate('c');
-// Platform app — clear per-integration client fields so runtime uses config.php
 $cfg['client_id'] = '';
 $cfg['tenant_id'] = '';
 
 $displayName = $me['displayName'] !== '' ? $me['displayName'] : $me['mail'];
-$nameSuffix = $displayName !== '' ? ' (' . $displayName . ')' : '';
+$baseLabel = match ((string) ($row['provider'] ?? '')) {
+    'microsoft_teams' => 'Microsoft Teams',
+    'sharepoint' => 'SharePoint',
+    default => 'Microsoft OneDrive',
+};
+$newName = $displayName !== '' ? $baseLabel . ' (' . $displayName . ')' : $baseLabel;
 
 SupabaseRest::restPatchAsService(
     $config,
@@ -90,7 +94,7 @@ SupabaseRest::restPatchAsService(
     [
         'config' => $cfg,
         'status' => 'connected',
-        'name' => trim((string) (($row['provider'] ?? 'Microsoft') . $nameSuffix)),
+        'name' => $newName,
         'updated_at' => gmdate('c'),
     ],
 );
@@ -100,22 +104,21 @@ $secrets = [
     'refresh_token' => $tokens['refresh_token'],
     'access_token' => $tokens['access_token'],
     'access_token_expires_at' => $expiresAt,
-    // client_secret left empty — platform credentials used at runtime
     'client_secret' => '',
 ];
 
-SupabaseRest::restInsertAsService($config, 'integration_secrets', [
-    'integration_id' => $integrationId,
-    'secrets' => $secrets,
-    'updated_at' => gmdate('c'),
-]);
-// Upsert: if insert fails on PK, patch
-$existing = SupabaseRest::restSelectAsService(
+$existingSecrets = SupabaseRest::restSelectAsService(
     $config,
     'integration_secrets',
     'integration_id=eq.' . rawurlencode($integrationId) . '&select=integration_id',
 );
-if ($existing !== []) {
+if ($existingSecrets === []) {
+    SupabaseRest::restInsertAsService($config, 'integration_secrets', [
+        'integration_id' => $integrationId,
+        'secrets' => $secrets,
+        'updated_at' => gmdate('c'),
+    ]);
+} else {
     SupabaseRest::restPatchAsService(
         $config,
         'integration_secrets',
