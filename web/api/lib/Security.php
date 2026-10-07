@@ -152,7 +152,7 @@ final class Security
             }
             if (!$ok) {
                 if ($throw) throw new \RuntimeException('Host is not in the allowlist');
-            Response::error('Host is not in the allowlist', 400);
+                Response::error('Host is not in the allowlist', 400);
             }
         }
 
@@ -187,7 +187,7 @@ final class Security
         foreach ($ips as $ip) {
             if (self::isPrivateOrReservedIp($ip)) {
                 if ($throw) throw new \RuntimeException('URL resolves to a private or reserved address');
-            Response::error('URL resolves to a private or reserved address', 400);
+                Response::error('URL resolves to a private or reserved address', 400);
             }
         }
 

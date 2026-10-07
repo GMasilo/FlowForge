@@ -1,7 +1,8 @@
 # Scheduled entity jobs
 
 Deploy `supabase/migrations/20261006142132_entity_jobs_step_reviews.sql`, then
-`supabase/migrations/20261006144529_step_review_private_helpers.sql` and the PHP API
+`supabase/migrations/20261006144529_step_review_private_helpers.sql`, then
+`supabase/migrations/20261007082817_entity_job_destinations.sql` and the PHP API
 changes. These migrations add no jobs and do not enable a scheduler.
 
 ## Server configuration
@@ -83,3 +84,56 @@ thread. Do not add this private schema to the Data API's exposed schemas.
 Anonymous execution is revoked; direct comment writes are revoked.
 The worker RPCs use `SECURITY INVOKER` and are executable only by `service_role`.
 See the [Supabase privileged-function advisory](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable).
+
+## API and external database destinations
+
+Create/install the destination connection on the owning chatbot first. Choose
+**Send JSON to an API** or **Insert into a database** under Scheduled jobs. Jobs
+remain paused until enabled. Connections must be live, installed (or owned) and in
+the same organisation; the runner rechecks this before resolving secrets. The
+picker loads connection metadata only.
+
+### API batch
+
+Use an HTTP connection with an HTTPS base URL and saved Basic, Bearer, API-key or
+custom-header authentication. Choose POST, PUT or PATCH and a relative path. The
+existing HTTP host policy applies; private addresses and redirects are rejected.
+Responses are not stored in logs. The request has `Content-Type: application/json`
+and `Idempotency-Key: <run UUID>`:
+
+```json
+{
+  "job_id": "job UUID",
+  "run_id": "run UUID",
+  "entity_id": "entity UUID",
+  "columns": ["student_id", "email"],
+  "records": [{"student_id": "S001", "email": "student@example.com"}]
+}
+```
+
+The endpoint must accept this envelope. It can upsert into your own database,
+forward to another API, or transform and store the batch. Third-party APIs with
+different schemas need an adapter. Only 2xx is successful (202 confirms acceptance,
+not downstream completion). Limit: 10,000 records / 20 MB, 60-second timeout.
+
+### Database inserts
+
+Use PostgreSQL, MySQL, SQL Server or allowlisted SQLite with the matching PDO
+driver. Enter an existing table or `schema.table`; selected entity field keys must
+match its column names (letters, digits, underscores). Values are bound parameters.
+Tables are not created or altered. Batches append every source record, at most
+1,000 per run, in a transaction with rollback on statement failure. Use transactional
+tables (InnoDB for MySQL); nontransactional engines cannot roll back. SQLite paths
+must be permitted by `sqlite_path_allowlist`. A batch has a 60-second loop deadline
+plus any in-flight database statement timeout.
+
+Both modes export a full snapshot per run. Schedule only when repeated inserts are
+intended, or use an API implementing upserts based on a stable selected key. There
+is no distributed transaction between the destination and run history: a connection
+loss or status-write failure can report failure after data was accepted. Inspect the
+destination before retrying. The run ID deduplicates one API run only, not snapshots
+on subsequent days.
+
+Local tests cover URL confinement, actual SQLite parameterised inserts and rollback,
+connection scope/retirement, password exclusion and worker permissions. They do not
+contact production APIs or external databases.

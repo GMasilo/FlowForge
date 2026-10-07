@@ -70,7 +70,7 @@ export function EntityJobsPanel({ entity, canManage }: { entity: InstalledEntity
     {!jobs.isLoading && !jobs.data?.length && !jobs.error && <p className="mb-3 text-sm">No scheduled jobs yet.</p>}
     {jobs.data?.map(job => <div key={job.id} className="my-2 rounded-lg bg-[var(--color-surface-2)] p-3 text-sm">
       <p className="font-semibold">{job.name} Â· {job.enabled ? 'Enabled' : 'Paused'}</p>
-      <p>{job.action === 'csv_s3' ? `CSV to ${job.destination}` : job.action === 'http_api' ? `JSON to API · ${job.http_method} ${job.http_path || '/'}` : job.action === 'database' ? `Insert into ${job.target_table}` : `Delete ${job.filter_key} = ${job.filter_value}, unchanged for ${job.stale_days} days`}</p>
+      <p>{job.action === 'csv_s3' ? `CSV to ${job.destination}` : job.action === 'http_api' ? `JSON to API Â· ${job.http_method} ${job.http_path || '/'}` : job.action === 'database' ? `Insert into ${job.target_table}` : `Delete ${job.filter_key} = ${job.filter_value}, unchanged for ${job.stale_days} days`}</p>
       <p>Daily at {job.daily_time.slice(0,5)} ({job.timezone})</p>
       {job.enabled && <p>Next scheduled: {new Date(job.next_run_at).toLocaleString()}</p>}
       <div className="mt-2 flex flex-wrap gap-2">
@@ -93,10 +93,10 @@ export function EntityJobsPanel({ entity, canManage }: { entity: InstalledEntity
         </>}
         {(editing.action === 'http_api' || editing.action === 'database') && <>
           <label className="block text-sm">Destination connection<select required className={fieldClass} value={editing.connection_id ?? ''} onChange={e => change({ connection_id: e.target.value })}><option value="">Choose a connection</option>{connections.data?.filter(c => c.kind === (editing.action === 'http_api' ? 'http' : 'database')).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-          <p className="text-xs text-[var(--color-ink-muted)]">Create or install a connection in this chatbot’s Connections section first. Its saved authentication is used on the server.</p>
+          <p className="text-xs text-[var(--color-ink-muted)]">Create or install a connection in this chatbotâ€™s Connections section first. Its saved authentication is used on the server.</p>
           {editing.action === 'http_api' ? <>
             <label className="block text-sm">Method<select className={fieldClass} value={editing.http_method ?? 'POST'} onChange={e => change({ http_method: e.target.value as EntityJob['http_method'] })}>{['POST','PUT','PATCH'].map(m => <option key={m}>{m}</option>)}</select></label>
-            <label className="block text-sm">Path after the connection’s base URL<input className={fieldClass} value={editing.http_path ?? ''} placeholder="/imports/contacts" onChange={e => change({ http_path: e.target.value })} /></label>
+            <label className="block text-sm">Path after the connectionâ€™s base URL<input className={fieldClass} value={editing.http_path ?? ''} placeholder="/imports/contacts" onChange={e => change({ http_path: e.target.value })} /></label>
             <p className="text-xs text-[var(--color-ink-muted)]">Sends JSON with job_id, run_id, entity_id, columns and records. Use an API that accepts this batch format, including an API that writes to your database. Only a 2xx response counts as success.</p>
           </> : <>
             <label className="block text-sm">Destination table<input required pattern="[A-Za-z_][A-Za-z0-9_]*([.][A-Za-z_][A-Za-z0-9_]*)?" className={fieldClass} value={editing.target_table ?? ''} placeholder="public.contacts" onChange={e => change({ target_table: e.target.value })} /></label>
