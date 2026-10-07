@@ -21,8 +21,12 @@ final class DatabaseClient
         string $sql,
         array $params,
         string $operation,
-        array $options = []
+        array $options = [],
+        ?array $batch = null
     ): array {
+        if ($batch !== null && (count($batch) > 1000 || $operation !== 'execute')) {
+            return ['ok' => false, 'error' => 'Batch writes require execute and at most 1000 records'];
+        }
         $provider = strtolower(trim((string) ($connectionConfig['provider'] ?? 'postgres')));
         if (!in_array($provider, ['postgres', 'mysql', 'mssql', 'sqlite'], true)) {
             return ['ok' => false, 'error' => 'Unsupported database provider'];
@@ -99,6 +103,20 @@ final class DatabaseClient
                 // Optional timeout settings; ignore if the server rejects them.
             }
 
+            if ($batch !== null) {
+                $pdo->beginTransaction();
+                $stmt = $pdo->prepare($sql);
+                $deadline = microtime(true) + 60;
+                $total = 0;
+                foreach ($batch as $record) {
+                    if (microtime(true) > $deadline) throw new \RuntimeException('Batch timed out');
+                    $stmt->execute(self::normalizeParams($record));
+                    $total += $stmt->rowCount();
+                    $stmt->closeCursor();
+                }
+                $pdo->commit();
+                return ['ok' => true, 'rowCount' => $total, 'rows' => []];
+            }
             $bound = self::normalizeParams($params);
             $stmt = $pdo->prepare($sql);
             foreach ($bound as $name => $value) {
@@ -130,6 +148,8 @@ final class DatabaseClient
                 'rowCount' => count($rows),
             ];
         } catch (\Throwable $e) {
+            if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
+            if ($batch !== null) return ['ok' => false, 'error' => 'Database batch failed; check table, column types, constraints and permissions'];
             return ['ok' => false, 'error' => self::safeErrorMessage($e->getMessage())];
         }
     }
@@ -142,7 +162,7 @@ final class DatabaseClient
         if ($path === '' || str_contains($path, "\0")) {
             return 'Invalid SQLite path';
         }
-        if (!str_starts_with($path, '/')) {
+        if (!str_starts_with($path, '/') && !preg_match('#^[A-Za-z]:[/\\\\]#', $path)) {
             return 'SQLite path must be absolute';
         }
         if (preg_match('#(^|/)\.\.(/|$)#', $path)) {

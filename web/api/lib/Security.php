@@ -121,20 +121,23 @@ final class Security
     }
 
     /** Block SSRF to private / link-local / metadata hosts. */
-    public static function assertSafePublicUrl(string $url, array $hostAllowlist = []): string
+    public static function assertSafePublicUrl(string $url, array $hostAllowlist = [], bool $throw = false): string
     {
         $parts = parse_url($url);
         if ($parts === false || empty($parts['scheme']) || empty($parts['host'])) {
+            if ($throw) throw new \RuntimeException('Invalid URL');
             Response::error('Invalid URL', 400);
         }
 
         $scheme = strtolower((string) $parts['scheme']);
         if (!in_array($scheme, ['http', 'https'], true)) {
+            if ($throw) throw new \RuntimeException('Only http/https URLs are allowed');
             Response::error('Only http/https URLs are allowed', 400);
         }
 
         $host = strtolower((string) $parts['host']);
         if ($host === 'localhost' || str_ends_with($host, '.localhost') || str_ends_with($host, '.local')) {
+            if ($throw) throw new \RuntimeException('Host is not allowed');
             Response::error('Host is not allowed', 400);
         }
 
@@ -148,7 +151,8 @@ final class Security
                 }
             }
             if (!$ok) {
-                Response::error('Host is not in the allowlist', 400);
+                if ($throw) throw new \RuntimeException('Host is not in the allowlist');
+            Response::error('Host is not in the allowlist', 400);
             }
         }
 
@@ -176,12 +180,14 @@ final class Security
         }
 
         if (!$ips) {
+            if ($throw) throw new \RuntimeException('Unable to resolve host');
             Response::error('Unable to resolve host', 400);
         }
 
         foreach ($ips as $ip) {
             if (self::isPrivateOrReservedIp($ip)) {
-                Response::error('URL resolves to a private or reserved address', 400);
+                if ($throw) throw new \RuntimeException('URL resolves to a private or reserved address');
+            Response::error('URL resolves to a private or reserved address', 400);
             }
         }
 

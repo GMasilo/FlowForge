@@ -21,6 +21,9 @@ create table public.flow_nodes(id uuid primary key default gen_random_uuid(),flo
 create table public.flow_comments(id uuid primary key default gen_random_uuid(),flow_id uuid,instance_id uuid,node_key text,parent_id uuid,author_id uuid,body text,resolved_at timestamptz,created_at timestamptz default now(),updated_at timestamptz default now());
 alter table public.flow_comments enable row level security;
 create table public.user_notifications(id uuid default gen_random_uuid(),instance_id uuid,user_id uuid,kind text,title text,body text,href text,resource_type text,resource_id text,meta jsonb);
+create table public.connections(id uuid primary key, instance_id uuid, chatbot_id uuid, kind text, deleted_at timestamptz);
+create table public.chatbot_connections(chatbot_id uuid, connection_id uuid);
+create table public.connection_secrets(connection_id uuid, config jsonb);
 create table public.chatbot_entities(id uuid primary key,chatbot_id uuid,kind public.entity_kind,deleted_at timestamptz);
 create table public.entity_attributes(entity_id uuid,key text,value_type text);
 create table public.entity_dynamic_records(id uuid primary key default gen_random_uuid(),entity_id uuid,values jsonb,created_at timestamptz default now(),updated_at timestamptz default now());
@@ -35,6 +38,7 @@ grant all on all tables in schema public to service_role;
 `)
 await db.exec(await readFile(new URL('../../supabase/migrations/20261006142132_entity_jobs_step_reviews.sql', import.meta.url),'utf8'))
 await db.exec(await readFile(new URL('../../supabase/migrations/20261006144529_step_review_private_helpers.sql', import.meta.url),'utf8'))
+await db.exec(await readFile(new URL('../../supabase/migrations/20261007082817_entity_job_destinations.sql', import.meta.url),'utf8'))
 const id = n => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`
 const [admin, member, outsider, instance, bot, flow, entity] = [1,2,3,4,5,6,7].map(id)
 await db.exec(`
@@ -97,5 +101,32 @@ assert.equal(new Date(next).toISOString(),'2026-10-06T23:00:00.000Z')
 await as(outsider)
 assert.equal(await scalar('select count(*)::int from public.entity_jobs'),0)
 assert.equal(await scalar('select count(*)::int from public.entity_job_runs'),0)
+await db.exec('reset role')
+const http = id(20), database = id(21), foreign = id(22), uninstalled = id(23)
+await db.exec(`insert into public.connections values('${http}','${instance}','${bot}','http',null),('${database}','${instance}','${bot}','database',null),('${foreign}','${id(99)}','${bot}','http',null),('${uninstalled}','${instance}','${id(98)}','http',null);
+insert into public.connection_secrets values('${http}','{"baseUrl":"https://example.test","bearerToken":"server-secret"}'),('${database}','{"provider":"postgres"}');`)
+await as(admin)
+for (const connection of [foreign, uninstalled, database]) {
+ await assert.rejects(db.query(`insert into public.entity_jobs(entity_id,name,action,connection_id,columns) values('${entity}','invalid API','http_api','${connection}',array['status'])`),/installed connection/)
+}
+await assert.rejects(db.query(`insert into public.entity_jobs(entity_id,name,action,connection_id,columns) values('${entity}','password','http_api','${http}',array['password'])`),/password/)
+await assert.rejects(db.query(`insert into public.entity_jobs(entity_id,name,action,connection_id,columns,target_table) values('${entity}','bad table','database','${database}',array['status'],'contacts; DROP TABLE contacts')`),/table/)
+for (const [action, connection, table] of [['http_api', http, null],['database', database, 'public.contacts']]) {
+ const exportJob = await scalar(`insert into public.entity_jobs(entity_id,name,action,connection_id,columns,target_table) values('${entity}','destination test','${action}','${connection}',array['status'],${table ? "'"+table+"'" : 'null'}) returning id`)
+ await db.exec(`update public.entity_jobs set enabled=true where id='${exportJob}'; update public.entity_jobs set next_run_at=now()-interval '1 minute' where id='${exportJob}'`)
+ await as('', 'service_role')
+ const active = await scalar('select public.claim_entity_job()')
+ assert.equal(active.job.id,exportJob)
+ assert.equal((await scalar(`select public.entity_job_export('${active.run.id}')`)).rows.length,2)
+ assert.ok(await scalar(`select public.entity_job_connection('${active.run.id}')`))
+ await as(admin)
+ await assert.rejects(db.query(`select public.entity_job_connection('${active.run.id}')`),/permission denied/)
+ await db.exec('reset role')
+ await db.exec(`update public.connections set deleted_at=now() where id='${connection}'`)
+ await as('', 'service_role')
+ await assert.rejects(db.query(`select public.entity_job_connection('${active.run.id}')`),/unavailable/)
+ await db.exec(`update public.entity_job_runs set status='failed' where id='${active.run.id}'`)
+ await as(admin)
+}
 await db.close()
 console.log('Entity jobs and step review database checks passed (permissions, mentions, schedules, claims, cleanup and export).')
